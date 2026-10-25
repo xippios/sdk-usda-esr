@@ -139,9 +139,11 @@ def test_a_market_year_esr_lacks_is_not_found(
     with pytest.raises(NoDataForYear) as info:
         tasks.get_exports(WHEAT_WHITE, 1900, CANADA)
     assert info.value.path == "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900"
-    message = str(info.value)
-    assert "commodity 104, country 1220, market year 1900" in message
-    assert "upstream answered HTTP 404" in message
+    assert str(info.value) == (
+        "ESR has no data for commodity 104, country 1220, market year 1900: GET "
+        "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900 answered HTTP 404 "
+        "with an empty body."
+    )
     assert route.call_count == 1
 
 

@@ -90,7 +90,7 @@ def _absent(
     return NoDataForYear(
         exc.path,
         f"ESR has no data for commodity {commodity_code}, {country}, market year "
-        f"{market_year}: upstream answered HTTP 404 ({exc.message}).",
+        f"{market_year}: GET {exc.path} answered HTTP 404 with an empty body.",
     )
 
 
@@ -105,9 +105,10 @@ async def get_exports_async(
     running bales for cotton; ``enums.UnitId``). A market year is named by the year it
     ends in and differs per commodity: for wheat 2024 runs June 2023 to May 2024, for corn
     and soybeans September to August, for cotton August to July (``get_release_dates``
-    lists each commodity's current one). Codes and the year are checked before any call;
-    an unknown code raises ``InvalidRequestError`` naming the closest ones, and so does a
-    market year after the current calendar year plus two. An empty list means ESR has no
+    lists each commodity's current one). Codes and the year are checked before any call:
+    an unknown code raises ``InvalidRequestError`` naming the closest known codes, and a
+    market year that is not four digits or is after the current calendar year plus two
+    raises ``InvalidRequestError`` with the reason. An empty list means ESR has no
     records for that combination; a market year ESR holds no data for (1900) raises
     ``NotFoundError``. ``meta.vintage`` is the latest week ending date among the records
     (``"2024-06-06"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells
