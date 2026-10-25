@@ -156,10 +156,12 @@ def test_unknown_codes_and_future_years_are_refused_before_any_request(
         tasks.get_exports(WHEAT_WHITE, 2024, 9999)
     with pytest.raises(UnknownCode):
         tasks.get_exports(999, 2024)
-    with pytest.raises(InvalidRequestError, match="four-digit year"):
+    with pytest.raises(InvalidRequestError, match="answers a future one"):
         tasks.get_exports(WHEAT_WHITE, 2099, CANADA)
-    with pytest.raises(InvalidRequestError, match="four-digit year"):
+    with pytest.raises(InvalidRequestError, match="answers a future one"):
         tasks.get_exports(WHEAT_WHITE, latest_market_year() + 1)
+    with pytest.raises(InvalidRequestError, match="four-digit year"):
+        tasks.get_exports(WHEAT_WHITE, 24)
     with pytest.raises(InvalidRequestError, match="must be an integer code"):
         tasks.get_exports("104", 2024)  # type: ignore[arg-type]
     assert not respx_mock.calls

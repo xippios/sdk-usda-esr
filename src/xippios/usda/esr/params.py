@@ -233,19 +233,27 @@ def validate_market_year(market_year: int) -> int:
         The year, unchanged.
 
     Raises:
-        InvalidRequestError: When the year is not an integer from 1000 to the current
-            calendar year plus two.
+        InvalidRequestError: When the year is not a four-digit integer (``24``, ``999``,
+            ``10000``, ``-2024``), or when it is later than the current calendar year plus
+            two (``2099``); the message gives the reason that applies.
     """
     latest = latest_market_year()
     if (
         isinstance(market_year, bool)
         or not isinstance(market_year, int)
-        or not EARLIEST_MARKET_YEAR <= market_year <= latest
+        or not EARLIEST_MARKET_YEAR <= market_year <= 9999
     ):
         raise InvalidRequestError(
             f"market_year must be a four-digit year no later than {latest}, such as 2024, "
-            f"got {market_year!r}. ESR names a market year by the year it ends in and answers "
-            "a future one with an empty result, so the package refuses it.",
+            f"got {market_year!r}. ESR names a market year by the full year it ends in: for "
+            "wheat, 2024 runs June 2023 to May 2024.",
+            source=SOURCE,
+        )
+    if market_year > latest:
+        raise InvalidRequestError(
+            f"market_year must be no later than {latest}, the current year plus two, got "
+            f"{market_year}. ESR names a market year by the year it ends in and answers a "
+            "future one with an empty result, so the package refuses it.",
             source=SOURCE,
         )
     return market_year

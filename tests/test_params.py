@@ -214,9 +214,19 @@ def test_the_latest_market_year_passes_and_the_next_is_refused() -> None:
         validate_market_year(latest + 1)
 
 
-@pytest.mark.parametrize("year", [2099, 24, 999, 10000, -2024, True])
-def test_other_market_years_are_refused(year: int) -> None:
+def test_a_future_market_year_is_refused_as_future() -> None:
     """2099 is recorded: ESR answers a future market year with HTTP 200 and ``[]``."""
-    with pytest.raises(InvalidRequestError, match="four-digit year") as info:
-        validate_market_year(year)
+    with pytest.raises(InvalidRequestError, match=f"no later than {latest_market_year()}") as info:
+        validate_market_year(2099)
     assert "answers a future one with an empty result" in info.value.message
+    assert "four-digit" not in info.value.message
+
+
+@pytest.mark.parametrize("year", [24, 999, 10000, -2024, True, 2024.0])
+def test_a_market_year_that_is_not_four_digits_is_refused_as_such(year: int) -> None:
+    """The shape reason, not the future one: 10000 is a five-digit year before it is a future
+    one, and ``True`` and ``2024.0`` are not integers."""
+    with pytest.raises(InvalidRequestError, match="must be a four-digit year") as info:
+        validate_market_year(year)
+    assert f"got {year!r}" in info.value.message
+    assert "future" not in info.value.message
