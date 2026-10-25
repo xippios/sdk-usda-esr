@@ -1,0 +1,73 @@
+{
+  "recorded_at": "2026-10-25T20:30:37.472330Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://api.fas.usda.gov/api/esr/exports/commodityCode/abc/countryCode/1220/marketYear/2024"
+  },
+  "response": {
+    "body": "{\"message\":\"The request is invalid.\"}",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Sun, 25 Oct 2026 20:30:37 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "access-control-allow-headers",
+        "X-Api-Key"
+      ],
+      [
+        "access-control-allow-origin",
+        "*"
+      ],
+      [
+        "age",
+        "0"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ],
+      [
+        "via",
+        "https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])"
+      ],
+      [
+        "x-api-umbrella-request-id",
+        "d1ej10tdguiibpgm9230"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-ratelimit-limit",
+        "1000"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "983"
+      ],
+      [
+        "x-vcap-request-id",
+        "e813caba-ba2a-481b-5550-4e88daa6a2cd"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ]
+    ],
+    "status": 400
+  }
+}

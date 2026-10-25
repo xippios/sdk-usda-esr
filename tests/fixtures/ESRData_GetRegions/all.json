@@ -1,0 +1,77 @@
+{
+  "recorded_at": "2026-10-25T20:29:25.595707Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://api.fas.usda.gov/api/esr/regions"
+  },
+  "response": {
+    "body": "[{\"regionId\":10,\"regionName\":\"AFRICA\"},{\"regionId\":7,\"regionName\":\"CHINA\"},{\"regionId\":3,\"regionName\":\"EASTERN EUROPE\"},{\"regionId\":1,\"regionName\":\"EUROPEAN UNION - 27\"},{\"regionId\":4,\"regionName\":\"FORMER SOVIET UNION-12\"},{\"regionId\":8,\"regionName\":\"INDIA\"},{\"regionId\":5,\"regionName\":\"JAPAN\"},{\"regionId\":9,\"regionName\":\"OTHER ASIA AND OCEANIA\"},{\"regionId\":2,\"regionName\":\"OTHER EUROPE\"},{\"regionId\":6,\"regionName\":\"TAIWAN\"},{\"regionId\":99,\"regionName\":\"UNKNOWN\"},{\"regionId\":11,\"regionName\":\"WESTERN HEMISPHERE\"}]",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Sun, 25 Oct 2026 20:29:24 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "access-control-allow-headers",
+        "X-Api-Key"
+      ],
+      [
+        "access-control-allow-origin",
+        "*"
+      ],
+      [
+        "age",
+        "0"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ],
+      [
+        "via",
+        "https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])"
+      ],
+      [
+        "x-api-umbrella-request-id",
+        "d1ej0f4fhiv7ihlbj4ng"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-ratelimit-limit",
+        "1000"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "990"
+      ],
+      [
+        "x-vcap-request-id",
+        "dac58462-520f-4f0e-684f-e47aa401ad6b"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ]
+    ],
+    "status": 200
+  }
+}

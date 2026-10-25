@@ -1,0 +1,61 @@
+{
+  "recorded_at": "2026-10-25T20:33:23.019985Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://api.fas.usda.gov/api/esr/commodities"
+  },
+  "response": {
+    "body": "{\n  \"error\": {\n    \"code\": \"API_KEY_INVALID\",\n    \"message\": \"An invalid api_key was supplied. Get one at https://api.fas.usda.gov:443\"\n  }\n}",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Sun, 25 Oct 2026 20:33:22 GMT"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "access-control-allow-origin",
+        "*"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "x-api-umbrella-request-id",
+        "d1ej296viccqa8lvhkhg"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-vcap-request-id",
+        "69cc811d-ed43-4fcd-7ec5-228bad500133"
+      ],
+      [
+        "x-xss-protection",
+        "1; mode=block"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ]
+    ],
+    "status": 403
+  }
+}
