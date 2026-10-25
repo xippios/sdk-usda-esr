@@ -26,7 +26,8 @@ All notable changes to this project are documented here. The format follows
   unknown code with an empty list); market years after the current UTC year plus two are
   refused (ESR answers them with an empty list), and ESR's empty 404 for a market year it
   lacks is `errors.NoDataForYear`, a `NotFoundError`. `meta.vintage` is the latest week
-  ending date in the answer; `meta.published_at` stays `None`.
+  ending date in the answer; `meta.published_at` stays `None`. Over MCP a cut answer's
+  note names `country_code` (`tasks.MCP_CAPS`).
 - `get_release_dates()`, MCP tool `usda_esr_get_release_dates`: when ESR last released each
   commodity's export data, with its current market year (`ESRData_GetDataReleaseInfo`);
   `meta.vintage` is the latest release day, `meta.published_at` `None` since the
@@ -41,6 +42,7 @@ All notable changes to this project are documented here. The format follows
 - Packaged reference data in `reference/` (44 commodities, 211 countries, 12 regions, 5
   units, fetched 2026-10-25) written by `scripts/refresh_reference.py`, which also renders
   the `IntEnum` `enums.UnitId`.
-- `scripts/check-siblings.sh` and the CI job `siblings`, required by `ci`: this wheel
-  installs with xippios-usda-psd and xippios-usda-nass as portions of the `xippios.usda`
-  namespace (ADR-0006).
+- `scripts/check-siblings.sh` and its workflow `siblings.yml`, a check of its own that the
+  org ruleset does not require: this wheel installs with xippios-usda-psd (PyPI) and
+  xippios-usda-nass (pinned to its main commit 727c9eb until its 0.1.0 is on PyPI) as
+  portions of the `xippios.usda` namespace (ADR-0006).

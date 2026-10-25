@@ -121,10 +121,12 @@ class DataReleaseInfo(UpstreamModel):
     commodity, each naming the commodity's current market year and the time of the last
     release of its export data. A market year is named by the year it ends in: wheat's
     ``marketYear`` 2027 runs from 2026-06-01 to 2027-05-31. Market years differ per
-    commodity, as this list shows: the wheat classes, barley, oats and rye run June to
-    May; corn, sorghum and soybeans September to August; cotton, cottonseed and rice
-    August to July; soybean meal and oil October to September; hides, skins, beef and pork
-    the calendar year. Nothing is re-based.
+    commodity, as this list shows: the wheat classes, all wheat, wheat products, barley,
+    rye, oats, flaxseed and linseed oil run June to May; cotton, cottonseed and rice
+    August to July; corn, sorghum and soybeans September to August; soybean cake and meal,
+    soybean oil, sunflowerseed oil, cottonseed cake and meal and cottonseed oil October to
+    September; the cattle hides, calf and kip skins and wet blues, and the beef and pork
+    muscle cuts, the calendar year. Nothing is re-based.
 
     Upstream sends the start and end as ``"2026-06-01T00:00:00"``, a midnight with no zone,
     parsed to ``date`` (pydantic accepts a zero time for a date and refuses any other, so

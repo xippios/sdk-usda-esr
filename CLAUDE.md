@@ -44,8 +44,10 @@ them once.
   a midnight without zone (`date` here). Wheat white to Canada 2024: 54 weeks.
 - `allCountries` has no paging: cottonseed 2024 is 498 records for 11 destinations,
   139,119 bytes (`cottonseed_2024`); wheat HRW 2024, measured and not kept, 1,136 records
-  for 28 destinations, 319,532 bytes. Over MCP the default cap shows 200 rows, so the
-  docstring tells agents to pass `country_code`.
+  for 28 destinations, 319,532 bytes. Over MCP `get_exports` keeps the family's cap, 200
+  rows or 64 KB, with a note of its own that names `country_code` (`tasks.MCP_CAPS`;
+  conventions §8, ADR-0016; Johannes, 2026-10-25), and the docstring tells agents to pass
+  it: one destination is up to 54 rows.
 - Unknown commodity (999) and unknown country (9999): HTTP 200 with `[]`; so are a
   future market year (2099) and valid codes without exports (rye `allCountries` 2024).
   Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
@@ -113,6 +115,7 @@ scripts/
   refresh_upstream.py    regenerates the docs/upstream/ snapshot, stdlib only, no key
   refresh_reference.py   fetches the packaged lists through api/ and regenerates enums.py
   check-siblings.sh      this wheel, xippios-usda-psd and xippios-usda-nass share xippios.usda
+                         (workflow siblings.yml)
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
@@ -125,8 +128,9 @@ tests/
   test_live.py     @pytest.mark.live smoke tests, one per task (3 keyed calls in all), and
                    the template's keyless reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
-.github/workflows/ ci.yml (the required ci check, with the siblings job), publish.yml (tag to PyPI),
-                   live.yml (nightly live tests)
+.github/workflows/ ci.yml (the required ci check), publish.yml (tag to PyPI), live.yml (nightly live tests),
+                   siblings.yml (scripts/check-siblings.sh, this package's own: a visible check
+                   the org ruleset does not require)
 .claude/commands/  add-endpoint, record-fixture, refresh-upstream, refresh-reference-data, release-prep,
                    adopt-release
 ```
@@ -168,9 +172,10 @@ subset of an upstream record builds its model with `UpstreamModel.project`; noth
 renamed or computed, parsing a value (`parse_decimal`) is the only override. Upstream's
 documented error shapes go into `ClientConfig.classify` in `_client.py`, once; wrappers
 use `client.get_json` and never inspect status codes. An upstream that reports an hourly
-or daily quota gets one `QuotaPolicy` installed on `config` there, as the commented block
-in `_client.py` shows, and `classify` maps its answer to a spent quota to
-`RateLimitError` with `retry_after` (ADR-0010, ADR-0015).
+or daily quota gets one `QuotaPolicy` installed on `config` there, as `_client.py` does:
+`policy = QuotaPolicy(...)` installed on `config` with `policy.install(...)`, and
+`classify` maps its answer to a spent quota to `RateLimitError` with `retry_after`
+(ADR-0010, ADR-0015).
 
 ## How to record a fixture
 
