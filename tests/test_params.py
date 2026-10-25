@@ -137,6 +137,7 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
     assert isinstance(error, InvalidRequestError)
     assert status_for(error) == 422
     assert (error.param, error.value, error.list_name) == ("commodity_code", 999, "commodities")
+    assert error.fetched == "2026-10-25"
     assert error.closest == [(1001, "Flaxseed"), (902, "Soybean Oil")]
     assert error.message.startswith(
         "999 is not a commodity_code in ESR's commodities list (packaged, fetched 2026-10-25). "

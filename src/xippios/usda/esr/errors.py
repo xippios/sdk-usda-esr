@@ -46,6 +46,7 @@ class UnknownCode(InvalidRequestError):
         param: The parameter, as the package names it, e.g. ``"commodity_code"``.
         value: The integer given, e.g. ``999``.
         list_name: The packaged list checked, as upstream names it, e.g. ``"commodities"``.
+        fetched: The day the packaged list was fetched, an ISO date, e.g. ``"2026-10-25"``.
         closest: The closest known codes with their upstream names, best match first.
     """
 
@@ -73,4 +74,5 @@ class UnknownCode(InvalidRequestError):
         self.param = param
         self.value = value
         self.list_name = list_name
+        self.fetched = fetched
         self.closest = closest
