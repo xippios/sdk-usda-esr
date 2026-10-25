@@ -1,19 +1,24 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, three keyed calls in all: ``get_exports`` for
+One live smoke test per task function, seven keyed calls in all: ``get_exports`` for
 wheat white to Canada and for soybeans to Mexico, market year 2024, and
 ``get_release_dates``. The codes are taken from the packaged lists by their upstream
-names, so a renamed or recoded commodity or country fails here first. Next to them, the
-template's reachability check, ``test_upstream_answers``, sends no key: a plain request
-to ``BASE_URL`` that spends no quota call.
+names, so a renamed or recoded commodity or country fails here first. The four list
+tasks answer from the package without a call, so their test fetches the list through its
+endpoint wrapper, one call each, and checks that the packaged records equal it: the
+freshness check ``reference/README.md`` promises. A difference fails the test naming
+what is gone and what is new; ``/refresh-reference-data`` then refreshes the package.
+Next to them, the template's reachability check, ``test_upstream_answers``, sends no
+key: a plain request to ``BASE_URL`` that spends no quota call.
 """
 
 from datetime import date
+from typing import Any
 
 import httpx
 import pytest
 
-from xippios.usda.esr import tasks
+from xippios.usda.esr import api, tasks
 from xippios.usda.esr._client import BASE_URL, config, policy
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.params import packaged_values
@@ -89,3 +94,27 @@ async def test_get_release_dates_live() -> None:
     latest = max(r.release_time_stamp for r in result.data)
     assert result.meta.vintage == latest.date().isoformat()
     assert result.meta.published_at is None
+
+
+LISTS = [
+    ("list_commodities", "ESRData_GetCommodities"),
+    ("list_countries", "ESRData_GetCountries"),
+    ("list_regions", "ESRData_GetRegions"),
+    ("list_units_of_measure", "ESRData_GetUnitsOfMeasure"),
+]
+
+
+@pytest.mark.parametrize(("task", "endpoint"), LISTS, ids=[task for task, _ in LISTS])
+async def test_packaged_list_equals_the_live_list(task: str, endpoint: str) -> None:
+    packaged = await getattr(tasks, f"{task}_async")()
+    live: list[Any] = await getattr(api, endpoint)()
+    stale = [record for record in packaged.data if record not in live]
+    new = [record for record in live if record not in packaged.data]
+    behind = bool(stale or new)
+    assert not behind, (
+        f"{task} is behind upstream (packaged {packaged.meta.vintage}): {len(stale)} packaged "
+        f"records upstream no longer sends, {len(new)} upstream records the package lacks; "
+        f"first of each: {stale[:5]}, {new[:5]}. Refresh with /refresh-reference-data."
+    )
+    assert packaged.data == live, f"{task}: the same records in another order"
+    assert packaged.meta.endpoint == endpoint
