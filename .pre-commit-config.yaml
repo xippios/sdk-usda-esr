@@ -1,0 +1,24 @@
+# Conventions §11: ruff, mypy --strict and detect-secrets. Nothing else.
+# .copier-answers.yml is excluded from secret detection: in a generated repository it names
+# the key's environment variable (never a key value) and trips the keyword check.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict
+        entry: uv run --frozen mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^(uv\.lock|\.copier-answers\.yml)$

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)", "Bash(uv run:*)", "Bash(pytest:*)", "Bash(ruff:*)", "Bash(mypy:*)",
+      "Bash(pre-commit:*)", "Bash(copier:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)",
+      "Bash(git commit:*)", "Bash(git checkout -b:*)", "Bash(git switch:*)", "Bash(git push -u origin:*)",
+      "Bash(gh pr create:*)", "Bash(gh pr view:*)", "Bash(gh run view:*)", "Bash(gh issue view:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push origin main:*)",
+      "Bash(git reset --hard:*)", "Bash(rm -rf:*)",
+      "Bash(gh pr merge:*)", "Bash(gh release:*)", "Bash(gh secret:*)", "Bash(gh api --method DELETE:*)",
+      "Read(**/.envrc)", "Read(**/.env)"
+    ]
+  }
+}
