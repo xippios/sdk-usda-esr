@@ -43,6 +43,24 @@ destination at once, one row per destination and week; the MCP server returns at
 200 rows per call, so pass a country there. Quantities are `Decimal` in Python and JSON
 numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`).
 
+The `list_*` tasks look codes up in the packaged lists, without a call:
+
+```python
+from xippios.usda.esr import list_commodities, list_countries
+
+result = list_countries(region_id=11)  # ESR's region WESTERN HEMISPHERE (list_regions)
+[c.country_code for c in result.data][:3]  # [1010, 1220, 1610], 40 in upstream order
+result.meta.endpoint, result.meta.vintage  # "ESRData_GetCountries", "2026-10-25" (fetched)
+list_countries(search="united").data  # 4120, 5200, 7830: code, name or GENC code, any case
+list_countries(search="deu").data  # 4280 GERMANY, by its GENC code "DEU"
+list_commodities(search="wheat").data  # 101 to 107 and 201 Wheat Products
+```
+
+`meta.vintage` of a list is the day the package fetched it (upstream gives these lists no
+version), `meta.retrieved_at` when the task answered. Names are upstream's, padding
+included: `country_name` is `"CANADA  "`. The list tasks spend no request of the
+api.data.gov quota.
+
 ## MCP
 
 ```json
@@ -58,7 +76,8 @@ numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`).
 ```
 
 Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
-200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest;
+`usda_esr_list_countries` has a cap of its own, 250 rows, so all 211 countries arrive.
 `--http` serves streamable HTTP instead of stdio.
 
 ## Status
@@ -68,10 +87,10 @@ Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
 | `ESRData_GetCountryData` (`exports/commodityCode/{commodityCode}/countryCode/{countryCode}/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year, country_code)` | `usda_esr_get_exports` | alpha |
 | `ESRData_GetAllCountriesData` (`exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year)` | `usda_esr_get_exports` | alpha |
 | `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates()` | `usda_esr_get_release_dates` | alpha |
-| `ESRData_GetCommodities` (`commodities`) | — | — | wrapper and packaged list; `list_*` task next |
-| `ESRData_GetCountries` (`countries`) | — | — | wrapper and packaged list; `list_*` task next |
-| `ESRData_GetRegions` (`regions`) | — | — | wrapper and packaged list; `list_*` task next |
-| `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | — | — | wrapper, packaged list and `enums.UnitId`; `list_*` task next |
+| `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
+| `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |
+| `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |
+| `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | `list_units_of_measure()` | `usda_esr_list_units_of_measure` | packaged, `enums.UnitId`; `list_*` task |
 
 Alpha: the public surface may change in a minor version before 1.0 (conventions §12);
 `CHANGELOG.md` lists every change.

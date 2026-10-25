@@ -32,10 +32,15 @@ Rules:
 - Agents get a lookup task for every packaged list so they can form valid calls: one
   lookup task per list, `list_<thing>`, served as the MCP tool `usda_esr_list_<thing>`,
   or the upstream's own lookup operation when it serves every list through one. ESR
-  serves each list through an operation of its own, so each gets its task; they come in
-  the next PR (`list_commodities`, `list_countries`, `list_regions`,
-  `list_units_of_measure`) and answer from these files without an upstream call. Until
-  then `get_exports` checks its codes against these files and names the closest ones.
+  serves each list through an operation of its own, so each gets its task:
+  `list_commodities`, `list_countries`, `list_regions` and `list_units_of_measure`
+  answer from these files without an upstream call, with `meta.vintage` the file's
+  `fetched` date. `get_exports` checks its codes against the same files and names the
+  closest ones.
+- Freshness: the nightly live tests compare each packaged list with the live one
+  (`test_packaged_list_equals_the_live_list` in `tests/test_live.py`, one keyed call per
+  list) and fail naming the records that are gone and those that are new; that is the
+  signal to run `/refresh-reference-data`, not breakage.
 - Refresh policy: `/refresh-reference-data` inside `/release-prep`, and whenever a
   validation failure names a code the package lacks.
 
