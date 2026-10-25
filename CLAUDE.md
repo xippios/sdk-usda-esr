@@ -9,15 +9,66 @@ that works here; the family rules it points to apply as well.
 | | |
 | --- | --- |
 | Upstream | USDA FAS Export Sales Reporting, https://www.fas.usda.gov/programs/export-sales-reporting-program |
-| API base URL | `https://api.fas.usda.gov` |
+| API base URL | `https://api.fas.usda.gov`, api.data.gov's gateway (the portal document's `host`): `BASE_URL` is the host root, and every path keeps the snapshot's `/api/esr/` prefix (`/api/esr/commodities`, `/api/esr/exports/commodityCode/{commodityCode}/...`) |
 | Documentation | https://apps.fas.usda.gov/opendatawebV2/, snapshotted in `docs/upstream/` |
-| Credentials | `DATA_GOV_API_KEY` from the environment, sent as the `X-Api-Key` header |
-| Rate limit | 60 requests per minute, burst 1; a self-imposed pace, upstream documents none (ADR-0010); enforced client-side in `_client.py` |
+| Credentials | `DATA_GOV_API_KEY` from the environment, sent as the `X-Api-Key` header. ADR-0009: one key variable per issuer when one key serves several sources, so every source reached through api.data.gov (`usda-psd`, `usda-esr`, `usda-gats`) reads `DATA_GOV_API_KEY`, and one key is one gateway quota |
+| Rate limit | ADR-0010, decisions 1–5. Pace: 60 requests per minute, burst 1 (`RateLimit(per_minute=60, burst=1)` in `_client.py`, enforced client-side): a self-imposed pace, upstream documents none (the snapshot names no limit). Quota: api.data.gov's 1,000 requests per rolling hour per key, reported in `x-ratelimit-limit` / `x-ratelimit-remaining` on every keyed answer (the hourly quota, not a pace) and shared with `usda-psd`, `usda-gats` and every process using the same `DATA_GOV_API_KEY`; it may be spent, it is not pre-rationed. Core's `QuotaPolicy` (`_client.policy`, ADR-0015) keeps the snapshot from every answer from the wire, never a cache hit's, and gates: once the quota is spent the next request waits it out inside the call, logged, when that is within `RetryPolicy.backoff_max` (30 s by default), and otherwise raises `RateLimitError` with `retry_after` without sending. The wait counts from the last answer: a 429's `Retry-After`, else the policy's `window` of one hour (the gateway sends no reset header). `classify` maps the 429 (`OVER_RATE_LIMIT`, not recorded for ESR) to `RateLimitError` with `retry_after` from `Retry-After`, else 3600 s, and core shapes its retries from that: a wait beyond `backoff_max` is raised after one request. In offline tests core's pytest plugin bypasses the limiter and the quota policy and forgets the snapshot around each test; a test that asserts a wait or a refusal is marked `rate_limited` |
 | Write tools | no, this package is read-only |
 
 The snapshot in `docs/upstream/` is the reference for names, parameters and semantics.
 If it is empty or stale, run `/refresh-upstream` first and review the diff. Never write a
 wrapper from memory of the API.
+
+The gateway pieces in `_client.py` (the `X-Api-Key` auth, the `QuotaPolicy` on
+`x-ratelimit-*`, the `API_KEY_*`, `OVER_RATE_LIMIT` and `NOT_FOUND` mappings with
+host-free messages) are the third copy of sdk-usda-psd's adopted shape, accepted until
+core 0.3.0 brings a shared api.data.gov gateway module (family review C14, conventions §15
+item 4); they move there then.
+
+## Upstream behaviour established by fixtures
+
+The snapshot types every response as `object` and defines no schema, so these facts come
+from the answers recorded on 2026-10-25 under `tests/fixtures/`; `_client.classify` maps
+them once.
+
+- Codes are integers on the wire and in the snapshot (`int32` path parameters), and the
+  package takes them as `int` (Johannes, 2026-10-25): `get_exports(104, 2024, 1220)`.
+- Record shapes of the four lists and the release list are in `models.py`, each naming
+  its fixture: 44 commodities (101 to 1702, each with its `unitId`), 211 countries (1 to
+  9990, `countryName` and `countryDescription` padded with spaces upstream and kept so),
+  12 regions (`regionId`, `regionName`; 99 is UNKNOWN), 5 units (`unitId`, `unitNames`,
+  plural upstream).
+- Exports records (`ESRData_GetCountryData`, `ESRData_GetAllCountriesData`;
+  `models.CommodityData`): one per destination and week, eight quantities as JSON
+  integers (`Decimal` here; net sales can be negative), `unitId`, and `weekEndingDate` as
+  a midnight without zone (`date` here). Wheat white to Canada 2024: 54 weeks.
+- `allCountries` has no paging: cottonseed 2024 is 498 records for 11 destinations,
+  139,119 bytes (`cottonseed_2024`); wheat HRW 2024, measured and not kept, 1,136 records
+  for 28 destinations, 319,532 bytes. Over MCP the default cap shows 200 rows, so the
+  docstring tells agents to pass `country_code`.
+- Unknown commodity (999) and unknown country (9999): HTTP 200 with `[]`; so are a
+  future market year (2099) and valid codes without exports (rye `allCountries` 2024).
+  Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
+  the nearest codes) and market years after the current UTC year plus two before the call.
+- Market year 1900: HTTP 404 with an empty `text/plain` body on the exports path, mapped
+  to `errors.NoDataForYear`, a `NotFoundError` (only that answer on an exports path).
+  Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
+  so where ESR's data begins is not established and no lower bound beyond four digits is
+  set.
+- A non-integer path value (`commodityCode/abc`): HTTP 400 `{"message": "The request is
+  invalid."}`, mapped to `InvalidRequestError`; never sent, since parameters are `int`.
+- Invalid key: HTTP 403 `{"error": {"code": "API_KEY_INVALID", ...}}`, no quota headers,
+  mapped to `AuthError` naming the code and `DATA_GOV_API_KEY` (recorded with a bogus key).
+- Release dates (`ESRData_GetDataReleaseInfo`; `models.DataReleaseInfo`): one record per
+  commodity with the current `marketYear`, named by its end year, its `marketYearStart`
+  and `marketYearEnd`, and `releaseTimeStamp` without a zone (all 44 at
+  `2026-10-22T08:30:42.67`). Market years differ per commodity: wheat June to May, corn
+  and soybeans September to August, cotton August to July, beef and pork the calendar year.
+- `meta.vintage` of `get_exports` is the latest `weekEndingDate` among the records as an
+  ISO date (`"2024-06-06"` for wheat white to Canada 2024), `None` for an empty answer; of
+  `get_release_dates` the latest `releaseTimeStamp`'s day (`"2026-10-22"`).
+  `meta.published_at` stays `None` for both: `get_exports` makes no second call, and the
+  snapshot states no zone for `releaseTimeStamp` (Johannes, 2026-10-25).
 
 ## Read first, in this order
 
@@ -47,28 +98,35 @@ src/xippios/usda/esr/
   __init__.py      public surface: __version__ and re-exported task functions
   py.typed         PEP 561 marker; consumers' mypy --strict needs it
   _version.py      __version__ from distribution metadata
-  _client.py       the one configured AsyncClient (base URL, key, rate limit)
+  _client.py       the configured client (base URL, key, rate limit, classify, quota)
   models.py        pydantic models mirroring upstream payloads (UpstreamModel)
   api/             endpoint wrappers, one module per upstream operation
   tasks.py         task functions; __all__ is what the adapters register, MCP_CAPS any
                    per-tool result caps
   mcp.py           xippios-usda-esr-mcp entry point
   http.py          FastAPI router
-  params.py        packaged value lists: PACKAGED_LISTS, packaged_values()
-  enums.py         StrEnums (IntEnums for integer ids) generated from the packaged lists;
-                   never edited by hand
-  reference/       packaged code lists (CSV/JSON) plus README with provenance
+  errors.py        UnknownCode (a code the packaged lists lack), NoDataForYear
+  params.py        packaged lists (PACKAGED_LISTS, packaged_values()) and the code and year checks
+  enums.py         IntEnum UnitId from the packaged unitsOfMeasure; never edited by hand
+  reference/       packaged code lists (JSON) plus README with provenance
 scripts/
+  refresh_upstream.py    regenerates the docs/upstream/ snapshot, stdlib only, no key
   refresh_reference.py   fetches the packaged lists through api/ and regenerates enums.py
+  check-siblings.sh      this wheel, xippios-usda-psd and xippios-usda-nass share xippios.usda
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
-  test_tasks.py    structural checks on every task plus per-task replay tests
+  test_tasks.py    structural checks on every task plus per-task replay tests, MCP and HTTP
+  test_api.py      replay tests for the endpoint wrappers
+  test_client.py   wiring, classify on recorded error bodies, core's quota policy on a 429
+  test_params.py   packaged lists, the enum and the code and year checks
   test_adapters.py the adapters expose exactly tasks.__all__
   test_layout.py   namespace levels stay empty; py.typed ships
-  test_live.py     @pytest.mark.live smoke tests, one per task
+  test_live.py     @pytest.mark.live smoke tests, one per task (3 keyed calls in all), and
+                   the template's keyless reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
-.github/workflows/ ci.yml (the required ci check), publish.yml (tag to PyPI), live.yml (nightly live tests)
+.github/workflows/ ci.yml (the required ci check, with the siblings job), publish.yml (tag to PyPI),
+                   live.yml (nightly live tests)
 .claude/commands/  add-endpoint, record-fixture, refresh-upstream, refresh-reference-data, release-prep,
                    adopt-release
 ```
