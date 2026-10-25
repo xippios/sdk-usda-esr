@@ -6,6 +6,21 @@ in ``_client`` are internal.
 """
 
 from xippios.usda.esr._version import __version__
-from xippios.usda.esr.tasks import get_exports, get_release_dates
+from xippios.usda.esr.tasks import (
+    get_exports,
+    get_release_dates,
+    list_commodities,
+    list_countries,
+    list_regions,
+    list_units_of_measure,
+)
 
-__all__ = ["__version__", "get_exports", "get_release_dates"]
+__all__ = [
+    "__version__",
+    "get_exports",
+    "get_release_dates",
+    "list_commodities",
+    "list_countries",
+    "list_regions",
+    "list_units_of_measure",
+]
