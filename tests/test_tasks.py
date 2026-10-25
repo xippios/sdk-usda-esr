@@ -46,6 +46,14 @@ def test_the_package_exports_the_tasks() -> None:
     assert tasks.__all__ == ["get_exports", "get_release_dates"]
 
 
+def test_only_get_exports_has_a_cap_of_its_own_with_the_family_bounds() -> None:
+    assert set(tasks.MCP_CAPS) == {"get_exports"}
+    cap = tasks.MCP_CAPS["get_exports"]
+    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
+    assert cap.note is not None
+    assert "country_code" in cap.note
+
+
 WHEAT_WHITE, COTTONSEED, RYE = 104, 1201, 501
 CANADA = 1220
 COUNTRY = "ESRData_GetCountryData"
@@ -224,12 +232,11 @@ async def test_mcp_tool_call_end_to_end(replay_fixture: Callable[[str, str], res
 
 
 @pytest.mark.anyio
-async def test_every_country_over_mcp_is_cut_at_the_default_cap(
+async def test_every_country_over_mcp_is_cut_with_a_note_naming_country_code(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's default cap
-    with core's note, which promises no filter (ADR-0016); the docstring tells agents to pass
-    ``country_code``."""
+    """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's bounds, and
+    the cap's note names the tool's filter, ``country_code`` (conventions §8, ADR-0016)."""
     replay_fixture(ALL, "cottonseed_2024")
     payload = await mcp_call(
         server, "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024}
@@ -237,8 +244,8 @@ async def test_every_country_over_mcp_is_cut_at_the_default_cap(
     shown = len(payload["data"])
     assert shown == 200, "the row bound comes first; 200 rows fit 64 KB"
     assert payload["note"] == (
-        f"showing {shown} of 498 rows (cap: 200 rows or 65536 bytes); narrow the query to see "
-        "the rest"
+        f"showing {shown} of 498 rows (cap: 200 rows or 65536 bytes); pass country_code, e.g. "
+        "1220 (Canada), for one destination's weeks, up to 54 rows"
     )
     assert payload["meta"]["request"]["country_code"] is None
     assert payload["meta"]["vintage"] == "2024-08-01"

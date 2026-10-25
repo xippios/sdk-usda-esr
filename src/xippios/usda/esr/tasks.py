@@ -27,6 +27,8 @@ hours in an as-of store; its ``meta.vintage`` is the latest ``releaseTimeStamp``
 date (``"2026-10-22"``).
 """
 
+from collections.abc import Mapping
+
 from xippios.core import Result, ResultMeta, sync
 
 from xippios.usda.esr import api
@@ -41,18 +43,26 @@ from xippios.usda.esr.params import (
 
 __all__ = ["get_exports", "get_release_dates"]
 
-# MCP_CAPS, only where a tool needs a result cap of its own: a list an agent needs whole
-# (conventions §8, ADR-0016), keyed by task function name; mcp.py reads it with getattr,
-# so a source without one adds nothing. ResultCap needs the mcp extra, which a base
-# install lacks, so its import is guarded and a base install, which serves no tool, gets
-# an empty mapping (the annotation quoted, Mapping from collections.abc):
-#
-# try:
-#     from xippios.core.mcp import ResultCap
-# except ImportError:  # pragma: no cover - a base install has no MCP server
-#     MCP_CAPS: "Mapping[str, ResultCap]" = {}
-# else:
-#     MCP_CAPS = {"list_<thing>": ResultCap(max_rows=400)}
+try:
+    from xippios.core.mcp import ResultCap
+except ImportError:  # pragma: no cover - a base install, without the mcp extra, has no server
+    MCP_CAPS: "Mapping[str, ResultCap]" = {}
+else:
+    MCP_CAPS = {
+        "get_exports": ResultCap(
+            note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+        )
+    }
+"""MCP result caps of their own, by task function name (conventions §8, ADR-0016).
+
+``get_exports`` keeps the family's bounds, 200 rows or 64 KB, with a note of its own: a
+tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
+at once is one row per destination and week (cottonseed 2024: 498 rows for 11
+destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
+(wheat white to Canada 2024). ``get_release_dates``, 44 rows, keeps the default.
+``ResultCap`` lives in ``xippios.core.mcp``, which needs the ``mcp`` extra, so a base
+install, which serves no MCP tool, has no caps.
+"""
 
 
 def _vintage(records: list[CommodityData]) -> str | None:
