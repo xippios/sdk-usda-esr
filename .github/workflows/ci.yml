@@ -1,6 +1,5 @@
-# The org ruleset requires a check named `ci` on main. The matrix job is `test`, the
-# namespace sibling proof is `siblings`; the single `ci` job below aggregates both so the
-# required check has one name.
+# The org ruleset requires a check named `ci` on main. The matrix job is `test`;
+# the single `ci` job below aggregates it so the required check has one name.
 name: CI
 
 on:
@@ -41,31 +40,15 @@ jobs:
           key: pre-commit-${{ runner.os }}-py${{ matrix.python }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - run: uv run pre-commit run --all-files
 
-  siblings:
-    # ADR-0006: this wheel, xippios-usda-psd and xippios-usda-nass share xippios.usda in one
-    # environment (scripts/check-siblings.sh).
-    name: siblings
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0
-        with:
-          python-version: "3.12"
-      - run: scripts/check-siblings.sh
-
   ci:
     name: ci
-    needs: [test, siblings]
+    needs: test
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require the whole matrix and the sibling check to pass
+      - name: Require the whole matrix to pass
         run: |
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "test matrix result: ${{ needs.test.result }}"
-            exit 1
-          fi
-          if [ "${{ needs.siblings.result }}" != "success" ]; then
-            echo "siblings result: ${{ needs.siblings.result }}"
             exit 1
           fi

@@ -16,10 +16,12 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 unset VIRTUAL_ENV  # never install into whatever environment the shell has active
 
-# xippios-usda-psd is on PyPI. xippios-usda-nass is not yet: switch to "xippios-usda-nass"
-# once it is tagged and published. PSD_REQUIREMENT and NASS_REQUIREMENT override either.
+# xippios-usda-psd is on PyPI. xippios-usda-nass is not yet, so it is pinned to a commit on
+# its main, 727c9eb, which a new head there cannot change (Johannes, 2026-10-25): switch it
+# to "xippios-usda-nass" from PyPI in /release-prep once nass 0.1.0 is published.
+# PSD_REQUIREMENT and NASS_REQUIREMENT override either.
 psd="${PSD_REQUIREMENT:-xippios-usda-psd}"
-nass="${NASS_REQUIREMENT:-xippios-usda-nass @ git+https://github.com/xippios/sdk-usda-nass@main}"
+nass="${NASS_REQUIREMENT:-xippios-usda-nass @ git+https://github.com/xippios/sdk-usda-nass@727c9eb}"
 
 cd "$root"
 uv build --wheel --out-dir "$work/dist"
