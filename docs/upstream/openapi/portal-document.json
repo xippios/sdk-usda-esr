@@ -1,0 +1,240 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "v1",
+    "title": "FAS Open Data Services",
+    "description": "<h1>ESR, GATS and PSD Data APIs</h1>"
+  },
+  "host": "api.fas.usda.gov",
+  "security": [
+    {
+      "apiKeyHeader": []
+    }
+  ],
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/api/esr/regions": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Returns a set of records with Region Codes and Region Names.\r\nUse it to associate Region Name with Country records obtained by querying Country end point",
+        "operationId": "ESRData_GetRegions",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/countries": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Returns a set of records with Countries and their corresponding Regions Codes the Country belongs to.\r\nUse it to associate Country Name with Commodity Data records obtained by querying Commodity Data End point",
+        "operationId": "ESRData_GetCountries",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/commodities": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Returns a set of records with Commodity Information.\r\nUse it to associate Commodity Name with Commodity Data records obtained by querying Commodity Data End point",
+        "operationId": "ESRData_GetCommodities",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/unitsOfMeasure": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Returns a set of records with Units of Measure Information.\r\nUse it to associate Unit Of Measure Name with Commodity Data redords obtained by querying Commodity Data End point",
+        "operationId": "ESRData_GetUnitsOfMeasure",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/datareleasedates": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Returns a set of records with the date of the last release of ESR Commodity Export Data.\r\nPlease note that there could be revision on the Export numbers for multiple years on a given commodity, and so this API endpoint returns\r\nset of records containing data release dates at a commodity level\r\nUse this information to query for only the Export data that has changed since last invocation of this API End point",
+        "operationId": "ESRData_GetDataReleaseInfo",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Given Commodity Code (Ex: 104 for Wheat - White ) and MarketYear (Ex: 2017) this API End point will return\r\na list of US Export records of White Wheat to all applicable countries from USA for the given Market Year.\r\nPlease see DataReleaseDates end point to get a list of all Commodities and the corresponding Market Year data.",
+        "operationId": "ESRData_GetAllCountriesData",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "parameters": [
+          {
+            "name": "commodityCode",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "marketYear",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/esr/exports/commodityCode/{commodityCode}/countryCode/{countryCode}/marketYear/{marketYear}": {
+      "get": {
+        "tags": [
+          "ESR Data API - United States Weekly Export Sales of Agricultural Commodity Data"
+        ],
+        "summary": "Given Commodity Code (Ex: 104 for Wheat - White ), Country Code (Ex:1220 for Canada) and MarketYear (Ex: 2017) this API End point will return\r\na list of US Export records of White Wheat to Canada from USA for the give Market Year.\r\nPlease see DataReleaseDates end point to get a list of all Commodities and the corresponding Market Year data.",
+        "operationId": "ESRData_GetCountryData",
+        "consumes": [],
+        "produces": [
+          "application/json",
+          "text/json",
+          "application/xml",
+          "text/xml"
+        ],
+        "parameters": [
+          {
+            "name": "commodityCode",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "countryCode",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "marketYear",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {},
+  "securityDefinitions": {
+    "apiKeyHeader": {
+      "type": "apiKey",
+      "description": "API Key Authentication",
+      "name": "X-Api-Key",
+      "in": "header"
+    }
+  }
+}
