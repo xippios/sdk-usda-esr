@@ -127,7 +127,7 @@ tests/
   test_adapters.py the adapters expose exactly tasks.__all__
   test_layout.py   namespace levels stay empty; py.typed ships
   test_live.py     @pytest.mark.live smoke tests, one per task (7 keyed calls in all: the
-                   list tasks' compares each packaged list with the live one), and the
+                   list tasks' test compares each packaged list with the live one), and the
                    template's keyless reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
 .github/workflows/ ci.yml (the required ci check), publish.yml (tag to PyPI), live.yml (nightly live tests),
