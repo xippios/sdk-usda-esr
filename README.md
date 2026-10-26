@@ -43,6 +43,24 @@ destination at once, one row per destination and week; the MCP server returns at
 200 rows per call, so pass a country there. Quantities are `Decimal` in Python and JSON
 numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`).
 
+The slices each make the one request `get_exports` makes and only select and order its
+records; nothing is excluded, so `9990` UNKNOWN ranks like a country when ESR sends it:
+
+```python
+from xippios.usda.esr import get_latest_week, get_top_destinations, get_weekly_series
+from xippios.usda.esr.models import ExportField
+
+week = get_latest_week(1201, 2024)  # cottonseed: the newest week, one row per destination
+len(week.data), week.meta.vintage  # 11, "2024-08-01"
+top = get_top_destinations(1201, 2024, ExportField.OUTSTANDING_SALES, n=3)
+[r.country_code for r in top.data]  # [5800, 5880, 5230], largest first, ties in upstream order
+series = get_weekly_series(104, 1220, 2024)  # wheat white to Canada, oldest week first
+len(series.data), series.meta.vintage  # 54, "2024-06-06"
+```
+
+`field` takes upstream's names of the eight quantities (`"outstandingSales"`,
+`"accumulatedExports"`, ...; `models.ExportField`), which the MCP and HTTP schemas list.
+
 The `list_*` tasks look codes up in the packaged lists, without a call:
 
 ```python
@@ -86,6 +104,9 @@ Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
 | --- | --- | --- | --- |
 | `ESRData_GetCountryData` (`exports/commodityCode/{commodityCode}/countryCode/{countryCode}/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year, country_code)` | `usda_esr_get_exports` | alpha |
 | `ESRData_GetAllCountriesData` (`exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year)` | `usda_esr_get_exports` | alpha |
+| `ESRData_GetAllCountriesData` | `get_latest_week(commodity_code, market_year)` | `usda_esr_get_latest_week` | alpha; slice |
+| `ESRData_GetAllCountriesData` | `get_top_destinations(commodity_code, market_year, field, n=10)` | `usda_esr_get_top_destinations` | alpha; slice |
+| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, market_year)` | `usda_esr_get_weekly_series` | alpha; slice |
 | `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates()` | `usda_esr_get_release_dates` | alpha |
 | `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
 | `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |
