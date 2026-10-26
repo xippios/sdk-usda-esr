@@ -28,23 +28,52 @@ upstream's release identifier (conventions §4), built as ``isoformat()`` of the
 naive datetime (Johannes, 2026-10-26, for every FAS package): upstream writes two
 fractional digits (``2026-10-22T08:30:42.67``) and the vintage renders six
 (``"2026-10-22T08:30:42.670000"``).
+
+The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
+upstream call (Johannes, 2026-10-25). ``meta.endpoint`` is the operation the list was
+fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the task answered,
+and ``meta.vintage`` is the day the package fetched the list (``"2026-10-25"``, UTC), the
+``fetched`` date as the file stores it: upstream gives these lists no version identifier.
+``meta.published_at`` stays ``None``, and so does ``meta.total``, since upstream reports no
+count (ADR-0012). The records keep upstream's order, field names (snake_cased) and values,
+padding included. Their filters only select records of the packaged list (ADR-0003), and
+``meta.request`` carries them: ``region_id`` is named after upstream's ``regionId`` and
+matches it exactly, ``search`` is the package's own (the four operations take no
+parameters), a case-insensitive substring match on codes, as digits, on names and, for
+countries, on GENC codes.
 """
 
 from collections.abc import Mapping
 
-from xippios.core import Result, ResultMeta, sync
+from xippios.core import Result, ResultMeta, parse, sync
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
 from xippios.usda.esr.errors import NoDataForYear
-from xippios.usda.esr.models import CommodityData, DataReleaseInfo
+from xippios.usda.esr.models import (
+    Commodity,
+    CommodityData,
+    Country,
+    DataReleaseInfo,
+    Region,
+    UnitOfMeasure,
+)
 from xippios.usda.esr.params import (
+    PackagedList,
+    packaged_values,
     validate_commodity_code,
     validate_country_code,
     validate_market_year,
 )
 
-__all__ = ["get_exports", "get_release_dates"]
+__all__ = [
+    "get_exports",
+    "get_release_dates",
+    "list_commodities",
+    "list_countries",
+    "list_regions",
+    "list_units_of_measure",
+]
 
 try:
     from xippios.core.mcp import ResultCap
@@ -54,7 +83,17 @@ else:
     MCP_CAPS = {
         "get_exports": ResultCap(
             note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
-        )
+        ),
+        "list_commodities": ResultCap(
+            note='pass search, e.g. "wheat" or "104", to narrow by code or name'
+        ),
+        "list_countries": ResultCap(
+            max_rows=250,
+            note=(
+                'pass region_id, e.g. 11 (WESTERN HEMISPHERE), or search, e.g. "korea" or '
+                '"1220", to narrow by region or by code, name, description or GENC code'
+            ),
+        ),
     }
 """MCP result caps of their own, by task function name (conventions §8, ADR-0016).
 
@@ -63,6 +102,14 @@ tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Ever
 at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
 (wheat white to Canada 2024). ``get_release_dates``, 44 rows, keeps the default.
+
+``list_countries`` is a reference list an agent needs whole to find codes (ADR-0016;
+Johannes, 2026-10-25): 211 countries when packaged, past the default of 200 rows, so its
+cap is 250 rows; the whole list is 28,936 bytes of compact JSON over MCP as packaged,
+within the default 64 KB, which it keeps. Its note names its filters, ``region_id`` and
+``search`` (§8). ``list_commodities``, 44 rows, fits the default and keeps the family's bounds, but
+it has a filter, so its entry carries a note naming ``search`` and nothing else.
+``list_regions`` (12 rows) and ``list_units_of_measure`` (5) have no filter and no entry.
 ``ResultCap`` lives in ``xippios.core.mcp``, which needs the ``mcp`` extra, so a base
 install, which serves no MCP tool, has no caps.
 """
@@ -100,6 +147,40 @@ def _absent(
         f"ESR has no data for commodity {commodity_code}, {country}, market year "
         f"{market_year}: GET {exc.path} answered HTTP 404 with an empty body.",
     )
+
+
+def _packaged[M](name: str, kind: type[list[M]]) -> tuple[list[M], PackagedList]:
+    """The packaged list ``name`` parsed into ``kind``, in upstream order, with its file."""
+    packaged = packaged_values(name)
+    if packaged is None:  # pragma: no cover - the four lists ship with the package
+        raise KeyError(name)
+    return parse(kind, packaged.records, source=SOURCE, endpoint=packaged.endpoint), packaged
+
+
+def _packaged_meta(packaged: PackagedList, request: dict[str, int | str | None]) -> ResultMeta:
+    """Answered now, from the list the package fetched on ``packaged.fetched``.
+
+    ``total`` stays ``None``: upstream reports no count for these lists (ADR-0012).
+    """
+    return ResultMeta(
+        source=SOURCE,
+        endpoint=packaged.endpoint,
+        vintage=packaged.fetched.isoformat(),
+        request=request,
+    )
+
+
+def _matches(search: str | None, *fields: str | int | None) -> bool:
+    """Case-insensitive substring match of ``search`` in any of ``fields``.
+
+    A ``search`` of ``None`` matches every record; a code is matched as its digits
+    (``"122"`` finds ``1220``); a field that is ``None`` (a country without a GENC code)
+    matches nothing. Fields are matched one at a time, never joined.
+    """
+    if search is None:
+        return True
+    needle = search.casefold()
+    return any(needle in str(field).casefold() for field in fields if field is not None)
 
 
 async def get_exports_async(
@@ -183,5 +264,111 @@ async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
     return Result(data=releases, meta=meta)
 
 
+async def list_commodities_async(search: str | None = None) -> Result[list[Commodity]]:
+    """List ESR's commodities with their codes, the values commodity_code takes.
+
+    Answered from ``ESRData_GetCommodities`` as packaged with this version
+    (``reference/commodities.json``), without an upstream call: 44 commodities when
+    packaged, in upstream order, from ``101`` (Wheat - HRW) to ``1702`` (Fresh, Chilled, or
+    Frozen Muscle Cuts of Pork), each with the ``unit_id`` ESR reports it in
+    (``list_units_of_measure``), e.g. ``104`` Wheat - White, ``401`` Corn, ``801``
+    Soybeans (all ``1``, Metric Tons), ``1404`` All Upland Cotton (``2``, Running Bales).
+    Names are upstream's, unchanged. ``meta.vintage`` is the day the package fetched the
+    list (``"2026-10-25"``), ``meta.retrieved_at`` when this task answered.
+
+    Args:
+        search: Keep the commodities where this text occurs, ignoring case, in the code
+            (as digits) or the name, e.g. ``"wheat"`` (101 to 107 and 201 Wheat
+            Products), ``"cotton"`` (1201 to 1203 cottonseed and its products, 1301 and
+            1401 to 1404 the cottons), ``"104"`` (104 Wheat - White), ``"14"`` (1401 to
+            1404, and 1498 and 1499, rough rice: the code matches as text). Omit
+            (``None``) for all.
+    """
+    commodities, packaged = _packaged("commodities", list[Commodity])
+    selected = [c for c in commodities if _matches(search, c.commodity_code, c.commodity_name)]
+    return Result(data=selected, meta=_packaged_meta(packaged, {"search": search}))
+
+
+async def list_countries_async(
+    region_id: int | None = None, search: str | None = None
+) -> Result[list[Country]]:
+    """List ESR's destination countries with their codes and regions, the values country_code takes.
+
+    Answered from ``ESRData_GetCountries`` as packaged with this version
+    (``reference/countries.json``), without an upstream call: 211 countries when
+    packaged, in upstream order, each with its ESR region (``list_regions``) and its GENC
+    code where upstream has one (50 have none). Codes are ESR's own, not ISO: ``1220``
+    CANADA, ``2010`` MEXICO, ``5700`` CHINA, PEOPLES REPUBLIC OF, ``5880`` JAPAN; ``1`` is
+    the EUROPEAN UNION - 27 aggregate and ``9990`` UNKNOWN. The names are upstream's,
+    padded with spaces, and kept so: ``country_name`` to eight characters
+    (``"CANADA  "``), ``country_description`` to 31 (``"CANADA"`` and 25 spaces); only
+    ``9990`` and the description of ``1`` are unpadded. ``meta.vintage`` is the day the
+    package fetched the list (``"2026-10-25"``), ``meta.retrieved_at`` when this task
+    answered.
+
+    Args:
+        region_id: Keep the countries of this ESR region, an integer as ``list_regions``
+            gives it, e.g. ``11`` (WESTERN HEMISPHERE, 40 countries), ``10`` (AFRICA, 58),
+            ``9`` (OTHER ASIA AND OCEANIA, 55), ``1`` (EUROPEAN UNION - 27, 27 countries,
+            as upstream sends them: the aggregate ``1`` itself, ``4120`` UNITED KINGDOM and
+            ``4230`` BELGIUM-LUXEMBOURG as one code besides 24 other members, while ``4791``
+            CROATIA sits in ``2`` OTHER EUROPE); ``5`` (JAPAN), ``6`` (TAIWAN), ``7``
+            (CHINA) and ``8`` (INDIA) hold one country each. Matched exactly and not
+            checked: a region no country carries, e.g. ``12``, yields an empty list. Omit
+            (``None``) for every region.
+        search: Keep the countries where this text occurs, ignoring case, in the code (as
+            digits), the name, the description or the GENC code, e.g. ``"united"`` (4120
+            UNITED KINGDOM, 5200 UNITED ARAB EMIRATES, 7830 TANZANIA, UNITED REPUBLIC OF),
+            ``"korea"`` (5790 and 5800), ``"DEU"`` (4280 GERMANY, by its GENC code),
+            ``"1220"`` (CANADA). Omit (``None``) for every country.
+    """
+    countries, packaged = _packaged("countries", list[Country])
+    selected = [
+        c
+        for c in countries
+        if (region_id is None or c.region_id == region_id)
+        and _matches(search, c.country_code, c.country_name, c.country_description, c.genc_code)
+    ]
+    request: dict[str, int | str | None] = {"region_id": region_id, "search": search}
+    return Result(data=selected, meta=_packaged_meta(packaged, request))
+
+
+async def list_regions_async() -> Result[list[Region]]:
+    """List ESR's regions with their ids, the values region_id of list_countries takes.
+
+    Answered from ``ESRData_GetRegions`` as packaged with this version
+    (``reference/regions.json``), without an upstream call: 12 regions when packaged, in
+    upstream order, alphabetical by name: ``10`` AFRICA, ``7`` CHINA, ``3`` EASTERN EUROPE,
+    ``1`` EUROPEAN UNION - 27, ``4`` FORMER SOVIET UNION-12, ``8`` INDIA, ``5`` JAPAN,
+    ``9`` OTHER ASIA AND OCEANIA, ``2`` OTHER EUROPE, ``6`` TAIWAN, ``99`` UNKNOWN, ``11``
+    WESTERN HEMISPHERE. Every one holds at least one country of ``list_countries``.
+    ``meta.vintage`` is the day the package fetched the list (``"2026-10-25"``),
+    ``meta.retrieved_at`` when this task answered. Takes no parameters.
+    """
+    regions, packaged = _packaged("regions", list[Region])
+    return Result(data=regions, meta=_packaged_meta(packaged, {}))
+
+
+async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
+    """List ESR's units of measure with their ids, the unit_id of every commodity and export.
+
+    Answered from ``ESRData_GetUnitsOfMeasure`` as packaged with this version
+    (``reference/unitsOfMeasure.json``), without an upstream call: 5 units when packaged,
+    in upstream order: ``1`` Metric Tons (grains, oilseeds and their products, rice, beef
+    and pork), ``2`` Running Bales (the cottons, 1301 to 1404), ``3`` Pieces (whole hides
+    and skins, 1601 to 1603), ``4`` NUMBER (1604, 1606, 1607) and ``5`` Pounds (1605,
+    1608). The name field is plural upstream, ``unit_names``, and stays so; the names are
+    upstream's, unchanged. ``enums.UnitId`` names the same ids. ``meta.vintage`` is the day
+    the package fetched the list (``"2026-10-25"``), ``meta.retrieved_at`` when this task
+    answered. Takes no parameters.
+    """
+    units, packaged = _packaged("unitsOfMeasure", list[UnitOfMeasure])
+    return Result(data=units, meta=_packaged_meta(packaged, {}))
+
+
 get_exports = sync(get_exports_async)
 get_release_dates = sync(get_release_dates_async)
+list_commodities = sync(list_commodities_async)
+list_countries = sync(list_countries_async)
+list_regions = sync(list_regions_async)
+list_units_of_measure = sync(list_units_of_measure_async)

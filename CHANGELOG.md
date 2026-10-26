@@ -33,6 +33,18 @@ All notable changes to this project are documented here. The format follows
   `meta.vintage` is the latest release time stamp's text (`"2026-10-22T08:30:42.670000"`,
   `isoformat()` of upstream's `2026-10-22T08:30:42.67`), `meta.published_at` `None` since
   the documentation states no time zone for `releaseTimeStamp`.
+- `list_commodities(search=None)`, `list_countries(region_id=None, search=None)`,
+  `list_regions()` and `list_units_of_measure()`, MCP tools `usda_esr_list_commodities`,
+  `usda_esr_list_countries`, `usda_esr_list_regions` and `usda_esr_list_units_of_measure`:
+  ESR's four code lists, answered from the packaged files without an upstream call, in
+  upstream order with upstream's names and padding. `meta.endpoint` is the operation the
+  list came from, `meta.vintage` the day the package fetched it, `meta.retrieved_at` when
+  the task answered; `meta.total` stays `None`. `search` is a case-insensitive substring
+  match on the code (as digits) and the name, for countries also the description and the
+  GENC code; `region_id` selects the countries of one region exactly. Over MCP
+  `usda_esr_list_countries` has a cap of its own, 250 rows, so all 211 countries arrive,
+  and its note names `region_id` and `search`; `usda_esr_list_commodities`' note names
+  `search` (`tasks.MCP_CAPS`).
 - Endpoint wrappers for the seven ESR operations under `api/`, named after the snapshot's
   operationIds, and their models, built from the recorded answers.
 - The configured client for api.data.gov's gateway: the `X-Api-Key` header from

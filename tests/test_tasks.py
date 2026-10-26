@@ -43,11 +43,19 @@ def test_task_is_a_sync_facade_with_an_agent_docstring(task: object) -> None:
 def test_the_package_exports_the_tasks() -> None:
     assert get_exports is tasks.get_exports
     assert get_release_dates is tasks.get_release_dates
-    assert tasks.__all__ == ["get_exports", "get_release_dates"]
+    assert tasks.__all__ == [
+        "get_exports",
+        "get_release_dates",
+        "list_commodities",
+        "list_countries",
+        "list_regions",
+        "list_units_of_measure",
+    ]
 
 
-def test_only_get_exports_has_a_cap_of_its_own_with_the_family_bounds() -> None:
-    assert set(tasks.MCP_CAPS) == {"get_exports"}
+def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
+    """The list tasks' caps are checked in ``test_lists.py``."""
+    assert set(tasks.MCP_CAPS) == {"get_exports", "list_commodities", "list_countries"}
     cap = tasks.MCP_CAPS["get_exports"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
