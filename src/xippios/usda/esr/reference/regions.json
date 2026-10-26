@@ -1,0 +1,55 @@
+{
+  "param": "regions",
+  "endpoint": "ESRData_GetRegions",
+  "fetched": "2026-10-25",
+  "records": [
+    {
+      "regionId": 10,
+      "regionName": "AFRICA"
+    },
+    {
+      "regionId": 7,
+      "regionName": "CHINA"
+    },
+    {
+      "regionId": 3,
+      "regionName": "EASTERN EUROPE"
+    },
+    {
+      "regionId": 1,
+      "regionName": "EUROPEAN UNION - 27"
+    },
+    {
+      "regionId": 4,
+      "regionName": "FORMER SOVIET UNION-12"
+    },
+    {
+      "regionId": 8,
+      "regionName": "INDIA"
+    },
+    {
+      "regionId": 5,
+      "regionName": "JAPAN"
+    },
+    {
+      "regionId": 9,
+      "regionName": "OTHER ASIA AND OCEANIA"
+    },
+    {
+      "regionId": 2,
+      "regionName": "OTHER EUROPE"
+    },
+    {
+      "regionId": 6,
+      "regionName": "TAIWAN"
+    },
+    {
+      "regionId": 99,
+      "regionName": "UNKNOWN"
+    },
+    {
+      "regionId": 11,
+      "regionName": "WESTERN HEMISPHERE"
+    }
+  ]
+}

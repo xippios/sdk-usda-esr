@@ -1,0 +1,77 @@
+{
+  "recorded_at": "2026-10-25T20:29:31.193649Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://api.fas.usda.gov/api/esr/datareleasedates"
+  },
+  "response": {
+    "body": "[{\"commodityCode\":101,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":102,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":103,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":104,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":105,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":106,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":107,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":201,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":301,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":401,\"marketYearStart\":\"2026-09-01T00:00:00\",\"marketYearEnd\":\"2027-08-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":501,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":601,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":701,\"marketYearStart\":\"2026-09-01T00:00:00\",\"marketYearEnd\":\"2027-08-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":801,\"marketYearStart\":\"2026-09-01T00:00:00\",\"marketYearEnd\":\"2027-08-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":901,\"marketYearStart\":\"2026-10-01T00:00:00\",\"marketYearEnd\":\"2027-09-30T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":902,\"marketYearStart\":\"2026-10-01T00:00:00\",\"marketYearEnd\":\"2027-09-30T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1001,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1101,\"marketYearStart\":\"2026-06-01T00:00:00\",\"marketYearEnd\":\"2027-05-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1110,\"marketYearStart\":\"2026-10-01T00:00:00\",\"marketYearEnd\":\"2027-09-30T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1201,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1202,\"marketYearStart\":\"2026-10-01T00:00:00\",\"marketYearEnd\":\"2027-09-30T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1203,\"marketYearStart\":\"2026-10-01T00:00:00\",\"marketYearEnd\":\"2027-09-30T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1301,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1401,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1402,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1403,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1404,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1498,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1499,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1501,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1502,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1503,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1504,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1505,\"marketYearStart\":\"2026-08-01T00:00:00\",\"marketYearEnd\":\"2027-07-31T00:00:00\",\"marketYear\":2027,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1601,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1602,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1603,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1604,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1605,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1606,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1607,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1608,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1701,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"},{\"commodityCode\":1702,\"marketYearStart\":\"2026-01-01T00:00:00\",\"marketYearEnd\":\"2026-12-31T00:00:00\",\"marketYear\":2026,\"releaseTimeStamp\":\"2026-10-22T08:30:42.67\"}]",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Sun, 25 Oct 2026 20:29:29 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "access-control-allow-headers",
+        "X-Api-Key"
+      ],
+      [
+        "access-control-allow-origin",
+        "*"
+      ],
+      [
+        "age",
+        "2"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "via",
+        "https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])"
+      ],
+      [
+        "x-api-umbrella-request-id",
+        "d1ej0g1ld7d30os9rli0"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-ratelimit-limit",
+        "1000"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "988"
+      ],
+      [
+        "x-vcap-request-id",
+        "cce4ecbb-4a97-4853-5c3c-69a8b666adbb"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ]
+    ],
+    "status": 200
+  }
+}

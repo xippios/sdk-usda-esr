@@ -1,0 +1,77 @@
+{
+  "recorded_at": "2026-10-25T20:29:27.608409Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://api.fas.usda.gov/api/esr/unitsOfMeasure"
+  },
+  "response": {
+    "body": "[{\"unitId\":1,\"unitNames\":\"Metric Tons\"},{\"unitId\":2,\"unitNames\":\"Running Bales\"},{\"unitId\":3,\"unitNames\":\"Pieces\"},{\"unitId\":4,\"unitNames\":\"NUMBER\"},{\"unitId\":5,\"unitNames\":\"Pounds\"}]",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Sun, 25 Oct 2026 20:29:26 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "access-control-allow-headers",
+        "X-Api-Key"
+      ],
+      [
+        "access-control-allow-origin",
+        "*"
+      ],
+      [
+        "age",
+        "1"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ],
+      [
+        "via",
+        "https/1.1 api-umbrella (ApacheTrafficServer [cMsSf ])"
+      ],
+      [
+        "x-api-umbrella-request-id",
+        "d1ej0fi8u1n45ih5iv9g"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-ratelimit-limit",
+        "1000"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "989"
+      ],
+      [
+        "x-vcap-request-id",
+        "0fc71ef3-6ae1-4456-5a3a-2a38606e7e85"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ]
+    ],
+    "status": 200
+  }
+}

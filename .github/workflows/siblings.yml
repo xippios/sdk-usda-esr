@@ -1,0 +1,27 @@
+# Sibling proof for ADR-0006: this wheel, xippios-usda-psd and xippios-usda-nass install
+# side by side as portions of the namespaces xippios and xippios.usda
+# (scripts/check-siblings.sh). The source's own workflow (Johannes, 2026-10-25, as for
+# sdk-usda-psd): ci.yml is the template's, core's file byte for byte, and publish.yml runs
+# it, so a job there would tie this package's releases to its siblings. This job runs next
+# to it, on pull requests and pushes to main, a visible check the org ruleset does not
+# require.
+name: Siblings
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  siblings:
+    name: siblings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - run: scripts/check-siblings.sh
