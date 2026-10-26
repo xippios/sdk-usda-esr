@@ -30,8 +30,9 @@ All notable changes to this project are documented here. The format follows
   note names `country_code` (`tasks.MCP_CAPS`).
 - `get_release_dates()`, MCP tool `usda_esr_get_release_dates`: when ESR last released each
   commodity's export data, with its current market year (`ESRData_GetDataReleaseInfo`);
-  `meta.vintage` is the latest release day, `meta.published_at` `None` since the
-  documentation states no time zone for `releaseTimeStamp`.
+  `meta.vintage` is the latest release time stamp's text (`"2026-10-22T08:30:42.670000"`,
+  `isoformat()` of upstream's `2026-10-22T08:30:42.67`), `meta.published_at` `None` since
+  the documentation states no time zone for `releaseTimeStamp`.
 - `list_commodities(search=None)`, `list_countries(region_id=None, search=None)`,
   `list_regions()` and `list_units_of_measure()`, MCP tools `usda_esr_list_commodities`,
   `usda_esr_list_countries`, `usda_esr_list_regions` and `usda_esr_list_units_of_measure`:

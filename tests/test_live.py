@@ -92,7 +92,7 @@ async def test_get_release_dates_live() -> None:
     assert (wheat.market_year_start.month, wheat.market_year_end.month) == (6, 5)
     assert all(r.release_time_stamp.tzinfo is None for r in result.data)
     latest = max(r.release_time_stamp for r in result.data)
-    assert result.meta.vintage == latest.date().isoformat()
+    assert result.meta.vintage == latest.isoformat()
     assert result.meta.published_at is None
 
 
