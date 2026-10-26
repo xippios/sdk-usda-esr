@@ -118,7 +118,7 @@ scripts/
   refresh_upstream.py    regenerates the docs/upstream/ snapshot, stdlib only, no key
   refresh_reference.py   fetches the packaged lists through api/ and regenerates enums.py
   check-siblings.sh      this wheel, xippios-usda-psd and xippios-usda-nass share xippios.usda
-                         (workflow siblings.yml)
+                         (both siblings from PyPI; workflow siblings.yml)
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
