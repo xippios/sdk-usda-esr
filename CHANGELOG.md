@@ -6,11 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-26
+
 ### Added
 
-- Scaffold from [sdk-template](https://github.com/xippios/sdk-template): configured
-  client for USDA FAS Export Sales Reporting, empty task layer, MCP server and FastAPI router
-  wired to it, test harness, CI, the nightly live tests and publishing.
+- Scaffold from [sdk-template](https://github.com/xippios/sdk-template) v0.2.0: configured
+  client for USDA FAS Export Sales Reporting, MCP server and FastAPI router wired to the
+  task layer, test harness, CI, the nightly live tests and publishing.
 - Upstream documentation snapshot of 2026-10-25 in `docs/upstream/`: the ESR part (seven
   `/api/esr/` operations) of the FAS Open Data Services portal's Swagger 2.0 document and
   of the API's own Swashbuckle document, with `FETCHED.md`; written by
@@ -68,6 +70,6 @@ All notable changes to this project are documented here. The format follows
   units, fetched 2026-10-25) written by `scripts/refresh_reference.py`, which also renders
   the `IntEnum` `enums.UnitId`.
 - `scripts/check-siblings.sh` and its workflow `siblings.yml`, a check of its own that the
-  org ruleset does not require: this wheel installs with xippios-usda-psd (PyPI) and
-  xippios-usda-nass (pinned to its main commit 727c9eb until its 0.1.0 is on PyPI) as
-  portions of the `xippios.usda` namespace (ADR-0006).
+  org ruleset does not require: this wheel installs with xippios-usda-psd and
+  xippios-usda-nass, both from PyPI, as portions of the `xippios.usda` namespace
+  (ADR-0006); `PSD_REQUIREMENT` and `NASS_REQUIREMENT` override either.

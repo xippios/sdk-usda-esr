@@ -116,9 +116,10 @@ src/xippios/usda/esr/
   reference/       packaged code lists (JSON) plus README with provenance
 scripts/
   refresh_upstream.py    regenerates the docs/upstream/ snapshot, stdlib only, no key
-  refresh_reference.py   fetches the packaged lists through api/ and regenerates enums.py
+  refresh_reference.py   fetches the packaged lists through api/ (four keyed calls) and
+                         regenerates enums.py; --render-only renders it without a call
   check-siblings.sh      this wheel, xippios-usda-psd and xippios-usda-nass share xippios.usda
-                         (workflow siblings.yml)
+                         (both siblings from PyPI; workflow siblings.yml)
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
@@ -196,7 +197,7 @@ key patterns, and for the personal identifiers the package keeps out of its proj
 ```bash
 uv sync --all-extras
 uv run pytest                      # offline, replays fixtures
-uv run pytest -m live              # needs XIPPIOS_LIVE_TESTS=1 and DATA_GOV_API_KEY
+uv run pytest -m live              # needs XIPPIOS_LIVE_TESTS=1 and DATA_GOV_API_KEY; 10 keyed calls
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pre-commit run --all-files

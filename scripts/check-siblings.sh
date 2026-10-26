@@ -5,9 +5,8 @@
 #
 # Builds this package's wheel, installs it with xippios-usda-psd and xippios-usda-nass
 # into a fresh virtual environment, imports all three, runs `uv pip check`, and fails if
-# either namespace level gained an __init__.py in site-packages. A namespace proof, not a
-# runtime one: xippios-usda-psd 0.1.0 imports on core 0.2.0, its runtime fix for core 0.2.0
-# comes with psd 0.2.0. Needs the network, no key. Run from anywhere:
+# either namespace level gained an __init__.py in site-packages. A namespace proof: it
+# imports, it calls nothing upstream. Needs the network, no key. Run from anywhere:
 # scripts/check-siblings.sh
 set -euo pipefail
 
@@ -16,12 +15,13 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 unset VIRTUAL_ENV  # never install into whatever environment the shell has active
 
-# xippios-usda-psd is on PyPI. xippios-usda-nass is not yet, so it is pinned to a commit on
-# its main, 727c9eb, which a new head there cannot change (Johannes, 2026-10-25): switch it
-# to "xippios-usda-nass" from PyPI in /release-prep once nass 0.1.0 is published.
+# Both siblings come from PyPI: uv installs the newest release of each that shares one
+# xippios-core with this wheel. xippios-usda-nass was pinned to its main commit 727c9eb
+# until its 0.1.0 was published; /release-prep 0.1.0 switched it to PyPI (Johannes,
+# 2026-10-25).
 # PSD_REQUIREMENT and NASS_REQUIREMENT override either.
 psd="${PSD_REQUIREMENT:-xippios-usda-psd}"
-nass="${NASS_REQUIREMENT:-xippios-usda-nass @ git+https://github.com/xippios/sdk-usda-nass@727c9eb}"
+nass="${NASS_REQUIREMENT:-xippios-usda-nass}"
 
 cd "$root"
 uv build --wheel --out-dir "$work/dist"
