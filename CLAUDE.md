@@ -68,9 +68,12 @@ them once.
   and soybeans September to August, cotton August to July, beef and pork the calendar year.
 - `meta.vintage` of `get_exports` is the latest `weekEndingDate` among the records as an
   ISO date (`"2024-06-06"` for wheat white to Canada 2024), `None` for an empty answer; of
-  `get_release_dates` the latest `releaseTimeStamp`'s day (`"2026-10-22"`).
+  `get_release_dates` the latest `releaseTimeStamp`'s text, its `isoformat()`: upstream
+  writes two fractional digits (`2026-10-22T08:30:42.67`), the vintage renders six
+  (`"2026-10-22T08:30:42.670000"`; Johannes, 2026-10-26, for every FAS package).
   `meta.published_at` stays `None` for both: `get_exports` makes no second call, and the
-  snapshot states no zone for `releaseTimeStamp` (Johannes, 2026-10-25).
+  snapshot states no zone for `releaseTimeStamp` (Johannes, 2026-10-25); no zone is
+  invented, since core's `ResultMeta` refuses a naive `published_at`.
 
 ## Read first, in this order
 

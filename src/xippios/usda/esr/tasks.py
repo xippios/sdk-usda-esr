@@ -23,8 +23,11 @@ one for the release time, so its ``meta.published_at`` stays ``None`` and its
 ``meta.published_at`` stays ``None`` too, because the snapshot states no time zone for
 ``releaseTimeStamp`` (the program page that might say Eastern answers 403 to headless
 clients, ``docs/upstream/FETCHED.md``) and an invented zone could shift the time by
-hours in an as-of store; its ``meta.vintage`` is the latest ``releaseTimeStamp`` as an ISO
-date (``"2026-10-22"``).
+hours in an as-of store. Its ``meta.vintage`` is the latest ``releaseTimeStamp``'s text,
+upstream's release identifier (conventions §4), built as ``isoformat()`` of the parsed
+naive datetime (Johannes, 2026-10-26, for every FAS package): upstream writes two
+fractional digits (``2026-10-22T08:30:42.67``) and the vintage renders six
+(``"2026-10-22T08:30:42.670000"``).
 
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
 Johannes, 2026-10-25) each make the one request ``get_exports`` makes and only select and
@@ -142,10 +145,15 @@ def _vintage(records: list[CommodityData]) -> str | None:
 
 
 def _release_vintage(releases: list[DataReleaseInfo]) -> str | None:
-    """The latest ``releaseTimeStamp`` across ``releases`` as an ISO date; ``None`` if empty."""
+    """The latest ``releaseTimeStamp`` across ``releases`` as its text; ``None`` if empty.
+
+    The text is ``isoformat()`` of the naive datetime, the family's construction for FAS
+    release timestamps: upstream writes two fractional digits (``2026-10-22T08:30:42.67``),
+    the vintage renders six (``"2026-10-22T08:30:42.670000"``).
+    """
     if not releases:
         return None
-    return max(release.release_time_stamp for release in releases).date().isoformat()
+    return max(release.release_time_stamp for release in releases).isoformat()
 
 
 def _absent(
@@ -263,8 +271,10 @@ async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
     to July, beef and pork the calendar year). Compare ``release_time_stamp`` with the one
     seen last to fetch only what changed with ``get_exports``. The time stamp is as ESR
     sends it, without a time zone, since the documentation names none; so
-    ``meta.published_at`` stays empty and ``meta.vintage`` is the latest release day
-    (``"2026-10-22"``). Takes no parameters: the endpoint takes none.
+    ``meta.published_at`` stays empty and ``meta.vintage`` is the latest release time
+    stamp's text, ESR's release identifier: upstream writes two fractional digits
+    (``2026-10-22T08:30:42.67``), the vintage renders six
+    (``"2026-10-22T08:30:42.670000"``). Takes no parameters: the endpoint takes none.
     """
     releases = await api.ESRData_GetDataReleaseInfo()
     meta = ResultMeta(
