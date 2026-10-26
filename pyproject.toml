@@ -1,0 +1,102 @@
+[project]
+name = "xippios-usda-esr"
+version = "0.1.0"
+description = "Typed client, MCP tools and HTTP routes for USDA FAS Export Sales Reporting"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "XIPPIOS GmbH" }]
+keywords = ["sdk", "usda-esr", "agriculture", "mcp", "httpx", "pydantic"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = [
+  "xippios-core~=0.2.0",
+]
+
+[project.optional-dependencies]
+mcp = ["xippios-core[mcp]~=0.2.0"]
+http = ["xippios-core[http]~=0.2.0"]
+testing = ["xippios-core[testing]~=0.2.0"]
+
+[project.scripts]
+xippios-usda-esr-mcp = "xippios.usda.esr.mcp:run"
+
+[project.urls]
+Homepage = "https://github.com/xippios/sdk-usda-esr"
+Upstream = "https://www.fas.usda.gov/programs/export-sales-reporting-program"
+Changelog = "https://github.com/xippios/sdk-usda-esr/blob/main/CHANGELOG.md"
+Issues = "https://github.com/xippios/sdk-usda-esr/issues"
+
+[dependency-groups]
+dev = [
+  "ruff>=0.14",
+  "mypy>=1.18",
+  "pre-commit>=4",
+  "pytest>=8",
+  "respx>=0.22",
+  "anyio>=4",
+  "detect-secrets>=1.5",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xippios"]
+
+[tool.hatch.build.targets.sdist]
+# Anchored: hatch reads gitignore-style patterns, so a bare README.md would match
+# tests/fixtures/README.md as well. The sdist ships no tests; they live in the repository.
+include = ["/src", "/docs", "/README.md", "/CHANGELOG.md", "/LICENSE"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["docs", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "D", "ANN", "PTH", "PT", "T20", "C4"]
+ignore = [
+  "ANN401", # Any is allowed where upstream payloads are untyped by nature
+  "D105",   # magic methods need no docstring
+  "D107",   # __init__ is documented on the class
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["xippios.usda.esr"]
+known-third-party = ["xippios.core"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ANN"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+files = ["src", "tests", "scripts"]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --import-mode=importlib"
+testpaths = ["tests"]
+# Core's plugin sets it to the placeholder key in every test not marked live (ADR-0013).
+xippios_placeholder_key_envs = ["DATA_GOV_API_KEY"]

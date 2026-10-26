@@ -1,0 +1,23 @@
+# environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+
+# build artefacts
+dist/
+build/
+*.egg-info/
+
+# local secrets are never files, but belt and braces
+.env
+.env.*
+.envrc
+.envrc.*
+
+# editors
+.idea/
+.vscode/
