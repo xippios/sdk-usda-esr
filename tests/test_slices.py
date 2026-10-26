@@ -367,6 +367,8 @@ def test_slices_check_their_arguments_before_any_request(respx_mock: respx.MockR
         tasks.get_top_destinations(COTTONSEED, 2024, "outstanding_sales")  # type: ignore[arg-type]
     with pytest.raises(InvalidRequestError, match="for the rows' current_my_net_sales"):
         tasks.get_top_destinations(COTTONSEED, 2024, "CURRENT_MY_NET_SALES")  # type: ignore[arg-type]
+    with pytest.raises(InvalidRequestError, match="Pass 'outstandingSales', upstream's name"):
+        tasks.get_top_destinations(COTTONSEED, 2024, "outstandingsales")  # type: ignore[arg-type]
     with pytest.raises(InvalidRequestError, match="field must be one of upstream's"):
         tasks.get_top_destinations(COTTONSEED, 2024, 3)  # type: ignore[arg-type]
 

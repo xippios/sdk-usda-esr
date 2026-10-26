@@ -304,7 +304,9 @@ def _export_field(field: object) -> ExportField:
         except ValueError:
             pass
     values = ", ".join(member.value for member in ExportField)
+    # The attribute name ("outstanding_sales") or upstream's in another case ("outstandingsales").
     by_name = {member.name.casefold(): member for member in ExportField}
+    by_name |= {member.value.casefold(): member for member in ExportField}
     named = by_name.get(field.casefold()) if isinstance(field, str) else None
     hint = (
         f" Pass {named.value!r}, upstream's name for the rows' {named.name.lower()}."
