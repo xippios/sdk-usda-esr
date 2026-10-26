@@ -119,11 +119,11 @@ destinations), and ``country_code`` narrows it to one destination's weeks, up to
 The slices have no entry and keep the family's bounds (§8; ADR-0016): none returns more
 than one market year of one destination or one week of every destination.
 ``get_weekly_series`` is one destination's weeks, 54 rows in the largest recorded answer;
-``get_latest_week`` one row per destination, 11 for cottonseed 2024 and 28 for wheat HRW
-2024, the largest measured; ``get_top_destinations`` at most ``n`` of those. Their
-parameters choose the one request and the order, and none is an optional filter that
-narrows a cut answer, so a note would have nothing to name (§8); ``n`` bounds the rows
-already.
+``get_latest_week`` one row per destination, 11 for cottonseed 2024 and for wheat HRW
+2024 at most 28, the destinations of its whole answer as measured (1,136 rows for 28);
+``get_top_destinations`` at most ``n`` of those. Their parameters choose the one request
+and the order, and none is an optional filter that narrows a cut answer, so a note would
+have nothing to name (§8); ``n`` bounds the rows already.
 
 ``list_countries`` is a reference list an agent needs whole to find codes (ADR-0016;
 Johannes, 2026-10-25): 211 countries when packaged, past the default of 200 rows, so its
@@ -345,10 +345,11 @@ async def get_latest_week_async(
     ``week_ending_date`` is the newest in the answer are kept, unchanged and in upstream's
     order (by destination code in the recorded answer). Cottonseed 2024 as recorded: 11
     destinations in the week ending 2024-08-01, of 498 records over 53 weeks; wheat HRW
-    2024, measured, 28. A destination ESR sends no record for in that week is not in the
-    list. Nothing is excluded: ``9990`` (UNKNOWN in ``list_countries``) is a row like any
-    country when ESR sends one; ``list_countries`` names every code. Quantities are in the
-    unit ``unit_id`` names (``enums.UnitId``). ``meta.vintage`` is that week's ending date
+    2024 at most 28, the destinations of its whole answer as measured (1,136 records for
+    28). A destination ESR sends no record for in that week is not in the list. Nothing is
+    excluded: ``9990`` (UNKNOWN in ``list_countries``) is a row like any country when ESR
+    sends one; ``list_countries`` names every code. Quantities are in the unit ``unit_id``
+    names (``enums.UnitId``). ``meta.vintage`` is that week's ending date
     (``"2024-08-01"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells when
     ESR released the data. Codes and the year are checked before the call, as for
     ``get_exports``. Valid codes without exports (rye 2024) give an empty list and an empty

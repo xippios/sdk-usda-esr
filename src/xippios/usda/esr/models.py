@@ -209,10 +209,9 @@ class CommodityData(UpstreamModel):
 
 
 class ExportField(StrEnum):
-    """The eight quantities of an ESR export record, by their upstream field names.
+    """The eight quantities of an ESR export row, by upstream's field names.
 
-    Each value is upstream's name of a ``CommodityData`` quantity, verbatim; the rows show
-    it snake_cased: ``outstandingSales`` is ``outstanding_sales``.
+    The rows show each snake_cased: outstandingSales is outstanding_sales.
     """
 
     # Agents read the docstring above in the tools' schemas; this note is for maintainers.
