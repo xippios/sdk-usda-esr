@@ -183,7 +183,7 @@ def test_the_country_note_is_what_an_agent_reads_when_the_list_outgrows_its_cap(
     assert payload["note"] == (
         "showing 200 of 211 rows (cap: 200 rows or 65536 bytes); pass region_id, e.g. 11 "
         '(WESTERN HEMISPHERE), or search, e.g. "korea" or "1220", to narrow by region or by '
-        "code, name or GENC code"
+        "code, name, description or GENC code"
     )
 
 
@@ -215,6 +215,12 @@ def test_list_countries_by_region(respx_mock: respx.MockRouter) -> None:
     assert western.meta.request == {"region_id": 11, "search": None}
     eastern = tasks.list_countries(region_id=3).data
     assert [c.country_code for c in eastern] == [4290, 4350]  # GDR, Czechoslovakia
+    european_union = [c.country_code for c in tasks.list_countries(region_id=1).data]
+    assert len(european_union) == 27
+    assert european_union[0] == 1, "the aggregate itself, as upstream sends it"
+    assert {4120, 4230} <= set(european_union), "UK; Belgium-Luxembourg as one code"
+    croatia = tasks.list_countries(search="4791").data
+    assert [c.region_id for c in croatia] == [2], "Croatia in OTHER EUROPE (Johannes, 2026-10-25)"
     region_ids = {r.region_id for r in tasks.list_regions().data}
     by_region = {rid: tasks.list_countries(region_id=rid).data for rid in region_ids}
     assert all(by_region.values()), "every region holds a country"

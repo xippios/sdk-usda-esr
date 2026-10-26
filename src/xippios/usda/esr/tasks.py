@@ -88,7 +88,7 @@ else:
             max_rows=250,
             note=(
                 'pass region_id, e.g. 11 (WESTERN HEMISPHERE), or search, e.g. "korea" or '
-                '"1220", to narrow by region or by code, name or GENC code'
+                '"1220", to narrow by region or by code, name, description or GENC code'
             ),
         ),
     }
@@ -299,10 +299,13 @@ async def list_countries_async(
     Args:
         region_id: Keep the countries of this ESR region, an integer as ``list_regions``
             gives it, e.g. ``11`` (WESTERN HEMISPHERE, 40 countries), ``10`` (AFRICA, 58),
-            ``9`` (OTHER ASIA AND OCEANIA, 55), ``1`` (EUROPEAN UNION - 27, 27 countries);
-            ``5`` (JAPAN), ``6`` (TAIWAN), ``7`` (CHINA) and ``8`` (INDIA) hold one country
-            each. Matched exactly and not checked: a region no country carries, e.g.
-            ``12``, yields an empty list. Omit (``None``) for every region.
+            ``9`` (OTHER ASIA AND OCEANIA, 55), ``1`` (EUROPEAN UNION - 27, 27 countries,
+            as upstream sends them: the aggregate ``1`` itself, ``4120`` UNITED KINGDOM and
+            ``4230`` BELGIUM-LUXEMBOURG as one code besides 24 other members, while ``4791``
+            CROATIA sits in ``2`` OTHER EUROPE); ``5`` (JAPAN), ``6`` (TAIWAN), ``7``
+            (CHINA) and ``8`` (INDIA) hold one country each. Matched exactly and not
+            checked: a region no country carries, e.g. ``12``, yields an empty list. Omit
+            (``None``) for every region.
         search: Keep the countries where this text occurs, ignoring case, in the code (as
             digits), the name, the description or the GENC code, e.g. ``"united"`` (4120
             UNITED KINGDOM, 5200 UNITED ARAB EMIRATES, 7830 TANZANIA, UNITED REPUBLIC OF),
