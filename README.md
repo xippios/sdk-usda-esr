@@ -113,8 +113,14 @@ Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
 | `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |
 | `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | `list_units_of_measure()` | `usda_esr_list_units_of_measure` | packaged, `enums.UnitId`; `list_*` task |
 
-Alpha: the public surface may change in a minor version before 1.0 (conventions §12);
-`CHANGELOG.md` lists every change.
+All nine tasks are covered in 0.1.0, the first release. Alpha: the public surface may
+change in a minor version before 1.0 (conventions §12); `CHANGELOG.md` lists every change.
+
+Every request counts against api.data.gov's quota of 1,000 requests per hour per key,
+shared by every package using the same `DATA_GOV_API_KEY`; the `list_*` tasks spend none.
+The client keeps its own pace of one request per second; once the quota is spent it waits
+for the quota to come back when that takes at most 30 s, and otherwise raises
+`RateLimitError` with `retry_after` instead of sending.
 
 ## Upstream terms and attribution
 
