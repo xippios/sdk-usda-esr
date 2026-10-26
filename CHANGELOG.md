@@ -30,8 +30,9 @@ All notable changes to this project are documented here. The format follows
   note names `country_code` (`tasks.MCP_CAPS`).
 - `get_release_dates()`, MCP tool `usda_esr_get_release_dates`: when ESR last released each
   commodity's export data, with its current market year (`ESRData_GetDataReleaseInfo`);
-  `meta.vintage` is the latest release day, `meta.published_at` `None` since the
-  documentation states no time zone for `releaseTimeStamp`.
+  `meta.vintage` is the latest release time stamp's text (`"2026-10-22T08:30:42.670000"`,
+  `isoformat()` of upstream's `2026-10-22T08:30:42.67`), `meta.published_at` `None` since
+  the documentation states no time zone for `releaseTimeStamp`.
 - Endpoint wrappers for the seven ESR operations under `api/`, named after the snapshot's
   operationIds, and their models, built from the recorded answers.
 - The configured client for api.data.gov's gateway: the `X-Api-Key` header from

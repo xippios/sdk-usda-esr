@@ -122,7 +122,9 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
     assert len(result.data) == 44
     assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
     assert result.meta.request == {}
-    assert result.meta.vintage == "2026-10-22", "the latest releaseTimeStamp's day"
+    assert result.meta.vintage == "2026-10-22T08:30:42.670000", (
+        "the latest releaseTimeStamp's isoformat(): upstream's two fractional digits render six"
+    )
     assert result.meta.published_at is None, "the snapshot states no time zone"
     wheat = next(r for r in result.data if r.commodity_code == WHEAT_WHITE)
     assert (wheat.market_year, wheat.market_year_start, wheat.market_year_end) == (
@@ -269,7 +271,7 @@ async def test_release_dates_over_mcp(replay_fixture: Callable[[str, str], respx
         "market_year": 2027,
         "release_time_stamp": "2026-10-22T08:30:42.670000",
     }
-    assert payload["meta"]["vintage"] == "2026-10-22"
+    assert payload["meta"]["vintage"] == "2026-10-22T08:30:42.670000"
     assert payload["meta"]["published_at"] is None
 
 
