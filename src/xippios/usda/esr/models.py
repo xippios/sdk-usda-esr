@@ -24,6 +24,7 @@ not fail an answer, and ``UnitId`` members compare equal to it.
 
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from pydantic import Field
 from xippios.core import UpstreamModel
@@ -33,6 +34,7 @@ __all__ = [
     "CommodityData",
     "Country",
     "DataReleaseInfo",
+    "ExportField",
     "Region",
     "UnitOfMeasure",
 ]
@@ -204,3 +206,27 @@ class CommodityData(UpstreamModel):
     next_my_net_sales: Decimal = Field(validation_alias="nextMYNetSales")
     unit_id: int = Field(validation_alias="unitId")
     week_ending_date: date = Field(validation_alias="weekEndingDate")
+
+
+class ExportField(StrEnum):
+    """The eight quantities of an ESR export row, by upstream's field names.
+
+    The rows show each snake_cased: outstandingSales is outstanding_sales.
+    """
+
+    # Agents read the docstring above in the tools' schemas; this note is for maintainers.
+    # The values are the validation_alias of each Decimal field of CommodityData, in the
+    # record's order, and the member names its attribute names in upper case; a test keeps
+    # them equal. get_top_destinations takes one as ``field``, so the MCP and HTTP schemas
+    # list the eight and refuse any other before a call (Johannes, 2026-10-25; conventions
+    # §3, ADR-0003). It lives next to the record, not in enums.py, which
+    # scripts/refresh_reference.py renders whole from the packaged lists.
+
+    WEEKLY_EXPORTS = "weeklyExports"
+    ACCUMULATED_EXPORTS = "accumulatedExports"
+    OUTSTANDING_SALES = "outstandingSales"
+    GROSS_NEW_SALES = "grossNewSales"
+    CURRENT_MY_NET_SALES = "currentMYNetSales"
+    CURRENT_MY_TOTAL_COMMITMENT = "currentMYTotalCommitment"
+    NEXT_MY_OUTSTANDING_SALES = "nextMYOutstandingSales"
+    NEXT_MY_NET_SALES = "nextMYNetSales"

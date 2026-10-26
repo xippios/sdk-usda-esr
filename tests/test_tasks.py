@@ -45,7 +45,10 @@ def test_the_package_exports_the_tasks() -> None:
     assert get_release_dates is tasks.get_release_dates
     assert tasks.__all__ == [
         "get_exports",
+        "get_latest_week",
         "get_release_dates",
+        "get_top_destinations",
+        "get_weekly_series",
         "list_commodities",
         "list_countries",
         "list_regions",

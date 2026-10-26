@@ -1,8 +1,10 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, seven keyed calls in all: ``get_exports`` for
+One live smoke test per task function, ten keyed calls in all: ``get_exports`` for
 wheat white to Canada and for soybeans to Mexico, market year 2024, and
-``get_release_dates``. The codes are taken from the packaged lists by their upstream
+``get_release_dates``; the slices, one call each, ``get_latest_week`` for wheat HRW,
+``get_top_destinations`` for soybeans and ``get_weekly_series`` for wheat white to
+Canada, market year 2024. The codes are taken from the packaged lists by their upstream
 names, so a renamed or recoded commodity or country fails here first. The four list
 tasks answer from the package without a call, so their test fetches the list through its
 endpoint wrapper, one call each, and checks that the packaged records equal it: the
@@ -21,6 +23,7 @@ import pytest
 from xippios.usda.esr import api, tasks
 from xippios.usda.esr._client import BASE_URL, config, policy
 from xippios.usda.esr.enums import UnitId
+from xippios.usda.esr.models import ExportField
 from xippios.usda.esr.params import packaged_values
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
@@ -35,6 +38,7 @@ def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
 
 
 WHEAT_WHITE = _code("commodities", "commodityCode", "commodityName", "Wheat - White")
+WHEAT_HRW = _code("commodities", "commodityCode", "commodityName", "Wheat - HRW")
 SOYBEANS = _code("commodities", "commodityCode", "commodityName", "Soybeans")
 CANADA = _code("countries", "countryCode", "countryDescription", "CANADA")
 MEXICO = _code("countries", "countryCode", "countryDescription", "MEXICO")
@@ -93,6 +97,53 @@ async def test_get_release_dates_live() -> None:
     assert all(r.release_time_stamp.tzinfo is None for r in result.data)
     latest = max(r.release_time_stamp for r in result.data)
     assert result.meta.vintage == latest.isoformat()
+    assert result.meta.published_at is None
+
+
+async def test_get_latest_week_live() -> None:
+    result = await tasks.get_latest_week_async(WHEAT_HRW, 2024)
+    assert result.data
+    weeks = {r.week_ending_date for r in result.data}
+    assert len(weeks) == 1, "one week"
+    (week,) = weeks
+    assert date(2024, 5, 1) < week < date(2024, 6, 14), "wheat's market year 2024 ends in May"
+    destinations = [r.country_code for r in result.data]
+    assert len(set(destinations)) == len(destinations), "one row per destination"
+    assert {r.commodity_code for r in result.data} == {WHEAT_HRW}
+    assert result.meta.endpoint == "ESRData_GetAllCountriesData"
+    assert result.meta.vintage == week.isoformat()
+    assert result.meta.published_at is None
+
+
+async def test_get_top_destinations_live() -> None:
+    result = await tasks.get_top_destinations_async(
+        SOYBEANS, 2024, ExportField.ACCUMULATED_EXPORTS, 5
+    )
+    assert len(result.data) == 5
+    values = [r.accumulated_exports for r in result.data]
+    assert values == sorted(values, reverse=True), "largest first"
+    weeks = {r.week_ending_date for r in result.data}
+    assert len(weeks) == 1, "one week"
+    (week,) = weeks
+    assert date(2024, 8, 1) < week < date(2024, 9, 14), "soybeans' 2024 ends in August 2024"
+    assert result.meta.request == {
+        "commodity_code": SOYBEANS,
+        "market_year": 2024,
+        "field": "accumulatedExports",
+        "n": 5,
+    }
+    assert result.meta.vintage == week.isoformat()
+
+
+async def test_get_weekly_series_live() -> None:
+    result = await tasks.get_weekly_series_async(WHEAT_WHITE, CANADA, 2024)
+    weeks = [r.week_ending_date for r in result.data]
+    assert weeks
+    assert weeks == sorted(weeks), "oldest first"
+    assert len(set(weeks)) == len(weeks), "one row per week"
+    assert {(r.commodity_code, r.country_code) for r in result.data} == {(WHEAT_WHITE, CANADA)}
+    assert result.meta.endpoint == "ESRData_GetCountryData"
+    assert result.meta.vintage == weeks[-1].isoformat()
     assert result.meta.published_at is None
 
 

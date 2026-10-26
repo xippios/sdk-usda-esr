@@ -29,6 +29,15 @@ naive datetime (Johannes, 2026-10-26, for every FAS package): upstream writes tw
 fractional digits (``2026-10-22T08:30:42.67``) and the vintage renders six
 (``"2026-10-22T08:30:42.670000"``).
 
+The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
+Johannes, 2026-10-25) each make the one request ``get_exports`` makes and only select and
+order its records (ADR-0003): no record is changed, nothing is derived, converted, filled
+or excluded, and nothing is compared with another source. Their ``meta.endpoint`` is the
+operation called, ``meta.request`` carries every parameter (``field`` as its upstream
+name), ``meta.vintage`` is the latest ``weekEndingDate`` among the records considered as an
+ISO date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``, as for
+``get_exports``.
+
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
 upstream call (Johannes, 2026-10-25). ``meta.endpoint`` is the operation the list was
 fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the task answered,
@@ -45,7 +54,7 @@ countries, on GENC codes.
 
 from collections.abc import Mapping
 
-from xippios.core import Result, ResultMeta, parse, sync
+from xippios.core import InvalidRequestError, Result, ResultMeta, parse, sync
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
@@ -55,6 +64,7 @@ from xippios.usda.esr.models import (
     CommodityData,
     Country,
     DataReleaseInfo,
+    ExportField,
     Region,
     UnitOfMeasure,
 )
@@ -68,7 +78,10 @@ from xippios.usda.esr.params import (
 
 __all__ = [
     "get_exports",
+    "get_latest_week",
     "get_release_dates",
+    "get_top_destinations",
+    "get_weekly_series",
     "list_commodities",
     "list_countries",
     "list_regions",
@@ -102,6 +115,15 @@ tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Ever
 at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
 (wheat white to Canada 2024). ``get_release_dates``, 44 rows, keeps the default.
+
+The slices have no entry and keep the family's bounds (§8; ADR-0016): none returns more
+than one market year of one destination or one week of every destination.
+``get_weekly_series`` is one destination's weeks, 54 rows in the largest recorded answer;
+``get_latest_week`` one row per destination, 11 for cottonseed 2024 and for wheat HRW
+2024 at most 28, the destinations of its whole answer as measured (1,136 rows for 28);
+``get_top_destinations`` at most ``n`` of those. Their parameters choose the one request
+and the order, and none is an optional filter that narrows a cut answer, so a note would
+have nothing to name (§8); ``n`` bounds the rows already.
 
 ``list_countries`` is a reference list an agent needs whole to find codes (ADR-0016;
 Johannes, 2026-10-25): 211 countries when packaged, past the default of 200 rows, so its
@@ -264,6 +286,209 @@ async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
     return Result(data=releases, meta=meta)
 
 
+_FIELD_ATTRIBUTES: dict[str, str] = {
+    info.validation_alias: name
+    for name, info in CommodityData.model_fields.items()
+    if isinstance(info.validation_alias, str)
+}
+"""``CommodityData``'s attribute for each upstream field name, read once from the model's
+fields: ``"outstandingSales"`` is ``outstanding_sales``. ``get_top_destinations`` sorts by
+the attribute that carries its ``ExportField``'s value."""
+
+
+def _export_field(field: object) -> ExportField:
+    """``field`` as an ``ExportField``; ``InvalidRequestError`` naming the eight otherwise."""
+    if isinstance(field, str):  # an ExportField is a str too
+        try:
+            return ExportField(field)
+        except ValueError:
+            pass
+    values = ", ".join(member.value for member in ExportField)
+    # The attribute name ("outstanding_sales") or upstream's in another case ("outstandingsales").
+    by_name = {member.name.casefold(): member for member in ExportField}
+    by_name |= {member.value.casefold(): member for member in ExportField}
+    named = by_name.get(field.casefold()) if isinstance(field, str) else None
+    hint = (
+        f" Pass {named.value!r}, upstream's name for the rows' {named.name.lower()}."
+        if named
+        else ""
+    )
+    raise InvalidRequestError(
+        f"field must be one of upstream's names of the eight quantities, {values}; got "
+        f"{field!r}.{hint}",
+        source=SOURCE,
+    )
+
+
+async def _every_destination(commodity_code: int, market_year: int) -> list[CommodityData]:
+    """``ESRData_GetAllCountriesData``'s records; ESR's empty 404 raised again, naming the ask."""
+    try:
+        return await api.ESRData_GetAllCountriesData(commodity_code, market_year)
+    except NoDataForYear as exc:
+        raise _absent(exc, commodity_code, "every country", market_year) from exc
+
+
+def _latest_week(records: list[CommodityData]) -> list[CommodityData]:
+    """The records whose ``weekEndingDate`` is the newest in ``records``, in their order; pure.
+
+    An empty list gives an empty list.
+    """
+    newest = max((record.week_ending_date for record in records), default=None)
+    return [record for record in records if record.week_ending_date == newest]
+
+
+async def get_latest_week_async(
+    commodity_code: int, market_year: int
+) -> Result[list[CommodityData]]:
+    """The newest week of US export sales of a commodity in a market year, one row per destination.
+
+    One request to ``ESRData_GetAllCountriesData``, the call ``get_exports`` makes without
+    a country; of its records, one per destination and week, those whose
+    ``week_ending_date`` is the newest in the answer are kept, unchanged and in upstream's
+    order (by destination code in the recorded answer). Cottonseed 2024 as recorded: 11
+    destinations in the week ending 2024-08-01, of 498 records over 53 weeks; wheat HRW
+    2024 at most 28, the destinations of its whole answer as measured (1,136 records for
+    28). A destination ESR sends no record for in that week is not in the list. Nothing is
+    excluded: ``9990`` (UNKNOWN in ``list_countries``) is a row like any country when ESR
+    sends one; ``list_countries`` names every code. Quantities are in the unit ``unit_id``
+    names (``enums.UnitId``). ``meta.vintage`` is that week's ending date
+    (``"2024-08-01"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells when
+    ESR released the data. Codes and the year are checked before the call, as for
+    ``get_exports``. Valid codes without exports (rye 2024) give an empty list and an empty
+    ``meta.vintage``; a market year ESR holds no data for (1900) raises ``NotFoundError``.
+
+    Args:
+        commodity_code: ESR commodity code, an integer, e.g. ``801`` (Soybeans), ``101``
+            (Wheat - HRW), ``401`` (Corn), ``1201`` (Cottonseed); ``list_commodities``
+            lists them.
+        market_year: ESR market year, named by its end year, e.g. ``2024`` (for soybeans
+            September 2023 to August 2024, for cottonseed August 2023 to July 2024);
+            ``get_release_dates`` names each commodity's current one.
+    """
+    validate_commodity_code(commodity_code)
+    validate_market_year(market_year)
+    request: dict[str, int] = {"commodity_code": commodity_code, "market_year": market_year}
+    week = _latest_week(await _every_destination(commodity_code, market_year))
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint="ESRData_GetAllCountriesData",
+        vintage=_vintage(week),
+        request=request,
+    )
+    return Result(data=week, meta=meta)
+
+
+async def get_top_destinations_async(
+    commodity_code: int, market_year: int, field: ExportField, n: int = 10
+) -> Result[list[CommodityData]]:
+    """The top n destinations by one quantity in the newest week of a commodity's market year.
+
+    One request to ``ESRData_GetAllCountriesData``; the records of the newest week in the
+    answer (what ``get_latest_week`` returns) are sorted by ``field``, largest first, and
+    the first ``n`` kept, each exactly as upstream sent it. Equal values keep upstream's
+    order (by destination code in the recorded answer); net sales can be negative and then
+    rank last. Values are compared as sent, in the commodity's unit (``unit_id``).
+    Cottonseed 2024 by ``"outstandingSales"`` as recorded: 5800 KOREA, REPUBLIC OF
+    (17,092), 5880 JAPAN (4,223), 5230 OMAN (939), 1220 CANADA (31), then seven
+    destinations at 0 in upstream's order. Nothing is excluded: ``9990`` (UNKNOWN in
+    ``list_countries``) ranks alongside countries when ESR sends it; check codes with
+    ``list_countries`` if only countries should count. ``meta.vintage`` is the week ranked
+    (``"2024-08-01"``); ``meta.published_at`` stays empty. Codes, the year, ``field`` and
+    ``n`` are checked before the call. Valid codes without exports (rye 2024) give an empty
+    list; a market year ESR holds no data for (1900) raises ``NotFoundError``.
+
+    Args:
+        commodity_code: ESR commodity code, an integer, e.g. ``801`` (Soybeans), ``101``
+            (Wheat - HRW), ``401`` (Corn), ``1201`` (Cottonseed); ``list_commodities``
+            lists them.
+        market_year: ESR market year, named by its end year, e.g. ``2024`` (for soybeans
+            September 2023 to August 2024).
+        field: The quantity to rank by, upstream's field name (``models.ExportField``):
+            ``"outstandingSales"`` (the rows' ``outstanding_sales``),
+            ``"accumulatedExports"``, ``"weeklyExports"``, ``"grossNewSales"``,
+            ``"currentMYNetSales"``, ``"currentMYTotalCommitment"``,
+            ``"nextMYOutstandingSales"``, ``"nextMYNetSales"``.
+        n: How many destinations to keep, a whole number of at least 1, e.g. ``5``, ``10``
+            (the default); more than the destinations in the week returns them all.
+    """
+    validate_commodity_code(commodity_code)
+    validate_market_year(market_year)
+    field = _export_field(field)
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise InvalidRequestError(
+            f"n must be a whole number of at least 1, such as 5 or 10, got {n!r}.",
+            source=SOURCE,
+        )
+    request: dict[str, int | str] = {
+        "commodity_code": commodity_code,
+        "market_year": market_year,
+        "field": field.value,
+        "n": n,
+    }
+    week = _latest_week(await _every_destination(commodity_code, market_year))
+    attribute = _FIELD_ATTRIBUTES[field.value]
+    ranked = sorted(
+        week,
+        key=lambda record: getattr(record, attribute),
+        reverse=True,  # sorted() stays stable with reverse=True: ties keep upstream order
+    )
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint="ESRData_GetAllCountriesData",
+        vintage=_vintage(week),
+        request=request,
+    )
+    return Result(data=ranked[:n], meta=meta)
+
+
+async def get_weekly_series_async(
+    commodity_code: int, country_code: int, market_year: int
+) -> Result[list[CommodityData]]:
+    """One destination's weekly US export sales of a commodity in a market year, oldest first.
+
+    One request to ``ESRData_GetCountryData``, the call ``get_exports`` makes with a
+    country; its records, one per week, are ordered by ``week_ending_date`` ascending and
+    otherwise unchanged. Upstream already sends them in that order in the recorded answer
+    (wheat white to Canada 2024: 54 weeks, 2023-06-01 to 2024-06-06), so the sort changes
+    nothing there and keeps the order should upstream's change. Nothing is filled: a week
+    ESR sends no record for is absent. ``9990`` (UNKNOWN in ``list_countries``) is a
+    destination code like any other. Quantities are in the unit ``unit_id`` names
+    (``enums.UnitId``). ``meta.vintage`` is the last week's ending date (``"2024-06-06"``);
+    ``meta.published_at`` stays empty, ``get_release_dates`` tells when ESR released the
+    data. Codes and the year are checked before the call; an empty list means ESR has no
+    records for that combination, and a market year ESR holds no data for (1900) raises
+    ``NotFoundError``.
+
+    Args:
+        commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
+            ``101`` (Wheat - HRW), ``801`` (Soybeans), ``1404`` (All Upland Cotton).
+        country_code: ESR destination country code (not ISO), an integer, e.g. ``1220``
+            (Canada), ``2010`` (Mexico), ``5880`` (Japan); ``list_countries`` lists them.
+        market_year: ESR market year, named by its end year, e.g. ``2024`` (for wheat
+            June 2023 to May 2024).
+    """
+    validate_commodity_code(commodity_code)
+    validate_country_code(country_code)
+    validate_market_year(market_year)
+    request: dict[str, int] = {
+        "commodity_code": commodity_code,
+        "country_code": country_code,
+        "market_year": market_year,
+    }
+    try:
+        records = await api.ESRData_GetCountryData(commodity_code, country_code, market_year)
+    except NoDataForYear as exc:
+        raise _absent(exc, commodity_code, f"country {country_code}", market_year) from exc
+    series = sorted(records, key=lambda record: record.week_ending_date)
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint="ESRData_GetCountryData",
+        vintage=_vintage(series),
+        request=request,
+    )
+    return Result(data=series, meta=meta)
+
+
 async def list_commodities_async(search: str | None = None) -> Result[list[Commodity]]:
     """List ESR's commodities with their codes, the values commodity_code takes.
 
@@ -367,7 +592,10 @@ async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
 
 
 get_exports = sync(get_exports_async)
+get_latest_week = sync(get_latest_week_async)
 get_release_dates = sync(get_release_dates_async)
+get_top_destinations = sync(get_top_destinations_async)
+get_weekly_series = sync(get_weekly_series_async)
 list_commodities = sync(list_commodities_async)
 list_countries = sync(list_countries_async)
 list_regions = sync(list_regions_async)

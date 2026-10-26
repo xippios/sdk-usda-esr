@@ -28,6 +28,18 @@ All notable changes to this project are documented here. The format follows
   lacks is `errors.NoDataForYear`, a `NotFoundError`. `meta.vintage` is the latest week
   ending date in the answer; `meta.published_at` stays `None`. Over MCP a cut answer's
   note names `country_code` (`tasks.MCP_CAPS`).
+- `get_latest_week(commodity_code, market_year)`,
+  `get_top_destinations(commodity_code, market_year, field, n=10)` and
+  `get_weekly_series(commodity_code, country_code, market_year)`, MCP tools
+  `usda_esr_get_latest_week`, `usda_esr_get_top_destinations` and
+  `usda_esr_get_weekly_series`: the slices, each one upstream request
+  (`ESRData_GetAllCountriesData` for the first two, `ESRData_GetCountryData` for the
+  series) whose records are only selected and ordered: the newest week's records, one per
+  destination; those sorted by one quantity, largest first, ties in upstream order, the
+  first `n`; one destination's weeks, oldest first. Nothing is excluded. `meta.vintage` is
+  the latest week among the records considered, `meta.published_at` `None`; an empty
+  answer is an empty result. `field` is a `models.ExportField`, a `StrEnum` of the
+  record's eight quantities by their upstream names, which the MCP and HTTP schemas list.
 - `get_release_dates()`, MCP tool `usda_esr_get_release_dates`: when ESR last released each
   commodity's export data, with its current market year (`ESRData_GetDataReleaseInfo`);
   `meta.vintage` is the latest release time stamp's text (`"2026-10-22T08:30:42.670000"`,

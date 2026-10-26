@@ -124,12 +124,13 @@ tests/
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
   test_tasks.py    structural checks on every task plus per-task replay tests, MCP and HTTP
   test_lists.py    the list tasks answer the recorded lists from the package, without a call
+  test_slices.py   the slices replay the recorded exports answers: selection and order only
   test_api.py      replay tests for the endpoint wrappers
   test_client.py   wiring, classify on recorded error bodies, core's quota policy on a 429
   test_params.py   packaged lists, the enum and the code and year checks
   test_adapters.py the adapters expose exactly tasks.__all__
   test_layout.py   namespace levels stay empty; py.typed ships
-  test_live.py     @pytest.mark.live smoke tests, one per task (7 keyed calls in all: the
+  test_live.py     @pytest.mark.live smoke tests, one per task (10 keyed calls in all: the
                    list tasks' test compares each packaged list with the live one), and the
                    template's keyless reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
