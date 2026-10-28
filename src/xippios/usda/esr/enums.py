@@ -8,7 +8,7 @@ __all__ = [
 
 
 class UnitId(IntEnum):
-    """Values of ``unitId`` (fetched 2026-10-25)."""
+    """Values of ``unitId`` (fetched 2026-10-28)."""
 
     METRIC_TONS = 1
     RUNNING_BALES = 2

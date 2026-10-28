@@ -20,14 +20,15 @@ list) and name the records that are gone and those that are new: the signal to r
 
 | File | Origin | Fetched (UTC) | Records |
 | --- | --- | --- | --- |
-| `commodities.json` | `GET https://api.fas.usda.gov/api/esr/commodities` (`ESRData_GetCommodities`) | 2026-10-25 | 44 |
-| `countries.json` | `GET https://api.fas.usda.gov/api/esr/countries` (`ESRData_GetCountries`) | 2026-10-25 | 211 |
-| `regions.json` | `GET https://api.fas.usda.gov/api/esr/regions` (`ESRData_GetRegions`) | 2026-10-25 | 12 |
-| `unitsOfMeasure.json` | `GET https://api.fas.usda.gov/api/esr/unitsOfMeasure` (`ESRData_GetUnitsOfMeasure`) | 2026-10-25 | 5 |
+| `commodities.json` | `GET https://api.fas.usda.gov/api/esr/commodities` (`ESRData_GetCommodities`) | 2026-10-28T19:19:51Z | 44 |
+| `countries.json` | `GET https://api.fas.usda.gov/api/esr/countries` (`ESRData_GetCountries`) | 2026-10-28T19:19:52Z | 211 |
+| `regions.json` | `GET https://api.fas.usda.gov/api/esr/regions` (`ESRData_GetRegions`) | 2026-10-28T19:19:53Z | 12 |
+| `unitsOfMeasure.json` | `GET https://api.fas.usda.gov/api/esr/unitsOfMeasure` (`ESRData_GetUnitsOfMeasure`) | 2026-10-28T19:19:53Z | 5 |
 
-The 2026-10-25 files were written by `scripts/refresh_reference.py` against the live API
-at about 20:39 UTC, ten minutes after the same four lists were recorded under
-`tests/fixtures/<wrapper>/all.json`; the records are equal to the recorded ones, which
-`tests/test_params.py` checks. Their `fetched` is the bare date the script then wrote,
-which `PackagedList.load` reads as 00:00 UTC of that day (so the list tasks'
-`meta.retrieved_at`) until the next refresh writes the full time.
+The files were last written by `scripts/refresh_reference.py` against the live API on
+2026-10-28, one keyed call per list, each `fetched` the UTC time of its fetch to the
+second, which is the list tasks' `meta.retrieved_at`. Every record is unchanged from the
+first files, written on 2026-10-25 at about 20:39 UTC, ten minutes after the same four
+lists were recorded under `tests/fixtures/<wrapper>/all.json`; the records are equal to
+the recorded ones, which `tests/test_params.py` checks. The 2026-10-25 files carried the
+bare date the script then wrote, which `PackagedList.load` read as 00:00 UTC of that day.

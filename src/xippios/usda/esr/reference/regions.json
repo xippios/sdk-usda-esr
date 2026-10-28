@@ -1,7 +1,7 @@
 {
   "param": "regions",
   "endpoint": "ESRData_GetRegions",
-  "fetched": "2026-10-25",
+  "fetched": "2026-10-28T19:19:53Z",
   "records": [
     {
       "regionId": 10,

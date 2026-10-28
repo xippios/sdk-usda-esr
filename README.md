@@ -84,7 +84,7 @@ from xippios.usda.esr import list_commodities, list_countries
 
 result = list_countries(region_id=11)  # ESR's region WESTERN HEMISPHERE (list_regions)
 [c.country_code for c in result.data][:3]  # [1010, 1220, 1610], 40 in upstream order
-result.meta.endpoint, result.meta.retrieved_at  # "ESRData_GetCountries", 2026-10-25 (fetched)
+result.meta.endpoint, result.meta.retrieved_at  # "ESRData_GetCountries", 2026-10-28T19:19:52Z
 list_countries(search="united").data  # 4120, 5200, 7830: code, name, description or GENC code
 list_countries(search="deu").data  # 4280 GERMANY, by its GENC code "DEU"
 list_commodities(search="wheat").data  # 101 to 107 and 201 Wheat Products

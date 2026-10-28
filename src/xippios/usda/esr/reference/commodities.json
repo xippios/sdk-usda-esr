@@ -1,7 +1,7 @@
 {
   "param": "commodities",
   "endpoint": "ESRData_GetCommodities",
-  "fetched": "2026-10-25",
+  "fetched": "2026-10-28T19:19:51Z",
   "records": [
     {
       "commodityCode": 101,

@@ -66,7 +66,8 @@ The ``list_*`` tasks answer from the four lists packaged under ``reference/`` an
 upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
 ``meta`` (ADR-0022, rule 1): ``meta.endpoint`` is the operation the list was fetched from
 (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the package fetched the list,
-the file's ``fetched`` (a bare date, ``2026-10-25``, reads as 00:00 UTC of that day), and
+the file's ``fetched``, a UTC time to the second (``2026-10-28T19:19:52Z`` for the
+countries), and
 ``meta.vintage`` is ``None``: upstream gives these lists no release identifier, and a
 fetch date is not one. ``meta.published_at`` stays ``None``, and so does ``meta.total``,
 since upstream reports no count (ADR-0012). The records keep upstream's order, field
@@ -712,7 +713,7 @@ async def list_commodities_async(search: str | None = None) -> Result[list[Commo
     (``list_units_of_measure``), e.g. ``104`` Wheat - White, ``401`` Corn, ``801``
     Soybeans (all ``1``, Metric Tons), ``1404`` All Upland Cotton (``2``, Running Bales).
     Names are upstream's, unchanged. ``meta.retrieved_at`` is when the package fetched the
-    list (2026-10-25, UTC); ``meta.vintage`` is empty, as upstream gives the list no
+    list (2026-10-28, UTC); ``meta.vintage`` is empty, as upstream gives the list no
     release identifier.
 
     Args:
@@ -743,7 +744,7 @@ async def list_countries_async(
     padded with spaces, and kept so: ``country_name`` to eight characters
     (``"CANADA  "``), ``country_description`` to 31 (``"CANADA"`` and 25 spaces); only
     ``9990`` and the description of ``1`` are unpadded. ``meta.retrieved_at`` is when the
-    package fetched the list (2026-10-25, UTC); ``meta.vintage`` is empty, as upstream
+    package fetched the list (2026-10-28, UTC); ``meta.vintage`` is empty, as upstream
     gives the list no release identifier.
 
     Args:
@@ -783,7 +784,7 @@ async def list_regions_async() -> Result[list[Region]]:
     ``1`` EUROPEAN UNION - 27, ``4`` FORMER SOVIET UNION-12, ``8`` INDIA, ``5`` JAPAN,
     ``9`` OTHER ASIA AND OCEANIA, ``2`` OTHER EUROPE, ``6`` TAIWAN, ``99`` UNKNOWN, ``11``
     WESTERN HEMISPHERE. Every one holds at least one country of ``list_countries``.
-    ``meta.retrieved_at`` is when the package fetched the list (2026-10-25, UTC);
+    ``meta.retrieved_at`` is when the package fetched the list (2026-10-28, UTC);
     ``meta.vintage`` is empty, as upstream gives the list no release identifier. Takes no
     parameters.
     """
@@ -801,7 +802,7 @@ async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
     and skins, 1601 to 1603), ``4`` NUMBER (1604, 1606, 1607) and ``5`` Pounds (1605,
     1608). The name field is plural upstream, ``unit_names``, and stays so; the names are
     upstream's, unchanged. ``enums.UnitId`` names the same ids. ``meta.retrieved_at`` is
-    when the package fetched the list (2026-10-25, UTC); ``meta.vintage`` is empty, as
+    when the package fetched the list (2026-10-28, UTC); ``meta.vintage`` is empty, as
     upstream gives the list no release identifier. Takes no parameters.
     """
     packaged = PackagedList.load(PACKAGE, "unitsOfMeasure")

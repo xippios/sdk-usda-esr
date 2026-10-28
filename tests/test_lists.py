@@ -48,6 +48,13 @@ LISTS: list[tuple[str, str, str, str, type[BaseModel], int]] = [
 IDS = [task for task, *_ in LISTS]
 DEFAULT_ROWS, DEFAULT_BYTES = 200, 65_536
 """The family's default MCP result cap (conventions §8)."""
+FETCHED = {
+    "commodities": datetime(2026, 10, 28, 19, 19, 51, tzinfo=UTC),
+    "countries": datetime(2026, 10, 28, 19, 19, 52, tzinfo=UTC),
+    "regions": datetime(2026, 10, 28, 19, 19, 53, tzinfo=UTC),
+    "unitsOfMeasure": datetime(2026, 10, 28, 19, 19, 53, tzinfo=UTC),
+}
+"""When the refresh fetched each packaged list, to the second (``reference/README.md``)."""
 WHEAT = [101, 102, 103, 104, 105, 106, 107, 201]
 """The commodities whose name holds "wheat": the six classes, All Wheat, Wheat Products."""
 
@@ -93,8 +100,8 @@ async def test_list_answers_the_recorded_records_without_a_call(
     assert all(type(record) is model for record in result.data)
     assert result.meta.source == "usda-esr"
     assert result.meta.endpoint == endpoint
-    assert result.meta.retrieved_at == _fetched(name) == datetime(2026, 10, 25, tzinfo=UTC), (
-        "retrieved_at is when the package fetched the list, its bare date read as 00:00 UTC"
+    assert result.meta.retrieved_at == _fetched(name) == FETCHED[name], (
+        "retrieved_at is when the package fetched the list, its UTC time to the second"
     )
     assert result.meta.vintage is None, "a fetch date is not a release identifier"
     assert result.meta.published_at is None
