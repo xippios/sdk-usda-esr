@@ -88,8 +88,8 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   text sits in a private attribute, which pydantic compares; compare two records'
   `model_dump()` for their values alone.
 - The `list_*` tasks' `meta`, now built by core's `PackagedList`: `retrieved_at` is when
-  the packaged list was fetched (2026-10-25, the files' bare date read as 00:00 UTC), no
-  longer when the task answered, and `vintage` is `None`, no longer the fetch date.
+  the packaged list was fetched (`2026-10-28T19:19:52Z` for the countries), no longer
+  when the task answered, and `vintage` is `None`, no longer the fetch date.
 - `meta.request` leaves out a parameter left `None`: `get_exports` without
   `country_code`, `list_commodities` and `list_countries` without their filters.
 - The gateway's answers are mapped by `xippios.core.data_gov`'s `Gateway`: its
@@ -105,12 +105,17 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
 - `scripts/check-siblings.sh` is replaced by the template's
   `.github/scripts/check-siblings.sh`, which `siblings.yml` runs and which finds the
   siblings under `xippios.usda` itself.
+- The packaged lists re-fetched on 2026-10-28, records unchanged (44 commodities, 211
+  countries, 12 regions, 5 units); `fetched` now a full UTC time, to the second, in each
+  `reference/*.json` (ADR-0022, amendment 2026-10-27, point 1), where 0.1.0's files
+  carried the bare date 2026-10-25. `enums.UnitId` is re-rendered, only its docstring's
+  fetch date moving.
 
 ### Removed
 
 - `xippios.usda.esr.errors.UnknownCode`, replaced by `xippios.core.UnknownCode`, an
   `InvalidRequestError` as before: its message reads "999 is not a commodity_code in the
-  packaged commodities list (fetched 2026-10-25). Did you mean ...", its `fetched` is
+  packaged commodities list (fetched 2026-10-28). Did you mean ...", its `fetched` is
   a datetime and its `closest` a tuple.
 - `params.PackagedList` and `params.packaged_values`: core's
   `PackagedList.load(params.PACKAGE, name)` reads a packaged list.
