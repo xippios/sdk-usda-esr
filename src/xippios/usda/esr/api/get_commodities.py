@@ -2,7 +2,7 @@
 
 Reference: ``docs/upstream/openapi/portal-document.json``, operation
 ``ESRData_GetCommodities``: no parameters, the response typed only as ``object``. The
-record shape is the recorded one, ``tests/fixtures/ESRData_GetCommodities/all.json``,
+record shape is the recorded one, ``tests/fixtures/get_commodities/all.json``,
 parsed into ``models.Commodity``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """

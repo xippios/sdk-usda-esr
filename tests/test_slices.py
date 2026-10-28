@@ -37,8 +37,11 @@ from xippios.usda.esr.models import CommodityData, ExportField
 FIXTURES = Path(__file__).parent / "fixtures"
 WHEAT_WHITE, COTTONSEED, RYE = 104, 1201, 501
 CANADA = 1220
-COUNTRY = "ESRData_GetCountryData"
-ALL = "ESRData_GetAllCountriesData"
+COUNTRY = "get_country_data"
+ALL = "get_all_countries_data"
+OPERATIONS = {COUNTRY: "ESRData_GetCountryData", ALL: "ESRData_GetAllCountriesData"}
+"""Each wrapper, the name of its fixture directory, to its verbatim ``operationId``, the
+``meta.endpoint`` of the slices that call it (conventions §2, §10)."""
 EXPORTS = f"{BASE_URL}/api/esr/exports/commodityCode"
 SLICES = ["get_latest_week", "get_top_destinations", "get_weekly_series"]
 
@@ -49,10 +52,10 @@ LATEST_DESTINATIONS = [1220, 2010, 5170, 5180, 5230, 5520, 5700, 5800, 5830, 588
 """The 11 destinations of that week, in upstream's order: by code."""
 
 
-def _recorded(endpoint: str, case: str) -> list[CommodityData]:
+def _recorded(wrapper: str, case: str) -> list[CommodityData]:
     """The recorded answer parsed as the wrapper parses it, without a request."""
-    body = json.loads(load_fixture(fixture_path(FIXTURES, endpoint, case)).response.body)
-    return parse(list[CommodityData], body, source="usda-esr", endpoint=endpoint)
+    body = json.loads(load_fixture(fixture_path(FIXTURES, wrapper, case)).response.body)
+    return parse(list[CommodityData], body, source="usda-esr", endpoint=OPERATIONS[wrapper])
 
 
 def _latest_week_recorded() -> list[CommodityData]:
@@ -112,7 +115,7 @@ def test_get_latest_week_is_the_newest_week_of_every_destination(
     assert [r.country_code for r in result.data] == LATEST_DESTINATIONS, "one row each"
     assert {r.week_ending_date for r in result.data} == {LATEST}
     assert result.meta.source == "usda-esr"
-    assert result.meta.endpoint == ALL
+    assert result.meta.endpoint == OPERATIONS[ALL]
     assert result.meta.request == {"commodity_code": 1201, "market_year": 2024}
     assert result.meta.vintage == "2024-08-01", "the week itself"
     assert result.meta.published_at is None
@@ -142,7 +145,7 @@ def test_top_destinations_by_outstanding_sales_ties_keep_upstream_order(
     ]
     week = _latest_week_recorded()
     assert all(record in week for record in top.data), "records as upstream sent them"
-    assert top.meta.endpoint == ALL
+    assert top.meta.endpoint == OPERATIONS[ALL]
     assert top.meta.request == {
         "commodity_code": 1201,
         "market_year": 2024,
@@ -207,7 +210,7 @@ def test_get_weekly_series_is_one_destinations_weeks_oldest_first(
         date(2024, 6, 6),
     )
     assert result.meta.source == "usda-esr"
-    assert result.meta.endpoint == COUNTRY
+    assert result.meta.endpoint == OPERATIONS[COUNTRY]
     assert result.meta.request == {
         "commodity_code": 104,
         "country_code": 1220,
@@ -400,7 +403,7 @@ async def test_top_destinations_tool_end_to_end(
     assert {row["week_ending_date"] for row in payload["data"]} == {"2024-08-01"}
     assert "note" not in payload
     assert payload["meta"]["request"] == arguments, "field as its upstream value, a string"
-    assert payload["meta"]["endpoint"] == ALL
+    assert payload["meta"]["endpoint"] == OPERATIONS[ALL]
     assert payload["meta"]["vintage"] == "2024-08-01"
     assert payload["meta"]["published_at"] is None
     refused = await mcp_call_text(

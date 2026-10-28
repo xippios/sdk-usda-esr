@@ -47,7 +47,7 @@ from xippios.usda.esr._client import (
 from xippios.usda.esr.errors import NoDataForYear
 
 FIXTURES = Path(__file__).parent / "fixtures"
-COUNTRY = "ESRData_GetCountryData"
+COUNTRY = "get_country_data"
 EXPORTS = "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear"
 SLACK = CLOCK_SLACK.total_seconds()
 """A wait read through the client counts from the snapshot to now, a moment later."""
@@ -142,7 +142,7 @@ def test_the_data_path_covers_both_exports_forms_only() -> None:
 def test_invalid_key_is_an_auth_error_naming_the_code_and_the_variable() -> None:
     """The gateway's text, from ``gateway.classify``: the code, the variable, never the key."""
     response = response_from_fixture(
-        load_fixture(FIXTURES / "ESRData_GetCommodities" / "invalid_key.json")
+        load_fixture(FIXTURES / "get_commodities" / "invalid_key.json")
     )
     assert response.status_code == 403
     assert "x-ratelimit-remaining" not in response.headers, "no quota headers for a bad key"
@@ -176,7 +176,7 @@ def test_a_403_without_a_gateway_code_falls_through_to_core() -> None:
 async def test_the_wrapper_raises_auth_error_on_the_recorded_invalid_key(
     replay_fixture: Callable[[str, str], respx.Route], placeholder_api_key: str
 ) -> None:
-    route = replay_fixture("ESRData_GetCommodities", "invalid_key")
+    route = replay_fixture("get_commodities", "invalid_key")
     with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
         await api.get_commodities()
     assert placeholder_api_key not in str(info.value)
@@ -185,21 +185,21 @@ async def test_the_wrapper_raises_auth_error_on_the_recorded_invalid_key(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("endpoint", "case", "path"),
+    ("wrapper", "case", "path"),
     [
         (COUNTRY, "unknown_commodity", "/api/esr/exports/commodityCode/999/countryCode/1220"),
         (COUNTRY, "unknown_country", "/api/esr/exports/commodityCode/104/countryCode/9999"),
         (COUNTRY, "year_2099", EXPORTS),
-        ("ESRData_GetAllCountriesData", "rye_2024", "/api/esr/exports/commodityCode/501"),
+        ("get_all_countries_data", "rye_2024", "/api/esr/exports/commodityCode/501"),
     ],
 )
 async def test_unknown_codes_future_years_and_no_exports_answer_an_empty_list(
-    replay_fixture: Callable[[str, str], respx.Route], endpoint: str, case: str, path: str
+    replay_fixture: Callable[[str, str], respx.Route], wrapper: str, case: str, path: str
 ) -> None:
     """Recorded: an unknown commodity (999) or country (9999), market year 2099 and rye
     for 2024 (valid codes, no exports) all answer HTTP 200 with ``[]``: no error."""
-    route = replay_fixture(endpoint, case)
-    response = response_from_fixture(load_fixture(FIXTURES / endpoint / f"{case}.json"))
+    route = replay_fixture(wrapper, case)
+    response = response_from_fixture(load_fixture(FIXTURES / wrapper / f"{case}.json"))
     assert (response.status_code, response.json()) == (200, [])
     assert classify(response) is None
     assert response.request.url.path.startswith(path)
@@ -292,7 +292,7 @@ def test_the_gateway_not_found_is_a_not_found_error() -> None:
 def test_other_statuses_fall_through_to_core() -> None:
     assert classify(synthesised(500, {"Message": "An error has occurred."})) is None
     for path in [
-        FIXTURES / "ESRData_GetCommodities" / "all.json",
+        FIXTURES / "get_commodities" / "all.json",
         FIXTURES / COUNTRY / "wheat_white_canada_2024.json",
     ]:
         assert classify(response_from_fixture(load_fixture(path))) is None, path.name

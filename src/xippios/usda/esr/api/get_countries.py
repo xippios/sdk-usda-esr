@@ -2,7 +2,7 @@
 
 Reference: ``docs/upstream/openapi/portal-document.json``, operation
 ``ESRData_GetCountries``: no parameters, the response typed only as ``object``. The
-record shape is the recorded one, ``tests/fixtures/ESRData_GetCountries/all.json``,
+record shape is the recorded one, ``tests/fixtures/get_countries/all.json``,
 parsed into ``models.Country``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """

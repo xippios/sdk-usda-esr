@@ -47,9 +47,9 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
 
 WHEAT_WHITE, COTTONSEED, RYE = 104, 1201, 501
 CANADA = 1220
-COUNTRY = "ESRData_GetCountryData"
-ALL = "ESRData_GetAllCountriesData"
-RELEASES = "ESRData_GetDataReleaseInfo"
+COUNTRY = "get_country_data"
+ALL = "get_all_countries_data"
+RELEASES = "get_data_release_info"
 EXPORTS = f"{BASE_URL}/api/esr/exports/commodityCode"
 
 
