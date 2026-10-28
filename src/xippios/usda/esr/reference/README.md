@@ -27,7 +27,7 @@ list) and name the records that are gone and those that are new: the signal to r
 
 The 2026-10-25 files were written by `scripts/refresh_reference.py` against the live API
 at about 20:39 UTC, ten minutes after the same four lists were recorded under
-`tests/fixtures/<operation>/all.json`; the records are equal to the recorded ones, which
+`tests/fixtures/<wrapper>/all.json`; the records are equal to the recorded ones, which
 `tests/test_params.py` checks. Their `fetched` is the bare date the script then wrote,
 which `PackagedList.load` reads as 00:00 UTC of that day (so the list tasks'
 `meta.retrieved_at`) until the next refresh writes the full time.
