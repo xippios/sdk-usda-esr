@@ -112,7 +112,7 @@ Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
 | `ESRData_GetAllCountriesData` | `get_latest_week(commodity_code, market_year)` | `usda_esr_get_latest_week` | alpha; slice |
 | `ESRData_GetAllCountriesData` | `get_top_destinations(commodity_code, market_year, field, n=10)` | `usda_esr_get_top_destinations` | alpha; slice |
 | `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, market_year)` | `usda_esr_get_weekly_series` | alpha; slice |
-| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)`; `since` keeps the commodities released after an earlier call's `meta.vintage` | `usda_esr_get_release_dates` | alpha |
+| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)` | `usda_esr_get_release_dates` | alpha; `since` keeps the commodities released after an earlier call's `meta.vintage` |
 | `ESRData_GetDataReleaseInfo` | `get_market_year(commodity_code)` | `usda_esr_get_market_year` | alpha; one commodity's record |
 | `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
 | `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |

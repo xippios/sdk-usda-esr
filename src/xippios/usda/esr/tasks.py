@@ -122,6 +122,12 @@ MCP_CAPS: Mapping[str, ResultCap] = {
     "get_exports": ResultCap(
         note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
     ),
+    "get_release_dates": ResultCap(
+        note=(
+            'pass since, e.g. "2026-10-22T08:30:42.67" (an earlier call\'s meta.vintage), to '
+            "keep the commodities released after it"
+        )
+    ),
     "list_commodities": ResultCap(
         note='pass search, e.g. "wheat" or "104", to narrow by code or name'
     ),
@@ -139,8 +145,10 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
 at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
-(wheat white to Canada 2024). ``get_release_dates``, 44 rows, and ``get_market_year``, one
-record, keep the default.
+(wheat white to Canada 2024). ``get_release_dates``, 44 rows, fits the default and keeps
+the family's bounds, but it has a filter, so its entry carries a note naming ``since`` and
+nothing else, as ``list_commodities``' does. ``get_market_year``, one record, has no
+filter and no entry: its one parameter chooses the record.
 
 The slices have no entry and keep the family's bounds (§8; ADR-0016): none returns more
 than one market year of one destination or one week of every destination.
