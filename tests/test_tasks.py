@@ -3,29 +3,42 @@
 ``/add-endpoint`` and ``/record-fixture`` add them.
 """
 
+import json
 from collections.abc import Callable
 from datetime import date, datetime
+from pathlib import Path
 
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError, UnknownCode
-from xippios.core.testing import mcp_call, sent_urls
+from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core.testing import (
+    fixture_path,
+    load_fixture,
+    mcp_call,
+    mcp_call_text,
+    sent_urls,
+)
 
-from xippios.usda.esr import get_exports, get_release_dates, tasks
+from xippios.usda.esr import api, get_exports, get_market_year, get_release_dates, tasks
 from xippios.usda.esr._client import BASE_URL
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
+from xippios.usda.esr.models import DataReleaseInfo
 from xippios.usda.esr.params import latest_market_year
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_the_package_exports_the_tasks() -> None:
     assert get_exports is tasks.get_exports
     assert get_release_dates is tasks.get_release_dates
+    assert get_market_year is tasks.get_market_year
     assert tasks.__all__ == [
         "get_exports",
         "get_latest_week",
+        "get_market_year",
         "get_release_dates",
         "get_top_destinations",
         "get_weekly_series",
@@ -38,11 +51,27 @@ def test_the_package_exports_the_tasks() -> None:
 
 def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
     """The list tasks' caps are checked in ``test_lists.py``."""
-    assert set(tasks.MCP_CAPS) == {"get_exports", "list_commodities", "list_countries"}
+    assert set(tasks.MCP_CAPS) == {
+        "get_exports",
+        "get_release_dates",
+        "list_commodities",
+        "list_countries",
+    }
     cap = tasks.MCP_CAPS["get_exports"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
     assert "country_code" in cap.note
+    assert "get_market_year" not in tasks.MCP_CAPS, "one record, no filter"
+
+
+def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
+    """A filtered tool names its filter in its cap's note even when its answer fits, as
+    ``list_commodities`` names ``search`` (conventions §8, ADR-0016)."""
+    cap = tasks.MCP_CAPS["get_release_dates"]
+    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
+    assert cap.note is not None
+    assert cap.note.startswith("pass since, ")
+    assert '"2026-10-22T08:30:42.67"' in cap.note
 
 
 WHEAT_WHITE, COTTONSEED, RYE = 104, 1201, 501
@@ -51,6 +80,10 @@ COUNTRY = "get_country_data"
 ALL = "get_all_countries_data"
 RELEASES = "get_data_release_info"
 EXPORTS = f"{BASE_URL}/api/esr/exports/commodityCode"
+RELEASE_DATES = f"{BASE_URL}/api/esr/datareleasedates"
+RELEASED = "2026-10-22T08:30:42.67"
+"""The one ``releaseTimeStamp`` of all 44 records of ``get_data_release_info/all``, as printed."""
+A_SECOND_EARLIER = "2026-10-22T08:30:41.67"
 
 
 def test_get_exports_for_one_country(replay_fixture: Callable[[str, str], respx.Route]) -> None:
@@ -125,6 +158,179 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
     )
 
 
+def test_get_release_dates_since_keeps_what_was_released_strictly_later(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """All 44 recorded records carry one release time: ``since`` equal to it keeps none, a
+    second earlier keeps all; the vintage is the whole answer's either way (Johannes,
+    2026-10-28)."""
+    route = replay_fixture(RELEASES, "all")
+    whole = tasks.get_release_dates()
+    same = tasks.get_release_dates(since=RELEASED)
+    earlier = tasks.get_release_dates(since=A_SECOND_EARLIER)
+    assert sent_urls(route) == [RELEASE_DATES] * 3, "one request each, filtered or not"
+    assert len(whole.data) == 44
+    assert whole.meta.request == {}, "since left None is left out (ADR-0022, rule 3)"
+    assert same.data == [], "a release at exactly since is not newer"
+    assert same.meta.request == {"since": RELEASED}
+    assert (same.meta.vintage, same.meta.published_at, same.meta.published_at_naive) == (
+        RELEASED,
+        datetime(2026, 10, 22, 8, 30, 42, 670000),
+        True,
+    ), "the whole answer's newest release, the marker to store for the next call"
+    assert (same.meta.vintage, same.meta.published_at) == (
+        whole.meta.vintage,
+        whole.meta.published_at,
+    )
+    assert earlier.data == whole.data, "every record, unchanged, in upstream's order"
+    assert earlier.meta.request == {"since": A_SECOND_EARLIER}
+    assert earlier.meta.vintage == RELEASED
+    assert len(tasks.get_release_dates(since="2026-10-22").data) == 44, "a date is its midnight"
+
+
+def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """``api.get_data_release_info`` answering ``[]``, in memory (a function input, not a
+    fixture file: that operation was never observed to answer empty); the list counts the
+    calls."""
+    calls: list[int] = []
+
+    async def empty() -> list[DataReleaseInfo]:
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(api, "get_data_release_info", empty)
+    return calls
+
+
+def test_get_release_dates_since_over_an_empty_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both markers are empty only when upstream lists nothing."""
+    calls = _no_releases(monkeypatch)
+    result = tasks.get_release_dates(since=RELEASED)
+    assert result.data == []
+    assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert result.meta.published_at_naive is False
+    assert result.meta.request == {"since": RELEASED}
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("since", "reason"),
+    [
+        ("not a time", "it is not an ISO date and time"),
+        ("", "it is not an ISO date and time"),
+        ("2026-10-22T08:30:42.67+00:00", "it carries a time zone"),
+        ("2026-10-22T08:30:42Z", "it carries a time zone"),
+        (datetime(2026, 10, 22, 8, 30, 42), "it is not an ISO date and time"),
+    ],
+    ids=["not_a_time", "empty", "utc_offset", "zulu", "a_datetime"],
+)
+def test_since_is_refused_before_the_request(
+    replay_fixture: Callable[[str, str], respx.Route], since: object, reason: str
+) -> None:
+    route = replay_fixture(RELEASES, "all")
+    with pytest.raises(InvalidRequestError) as info:
+        tasks.get_release_dates(since=since)  # type: ignore[arg-type]
+    message = str(info.value)
+    assert message.startswith(
+        "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
+        "date and time without a time zone such as '2026-10-22T08:30:42.67'; got "
+    )
+    assert reason in message
+    assert sent_urls(route) == [], "refused before any request"
+
+
+def _recorded_releases() -> list[DataReleaseInfo]:
+    """The recorded release list parsed as the wrapper parses it, without a request."""
+    body = json.loads(load_fixture(fixture_path(FIXTURES, RELEASES, "all")).response.body)
+    return parse(
+        list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
+    )
+
+
+def test_get_market_year(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+    route = replay_fixture(RELEASES, "all")
+    result = tasks.get_market_year(WHEAT_WHITE)
+    assert sent_urls(route) == [RELEASE_DATES], "one request"
+    wheat = result.data
+    assert (
+        wheat.commodity_code,
+        wheat.market_year,
+        wheat.market_year_start,
+        wheat.market_year_end,
+    ) == (104, 2027, date(2026, 6, 1), date(2027, 5, 31))
+    assert wheat.release_time_stamp == datetime(2026, 10, 22, 8, 30, 42, 670000)
+    assert wheat.release_time_stamp_text == RELEASED
+    recorded = next(r for r in _recorded_releases() if r.commodity_code == WHEAT_WHITE)
+    assert wheat == recorded, "the record as upstream sent it: selected, not projected"
+    assert result.meta.source == "usda-esr"
+    assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
+    assert result.meta.request == {"commodity_code": 104}
+    assert result.meta.vintage == RELEASED, "that record's text as upstream prints it"
+    assert result.meta.published_at == wheat.release_time_stamp
+    assert result.meta.published_at.tzinfo is None
+    assert result.meta.published_at_naive is True
+    assert result.meta.total is None
+
+    corn = tasks.get_market_year(401).data
+    assert (corn.market_year, corn.market_year_start, corn.market_year_end) == (
+        2027,
+        date(2026, 9, 1),
+        date(2027, 8, 31),
+    ), "corn runs September to August"
+    beef = tasks.get_market_year(1701).data
+    assert (beef.market_year, beef.market_year_start, beef.market_year_end) == (
+        2026,
+        date(2026, 1, 1),
+        date(2026, 12, 31),
+    ), "beef muscle cuts, the calendar year"
+    assert route.call_count == 3
+
+
+def test_get_market_year_checks_the_code_before_the_request(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """respx is active with no routes mounted, so any upstream call would fail loudly."""
+    with pytest.raises(UnknownCode, match=r"1001 \(Flaxseed\)"):
+        tasks.get_market_year(999)
+    with pytest.raises(InvalidRequestError, match="must be an integer code"):
+        tasks.get_market_year("104")  # type: ignore[arg-type]
+    assert not respx_mock.calls
+
+
+NOT_LISTED = (
+    "ESR lists no market year for commodity 104: GET /api/esr/datareleasedates "
+    "(ESRData_GetDataReleaseInfo) answered without a record for it, although the packaged "
+    "commodities list names it."
+)
+
+
+def test_a_commodity_the_release_list_lacks_is_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A packaged code the answer lacks: upstream dropped it. Here the answer lists no
+    commodity at all (``_no_releases``)."""
+    calls = _no_releases(monkeypatch)
+    with pytest.raises(NotFoundError) as info:
+        tasks.get_market_year(WHEAT_WHITE)
+    assert not isinstance(info.value, InvalidRequestError), "the request was valid"
+    assert str(info.value) == NOT_LISTED
+    assert len(calls) == 1
+
+
+def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The recorded records without wheat white, in memory (a function input, not a fixture
+    file): wheat white is not found, every other commodity still answers."""
+    recorded = _recorded_releases()
+
+    async def without_wheat_white() -> list[DataReleaseInfo]:
+        return [r for r in recorded if r.commodity_code != WHEAT_WHITE]
+
+    monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
+    with pytest.raises(NotFoundError, match="ESR lists no market year for commodity 104"):
+        tasks.get_market_year(WHEAT_WHITE)
+    assert tasks.get_market_year(101).data.market_year == 2027
+
+
 def test_a_market_year_esr_lacks_is_not_found(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
@@ -136,6 +342,22 @@ def test_a_market_year_esr_lacks_is_not_found(
         "ESR has no data for commodity 104, country 1220, market year 1900: GET "
         "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900 answered HTTP 404 "
         "with an empty body."
+    )
+    assert route.call_count == 1
+
+
+def test_a_market_year_esr_lacks_is_not_found_for_every_country(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """Recorded 2026-10-28: the every-country form answers 1900 with the same empty 404."""
+    route = replay_fixture(ALL, "year_1900")
+    with pytest.raises(NoDataForYear) as info:
+        tasks.get_exports(WHEAT_WHITE, 1900)
+    path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
+    assert info.value.path == path
+    assert str(info.value) == (
+        f"ESR has no data for commodity 104, every country, market year 1900: GET {path} "
+        "answered HTTP 404 with an empty body."
     )
     assert route.call_count == 1
 
@@ -267,6 +489,73 @@ async def test_release_dates_over_mcp(replay_fixture: Callable[[str, str], respx
     assert payload["meta"]["published_at_naive"] is True
 
 
+@pytest.mark.anyio
+async def test_release_dates_since_over_mcp(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    route = replay_fixture(RELEASES, "all")
+    every = await mcp_call(server, "usda_esr_get_release_dates", {"since": A_SECOND_EARLIER})
+    assert len(every["data"]) == 44
+    assert every["meta"]["request"] == {"since": A_SECOND_EARLIER}, "verbatim, no credential"
+    none_newer = await mcp_call(server, "usda_esr_get_release_dates", {"since": RELEASED})
+    assert none_newer["data"] == []
+    assert none_newer["meta"]["vintage"] == RELEASED, "the marker for the next call"
+    assert none_newer["meta"]["published_at"] == "2026-10-22T08:30:42.670000"
+    refused = await mcp_call_text(
+        server, "usda_esr_get_release_dates", {"since": "2026-10-22T08:30:42.67+00:00"}
+    )
+    assert refused.startswith(
+        "error: InvalidRequestError: since must be the meta.vintage text of an earlier "
+        "get_release_dates call"
+    )
+    assert "it carries a time zone" in refused
+    assert sent_urls(route) == [RELEASE_DATES] * 2, "the refusal sent nothing"
+
+
+@pytest.mark.anyio
+async def test_market_year_over_mcp(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+    route = replay_fixture(RELEASES, "all")
+    payload = await mcp_call(server, "usda_esr_get_market_year", {"commodity_code": 104})
+    assert payload["data"] == {
+        "commodity_code": 104,
+        "market_year_start": "2026-06-01",
+        "market_year_end": "2027-05-31",
+        "market_year": 2027,
+        "release_time_stamp": "2026-10-22T08:30:42.670000",
+    }, "one record, the text not among its fields"
+    assert "note" not in payload
+    assert payload["meta"]["endpoint"] == "ESRData_GetDataReleaseInfo"
+    assert payload["meta"]["request"] == {"commodity_code": 104}
+    assert payload["meta"]["vintage"] == RELEASED
+    assert payload["meta"]["published_at"] == "2026-10-22T08:30:42.670000", "no zone added"
+    assert payload["meta"]["published_at_naive"] is True
+    with pytest.raises(AssertionError, match=r"UnknownCode.*1001 \(Flaxseed\)"):
+        await mcp_call(server, "usda_esr_get_market_year", {"commodity_code": 999})
+    assert sent_urls(route) == [RELEASE_DATES], "the unknown code sent nothing"
+
+
+def test_market_year_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from xippios.usda.esr.http import router
+
+    route = replay_fixture(RELEASES, "all")
+    app = FastAPI()
+    app.include_router(router)
+    http = TestClient(app)
+    response = http.get("/usda-esr/get_market_year", params={"commodity_code": 104})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["data"]["market_year"], body["data"]["market_year_end"]) == (2027, "2027-05-31")
+    assert (body["meta"]["vintage"], body["meta"]["published_at_naive"]) == (RELEASED, True)
+    assert body["meta"]["request"] == {"commodity_code": 104}
+    rejected = http.get("/usda-esr/get_market_year", params={"commodity_code": 999})
+    assert rejected.status_code == 422
+    assert rejected.json()["title"] == "UnknownCode"
+    assert route.call_count == 1
+
+
 def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     """The HTTP envelope carries the naive release time with its flag, as MCP's does."""
     from fastapi import FastAPI
@@ -285,6 +574,31 @@ def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Rout
         "2026-10-22T08:30:42.670000",
         True,
     )
+
+
+def test_release_dates_since_over_http(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from xippios.usda.esr.http import router
+
+    route = replay_fixture(RELEASES, "all")
+    app = FastAPI()
+    app.include_router(router)
+    http = TestClient(app)
+    response = http.get("/usda-esr/get_release_dates", params={"since": RELEASED})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["data"] == []
+    assert (body["meta"]["vintage"], body["meta"]["request"]) == (RELEASED, {"since": RELEASED})
+    earlier = http.get("/usda-esr/get_release_dates", params={"since": A_SECOND_EARLIER})
+    assert len(earlier.json()["data"]) == 44
+    refused = http.get("/usda-esr/get_release_dates", params={"since": "not a time"})
+    assert refused.status_code == 422
+    assert refused.json()["title"] == "InvalidRequestError"
+    assert sent_urls(route) == [RELEASE_DATES] * 2
 
 
 def test_quantities_are_json_numbers_over_http(

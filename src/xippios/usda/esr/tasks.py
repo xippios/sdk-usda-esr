@@ -31,6 +31,20 @@ release identifier: where the identifier is the timestamp text, ``vintage`` hold
 text and ``published_at`` its parsed value with the flag (conventions §4). Both are
 ``None`` for an empty answer.
 
+Change detection is ``get_release_dates``' parameter ``since`` (Johannes, 2026-10-28):
+the ``meta.vintage`` text of an earlier call, parsed with ``datetime.fromisoformat`` to a
+naive time, since upstream's text carries no zone; a text that does not parse, or parses
+to an aware time, is refused before the call (``InvalidRequestError``, conventions §5,
+ADR-0007). The filter keeps the commodities released strictly after it, an equal time
+being no newer, and only selects (ADR-0003). ``meta.vintage`` and ``meta.published_at``
+stay the newest release of upstream's whole answer, filtered or not, so an empty
+filtered answer still hands the caller the marker to store for the next call. It is one
+request either way, and no answer is cached: ``retrieved_at`` is the wire time.
+``get_market_year`` (Johannes, 2026-10-28) makes the same one request and selects one
+commodity's record, unchanged, with that record's release as its ``meta.vintage`` and
+``meta.published_at``; a commodity the packaged list names and the release list lacks is
+``NotFoundError``, upstream having dropped it.
+
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
 Johannes, 2026-10-25) each make the one request ``get_exports`` makes and only select and
 order its records (ADR-0003): no record is changed, nothing is derived, converted, filled
@@ -56,9 +70,11 @@ codes, as digits, on names and, for countries, on GENC codes (``xippios.core.mat
 """
 
 from collections.abc import Mapping
+from datetime import datetime
 
 from xippios.core import (
     InvalidRequestError,
+    NotFoundError,
     PackagedList,
     Result,
     ResultCap,
@@ -89,6 +105,7 @@ from xippios.usda.esr.params import (
 __all__ = [
     "get_exports",
     "get_latest_week",
+    "get_market_year",
     "get_release_dates",
     "get_top_destinations",
     "get_weekly_series",
@@ -104,6 +121,12 @@ BULK_TASKS: frozenset[str] = frozenset()
 MCP_CAPS: Mapping[str, ResultCap] = {
     "get_exports": ResultCap(
         note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+    ),
+    "get_release_dates": ResultCap(
+        note=(
+            'pass since, e.g. "2026-10-22T08:30:42.67" (an earlier call\'s meta.vintage), to '
+            "keep the commodities released after it"
+        )
     ),
     "list_commodities": ResultCap(
         note='pass search, e.g. "wheat" or "104", to narrow by code or name'
@@ -122,7 +145,10 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
 at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
-(wheat white to Canada 2024). ``get_release_dates``, 44 rows, keeps the default.
+(wheat white to Canada 2024). ``get_release_dates``, 44 rows, fits the default and keeps
+the family's bounds, but it has a filter, so its entry carries a note naming ``since`` and
+nothing else, as ``list_commodities``' does. ``get_market_year``, one record, has no
+filter and no entry: its one parameter chooses the record.
 
 The slices have no entry and keep the family's bounds (§8; ADR-0016): none returns more
 than one market year of one destination or one week of every destination.
@@ -180,8 +206,8 @@ async def get_exports_async(
     net sales and commitments, in the unit ``unit_id`` names (``1`` metric tons, ``2``
     running bales for cotton; ``enums.UnitId``). A market year is named by the year it
     ends in and differs per commodity: for wheat 2024 runs June 2023 to May 2024, for corn
-    and soybeans September to August, for cotton August to July (``get_release_dates``
-    lists each commodity's current one). Codes and the year are checked before any call:
+    and soybeans September to August, for cotton August to July (``get_market_year``
+    names a commodity's current one). Codes and the year are checked before any call:
     an unknown code raises ``InvalidRequestError`` naming the closest known codes, and a
     market year that is not four digits or is after the current calendar year plus two
     raises ``InvalidRequestError`` with the reason. An empty list means ESR has no
@@ -225,33 +251,126 @@ async def get_exports_async(
     return Result(data=records, meta=meta)
 
 
-async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
+_SINCE_EXAMPLE = "2026-10-22T08:30:42.67"
+"""``meta.vintage`` of ``get_release_dates`` as recorded, the example ``since`` refusals name."""
+
+
+def _since(since: object) -> datetime:
+    """``since`` as the naive time it names; ``InvalidRequestError`` naming the form otherwise.
+
+    Parsed with ``datetime.fromisoformat``, so a date alone (``"2026-10-01"``) is its
+    midnight; a time with a zone is refused, since ESR's release times carry none and the
+    two cannot be compared without inventing one (ADR-0022, rule 2).
+    """
+    parsed = None
+    if isinstance(since, str):
+        try:
+            parsed = datetime.fromisoformat(since)
+        except ValueError:
+            parsed = None
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed
+    reason = (
+        "it carries a time zone, and ESR's release times carry none"
+        if parsed is not None
+        else "it is not an ISO date and time"
+    )
+    raise InvalidRequestError(
+        "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
+        f"date and time without a time zone such as {_SINCE_EXAMPLE!r}; got {since!r}, and "
+        f"{reason}.",
+        source=SOURCE,
+    )
+
+
+async def get_release_dates_async(since: str | None = None) -> Result[list[DataReleaseInfo]]:
     """When ESR last released each commodity's export data, with its current market year.
 
-    One record per commodity (44): ``release_time_stamp``, the last release of that
-    commodity's export data, which can revise several market years; and the current
-    market year, named by the year it ends in, with its first and last day (wheat 2027
-    runs 2026-06-01 to 2027-05-31, corn and soybeans September to August, cotton August
-    to July, beef and pork the calendar year). Compare ``release_time_stamp`` with the one
-    seen last to fetch only what changed with ``get_exports``. The time stamp is as ESR
-    sends it, without a time zone, since the documentation names none: so
-    ``meta.published_at`` is the latest release time stamp as given, naive, with
-    ``meta.published_at_naive`` true, and ``meta.vintage`` is its text as ESR prints it,
-    ESR's release identifier (``"2026-10-22T08:30:42.67"``). Takes no parameters: the
-    endpoint takes none.
+    One request to ``ESRData_GetDataReleaseInfo``, one record per commodity (44):
+    ``release_time_stamp``, the last release of that commodity's export data, which can
+    revise several market years; and the current market year, named by the year it ends
+    in, with its first and last day (wheat 2027 runs 2026-06-01 to 2027-05-31, corn and
+    soybeans September to August, cotton August to July, beef and pork the calendar year).
+    The time stamp is as ESR sends it, without a time zone, since the documentation names
+    none: ``meta.published_at`` is the latest release time stamp of the whole answer as
+    given, naive, with ``meta.published_at_naive`` true, and ``meta.vintage`` is its text
+    as ESR prints it, ESR's release identifier (``"2026-10-22T08:30:42.67"``), with or
+    without ``since``; both are empty only when ESR lists no commodity. To fetch only what
+    changed: store ``meta.vintage``, pass it as ``since`` on the next call, and call
+    ``get_exports`` for the commodities returned; an empty list means no commodity's data
+    was released since.
+
+    Args:
+        since: Keep only the commodities whose ``release_time_stamp`` is strictly later
+            than this time, the ``meta.vintage`` text of an earlier call, e.g.
+            ``"2026-10-22T08:30:42.67"``: an ISO date and time without a time zone, as ESR
+            prints it, e.g. ``"2026-10-01T00:00:00"`` (a date alone, ``"2026-10-01"``, is
+            its midnight). A release at exactly that time is not newer. A text with a zone
+            (``"2026-10-22T08:30:42+00:00"``, ``"...Z"``) or one that is not a date and
+            time is refused before the call. Omit (``None``) for every commodity.
     """
+    after = None if since is None else _since(since)
     releases = await api.get_data_release_info()
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
+    selected = (
+        releases
+        if after is None
+        else [release for release in releases if release.release_time_stamp > after]
+    )
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetDataReleaseInfo",
         published_at=published_at,
         published_at_naive=published_at is not None,
         vintage=None if newest is None else newest.release_time_stamp_text,
-        request={},
+        request={"since": since},
     )
-    return Result(data=releases, meta=meta)
+    return Result(data=selected, meta=meta)
+
+
+async def get_market_year_async(commodity_code: int) -> Result[DataReleaseInfo]:
+    """Which ESR market year a commodity is in now, and the days it starts and ends.
+
+    One request to ``ESRData_GetDataReleaseInfo``, the call ``get_release_dates`` makes;
+    of its records, one per commodity, the one of ``commodity_code`` is returned as ESR
+    sends it: ``market_year``, the current market year, named by the year it ends in;
+    ``market_year_start`` and ``market_year_end``, its first and last day; and
+    ``release_time_stamp``, the last release of the commodity's export data. Market years
+    differ per commodity: wheat 2027 runs 2026-06-01 to 2027-05-31, corn and soybeans run
+    September to August, cotton August to July, beef and pork the calendar year. Pass
+    ``market_year`` to ``get_exports`` or a slice for the current year's sales.
+    ``meta.vintage`` is the record's release time stamp as ESR prints it
+    (``"2026-10-22T08:30:42.67"``) and ``meta.published_at`` its value as given, without
+    a time zone, with ``meta.published_at_naive`` true. The code is checked before the
+    call: an unknown code raises ``InvalidRequestError`` naming the closest known codes; a
+    commodity ESR's release list lacks raises ``NotFoundError``.
+
+    Args:
+        commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White,
+            June to May), ``401`` (Corn, September to August), ``801`` (Soybeans),
+            ``1404`` (All Upland Cotton, August to July), ``1701`` (beef muscle cuts, the
+            calendar year); ``list_commodities`` lists them.
+    """
+    validate_commodity_code(commodity_code)
+    releases = await api.get_data_release_info()
+    record = next((r for r in releases if r.commodity_code == commodity_code), None)
+    if record is None:
+        raise NotFoundError(
+            f"ESR lists no market year for commodity {commodity_code}: GET "
+            "/api/esr/datareleasedates (ESRData_GetDataReleaseInfo) answered without a record "
+            "for it, although the packaged commodities list names it.",
+            source=SOURCE,
+        )
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint="ESRData_GetDataReleaseInfo",
+        published_at=record.release_time_stamp,
+        published_at_naive=True,
+        vintage=record.release_time_stamp_text,
+        request={"commodity_code": commodity_code},
+    )
+    return Result(data=record, meta=meta)
 
 
 _FIELD_ATTRIBUTES: dict[str, str] = {
@@ -565,6 +684,7 @@ async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
 
 get_exports = sync(get_exports_async)
 get_latest_week = sync(get_latest_week_async)
+get_market_year = sync(get_market_year_async)
 get_release_dates = sync(get_release_dates_async)
 get_top_destinations = sync(get_top_destinations_async)
 get_weekly_series = sync(get_weekly_series_async)

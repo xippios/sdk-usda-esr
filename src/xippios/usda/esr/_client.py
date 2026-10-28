@@ -74,9 +74,10 @@ def classify(response: httpx.Response) -> XippiosError | None:
     the shapes api.data.gov documents and sdk-usda-psd recorded). ESR's own follow:
 
     - 404 with an empty ``text/plain`` body on an exports path (``DATA_PATH``) is ESR's own
-      answer for a market year it holds no data for, recorded for 1900
-      (``get_country_data/year_1900.json``). It is ``errors.NoDataForYear``, a
-      ``NotFoundError``; an empty 404 anywhere else is a plain ``NotFoundError``.
+      answer for a market year it holds no data for, recorded for 1900 on both forms
+      (``get_country_data/year_1900.json``, ``get_all_countries_data/year_1900.json``).
+      It is ``errors.NoDataForYear``, a ``NotFoundError``; an empty 404 anywhere else is a
+      plain ``NotFoundError``.
     - 400 with ESR's ``{"message": "The request is invalid."}`` is ``InvalidRequestError``:
       a path value that is not an integer (``exports/commodityCode/abc/...``, recorded as
       ``get_country_data/not_an_integer.json``). The package never sends one, since

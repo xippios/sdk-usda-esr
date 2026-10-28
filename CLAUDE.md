@@ -28,8 +28,8 @@ keeps ESR's own answers after it, the empty 404 and the 400 below.
 ## Upstream behaviour established by fixtures
 
 The snapshot types every response as `object` and defines no schema, so these facts come
-from the answers recorded on 2026-10-25 under `tests/fixtures/`; `_client.classify` maps
-them once.
+from the answers recorded on 2026-10-25, and two on 2026-10-28, under `tests/fixtures/`;
+`_client.classify` maps them once.
 
 - Codes are integers on the wire and in the snapshot (`int32` path parameters), and the
   package takes them as `int` (Johannes, 2026-10-25): `get_exports(104, 2024, 1220)`.
@@ -48,12 +48,20 @@ them once.
   rows or 64 KB, with a note of its own that names `country_code` (`tasks.MCP_CAPS`;
   conventions §8, ADR-0016; Johannes, 2026-10-25), and the cap's note tells agents to pass
   it: one destination is up to 54 rows.
+- Destination `9990` (UNKNOWN) arrives in `allCountries` as a row like any country:
+  wheat white 2027, recorded 2026-10-28 (`wheat_white_2027`, 119,811 bytes), is 385
+  records for 22 destinations over 20 weeks, a `9990` row in each of them; wheat white
+  2024, measured the same day and not kept, 1,012 records for 22 destinations, 312,360
+  bytes as a fixture, over the 256 KiB cap, `9990` in all 54 weeks. The slices keep and
+  rank it like any other code.
 - Unknown commodity (999) and unknown country (9999): HTTP 200 with `[]`; so are a
   future market year (2099) and valid codes without exports (rye `allCountries` 2024).
   Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
   the nearest codes) and market years after the current UTC year plus two before the call.
-- Market year 1900: HTTP 404 with an empty `text/plain` body on the exports path, mapped
-  to `errors.NoDataForYear`, a `NotFoundError` (only that answer on an exports path).
+- Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
+  one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
+  bytes, recorded 2026-10-28), mapped to `errors.NoDataForYear`, a `NotFoundError` (only
+  that answer on an exports path).
   Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
   so where ESR's data begins is not established and no lower bound beyond four digits is
   set.
@@ -114,7 +122,7 @@ tests/
   test_api.py      replay tests for the endpoint wrappers
   test_client.py   wiring, classify on recorded error bodies, core's quota policy on a 429
   test_params.py   packaged lists, the enum and the code and year checks
-  test_live.py     @pytest.mark.live smoke tests, one per task (10 keyed calls in all: the
+  test_live.py     @pytest.mark.live smoke tests, one per task (12 keyed calls in all: the
                    list tasks' test compares each packaged list with the live one), and the
                    template's keyless reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
@@ -158,5 +166,5 @@ the key, from the org secret `DATA_GOV_API_KEY`.
   quota's 429 to `RateLimitError` with `retry_after` (ADR-0009, ADR-0010, ADR-0015). An
   endpoint added here installs no policy of its own; only ESR's own error shapes go into
   `classify`, after the gateway's.
-- The live run, `uv run pytest -m live --tb=short`, spends 10 keyed calls of the shared
+- The live run, `uv run pytest -m live --tb=short`, spends 12 keyed calls of the shared
   quota: one per test in `tests/test_live.py` but the keyless reachability check.

@@ -8,6 +8,29 @@ All notable changes to this project are documented here. The format follows
 
 Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (conventions §15).
 
+### Added
+
+- `get_release_dates(since=None)`: `since` takes the `meta.vintage` text of an earlier
+  call (`"2026-10-22T08:30:42.67"`) and keeps the commodities whose `release_time_stamp`
+  is strictly later, so a caller stores `meta.vintage` and passes it next time; an empty
+  list means nothing was released since. `meta.vintage` and `meta.published_at` stay the
+  newest release of ESR's whole answer, filtered or not, and `meta.request` carries
+  `since` when given. A text that is not an ISO date and time, or one with a time zone,
+  is refused with `InvalidRequestError` before the call. Still one request.
+- `get_market_year(commodity_code)`, MCP tool `usda_esr_get_market_year`: one commodity's
+  record of `ESRData_GetDataReleaseInfo` as ESR sends it, its current market year with
+  the first and last day and its last release (wheat white: 2027, 2026-06-01 to
+  2027-05-31). `meta.vintage` is the record's release time stamp as ESR prints it,
+  `meta.published_at` its value without a zone, with `meta.published_at_naive`. An
+  unknown code is refused with `UnknownCode` before the call; a packaged code the release
+  list lacks raises `NotFoundError`. One request.
+- Two recordings of `ESRData_GetAllCountriesData`. Market year 1900 for every country
+  answers HTTP 404 with an empty body, as the one-country form does, so `get_exports`
+  without a country, `get_latest_week` and `get_top_destinations` raise `NoDataForYear`
+  for it, as 0.1.0 assumed without a recording. Wheat white 2027 carries a `9990`
+  (UNKNOWN) destination in every week, and the slices keep and rank it like any other
+  code.
+
 ### Changed
 
 - **BREAKING:** depends on `xippios-core~=0.3.0`, and its `mcp`, `http` and `testing`
