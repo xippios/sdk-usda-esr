@@ -6,7 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (conventions §15).
+## [0.2.0] - 2026-10-28
+
+0.2.0 is built on xippios-core 0.3.0 and sdk-template v0.3.0 and follows conventions
+1.22. Its breaking changes: it requires `xippios-core~=0.3.0`; the seven endpoint
+wrappers in `xippios.usda.esr.api` are named after their upstream operations without the
+`ESRData_` prefix (`get_country_data` for `ESRData_GetCountryData`), and the old names
+are gone; `get_weekly_series` takes a range of market years, `start_year` and
+`end_year`, in place of one `market_year`, with one request per market year and at most
+10 a call; and three names leave the package's API, `errors.UnknownCode` for
+`xippios.core.UnknownCode`, and `params.PackagedList` and `params.packaged_values` for
+`xippios.core.PackagedList.load`. 0.2.0 also changes values in the result envelope: the
+`list_*` tasks' `meta.retrieved_at` is when the list was fetched and their
+`meta.vintage` is `None`, `get_release_dates` sets `meta.published_at` and gives
+`meta.vintage` as upstream's text, and `meta.request` leaves out a parameter left
+`None`. New are `get_release_dates(since)`, which keeps only the commodities ESR
+released after an earlier call's `meta.vintage`, so a caller can tell whether anything
+changed, and `get_market_year(commodity_code)`, one commodity's current market year and
+last release. Three new recordings cover ESR's answer for every destination at once and
+a second market year of one destination. The packaged code lists were fetched again on
+2026-10-28 with their records unchanged, and now carry the full UTC time of the fetch.
 
 ### Added
 
@@ -113,11 +132,11 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
 
 ### Removed
 
-- `xippios.usda.esr.errors.UnknownCode`, replaced by `xippios.core.UnknownCode`, an
-  `InvalidRequestError` as before: its message reads "999 is not a commodity_code in the
-  packaged commodities list (fetched 2026-10-28). Did you mean ...", its `fetched` is
-  a datetime and its `closest` a tuple.
-- `params.PackagedList` and `params.packaged_values`: core's
+- **BREAKING:** `xippios.usda.esr.errors.UnknownCode`, replaced by
+  `xippios.core.UnknownCode`, an `InvalidRequestError` as before: its message reads "999
+  is not a commodity_code in the packaged commodities list (fetched 2026-10-28). Did you
+  mean ...", its `fetched` is a datetime and its `closest` a tuple.
+- **BREAKING:** `params.PackagedList` and `params.packaged_values`: core's
   `PackagedList.load(params.PACKAGE, name)` reads a packaged list.
 
 ## [0.1.0] - 2026-10-26
