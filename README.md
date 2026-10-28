@@ -71,7 +71,8 @@ no data for is skipped, so `get_weekly_series(104, 1220, 1900, 1900)` is an empt
 ESR answers a market year it has not released with an empty list, as it answers a year
 without exports, so a range past the commodity's current market year raises
 `NotFoundError` naming the latest released one (`get_market_year` names it; wheat: 2027
-in October 2026); a range into next year reads the release list first, one request more.
+in October 2026); a range ending in the current calendar year or later reads the release
+list first, one request more.
 
 `field` takes upstream's names of the eight quantities (`"outstandingSales"`,
 `"accumulatedExports"`, ...; `models.ExportField`), which the MCP and HTTP schemas list.

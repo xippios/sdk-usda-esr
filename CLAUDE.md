@@ -69,9 +69,12 @@ from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/f
   Market year 2028 of wheat white to Canada answers HTTP 200 with `[]` as well (probed
   2026-10-28, one keyed call, not kept; wheat's current market year is 2027), so a market
   year ESR has not released cannot be told from one without exports: `get_weekly_series`
-  reads the release list for a range that ends after the current UTC year and refuses
-  one past the commodity's current market year with `NotFoundError` naming the latest
-  released one (Johannes, 2026-10-28; conventions §4; ADR-0022, amendment points 6 and 7).
+  reads the release list for a range that ends in the current UTC year or later and
+  refuses one past the commodity's current market year with `NotFoundError` naming the
+  latest released one (Johannes, 2026-10-28; conventions §4; ADR-0022, amendment points
+  6 and 7). The current year counts too: a market year named by it may have begun
+  without a week released, as a calendar-year commodity's does in January (market years
+  start in June, August, September, October or January, per the recorded release list).
 - Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
   one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
   bytes, recorded 2026-10-28), mapped to `errors.NoDataForYear`, a `NotFoundError` (only
