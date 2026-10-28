@@ -28,9 +28,12 @@ result.meta.vintage  # "2024-06-06": the latest week ending date in the answer
 result.meta.published_at  # None: get_release_dates tells when ESR released the data
 result.meta.retrieved_at, result.meta.request
 
-releases = get_release_dates()  # one record per commodity, no parameters
+releases = get_release_dates()  # one record per commodity
 wheat = next(r for r in releases.data if r.commodity_code == 104)
 wheat.market_year, wheat.market_year_start, wheat.release_time_stamp  # 2027, 2026-06-01, ...
+releases.meta.vintage  # "2026-10-22T08:30:42.67": store it for the next call
+changed = get_release_dates(since=releases.meta.vintage)  # released strictly later only
+changed.data, changed.meta.vintage  # [] when nothing was released since; the newest release
 ```
 
 Codes are ESR's own integers (commodity `104` wheat white, `401` corn, `801` soybeans;
@@ -107,7 +110,7 @@ Tools are read-only and named `usda_esr_<verb>_<noun>`. Results are capped, at
 | `ESRData_GetAllCountriesData` | `get_latest_week(commodity_code, market_year)` | `usda_esr_get_latest_week` | alpha; slice |
 | `ESRData_GetAllCountriesData` | `get_top_destinations(commodity_code, market_year, field, n=10)` | `usda_esr_get_top_destinations` | alpha; slice |
 | `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, market_year)` | `usda_esr_get_weekly_series` | alpha; slice |
-| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates()` | `usda_esr_get_release_dates` | alpha |
+| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)`; `since` keeps the commodities released after an earlier call's `meta.vintage` | `usda_esr_get_release_dates` | alpha |
 | `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
 | `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |
 | `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |

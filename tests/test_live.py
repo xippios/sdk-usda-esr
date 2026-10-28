@@ -1,20 +1,21 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, ten keyed calls in all: ``get_exports`` for
+One live smoke test per task function, eleven keyed calls in all: ``get_exports`` for
 wheat white to Canada and for soybeans to Mexico, market year 2024, and
-``get_release_dates``; the slices, one call each, ``get_latest_week`` for wheat HRW,
-``get_top_destinations`` for soybeans and ``get_weekly_series`` for wheat white to
-Canada, market year 2024. The codes are taken from the packaged lists by their upstream
-names, so a renamed or recoded commodity or country fails here first. The four list
-tasks answer from the package without a call, so their test fetches the list through its
-endpoint wrapper, one call each, and checks that the packaged records equal it: the
-freshness check ``reference/README.md`` promises. A difference fails the test naming
-what is gone and what is new; ``/refresh-reference-data`` then refreshes the package.
-Next to them, the template's reachability check, ``test_upstream_answers``, sends no
-key: a plain request to ``BASE_URL`` that spends no quota call.
+``get_release_dates``, once whole and once with ``since``; the slices, one call each,
+``get_latest_week`` for wheat HRW, ``get_top_destinations`` for soybeans and
+``get_weekly_series`` for wheat white to Canada, market year 2024. The codes are taken
+from the packaged lists by their upstream names, so a renamed or recoded commodity or
+country fails here first. The four list tasks answer from the package without a call, so
+their test fetches the list through its endpoint wrapper, one call each, and checks that
+the packaged records equal it: the freshness check ``reference/README.md`` promises. A
+difference fails the test naming what is gone and what is new;
+``/refresh-reference-data`` then refreshes the package. Next to them, the template's
+reachability check, ``test_upstream_answers``, sends no key: a plain request to
+``BASE_URL`` that spends no quota call.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import httpx
@@ -99,6 +100,18 @@ async def test_get_release_dates_live() -> None:
     assert result.meta.vintage == latest.release_time_stamp_text, "upstream's text"
     assert result.meta.published_at == latest.release_time_stamp, "naive, as upstream gives it"
     assert result.meta.published_at_naive is True
+
+
+async def test_get_release_dates_since_live() -> None:
+    since = "2000-01-01T00:00:00"
+    result = await tasks.get_release_dates_async(since=since)
+    assert result.data
+    assert all(r.release_time_stamp > datetime.fromisoformat(since) for r in result.data), (
+        "every record released after since"
+    )
+    assert result.meta.request == {"since": since}
+    latest = max(result.data, key=lambda r: r.release_time_stamp)
+    assert result.meta.vintage == latest.release_time_stamp_text
 
 
 async def test_get_latest_week_live() -> None:

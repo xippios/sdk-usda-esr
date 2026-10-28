@@ -31,6 +31,16 @@ release identifier: where the identifier is the timestamp text, ``vintage`` hold
 text and ``published_at`` its parsed value with the flag (conventions §4). Both are
 ``None`` for an empty answer.
 
+Change detection is ``get_release_dates``' parameter ``since`` (Johannes, 2026-10-28):
+the ``meta.vintage`` text of an earlier call, parsed with ``datetime.fromisoformat`` to a
+naive time, since upstream's text carries no zone; a text that does not parse, or parses
+to an aware time, is refused before the call (``InvalidRequestError``, conventions §5,
+ADR-0007). The filter keeps the commodities released strictly after it, an equal time
+being no newer, and only selects (ADR-0003). ``meta.vintage`` and ``meta.published_at``
+stay the newest release of upstream's whole answer, filtered or not, so an empty
+filtered answer still hands the caller the marker to store for the next call. It is one
+request either way, and no answer is cached: ``retrieved_at`` is the wire time.
+
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
 Johannes, 2026-10-25) each make the one request ``get_exports`` makes and only select and
 order its records (ADR-0003): no record is changed, nothing is derived, converted, filled
@@ -56,6 +66,7 @@ codes, as digits, on names and, for countries, on GENC codes (``xippios.core.mat
 """
 
 from collections.abc import Mapping
+from datetime import datetime
 
 from xippios.core import (
     InvalidRequestError,
@@ -225,33 +236,82 @@ async def get_exports_async(
     return Result(data=records, meta=meta)
 
 
-async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
+_SINCE_EXAMPLE = "2026-10-22T08:30:42.67"
+"""``meta.vintage`` of ``get_release_dates`` as recorded, the example ``since`` refusals name."""
+
+
+def _since(since: object) -> datetime:
+    """``since`` as the naive time it names; ``InvalidRequestError`` naming the form otherwise.
+
+    Parsed with ``datetime.fromisoformat``, so a date alone (``"2026-10-01"``) is its
+    midnight; a time with a zone is refused, since ESR's release times carry none and the
+    two cannot be compared without inventing one (ADR-0022, rule 2).
+    """
+    parsed = None
+    if isinstance(since, str):
+        try:
+            parsed = datetime.fromisoformat(since)
+        except ValueError:
+            parsed = None
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed
+    reason = (
+        "it carries a time zone, and ESR's release times carry none"
+        if parsed is not None
+        else "it is not an ISO date and time"
+    )
+    raise InvalidRequestError(
+        "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
+        f"date and time without a time zone such as {_SINCE_EXAMPLE!r}; got {since!r}, and "
+        f"{reason}.",
+        source=SOURCE,
+    )
+
+
+async def get_release_dates_async(since: str | None = None) -> Result[list[DataReleaseInfo]]:
     """When ESR last released each commodity's export data, with its current market year.
 
-    One record per commodity (44): ``release_time_stamp``, the last release of that
-    commodity's export data, which can revise several market years; and the current
-    market year, named by the year it ends in, with its first and last day (wheat 2027
-    runs 2026-06-01 to 2027-05-31, corn and soybeans September to August, cotton August
-    to July, beef and pork the calendar year). Compare ``release_time_stamp`` with the one
-    seen last to fetch only what changed with ``get_exports``. The time stamp is as ESR
-    sends it, without a time zone, since the documentation names none: so
-    ``meta.published_at`` is the latest release time stamp as given, naive, with
-    ``meta.published_at_naive`` true, and ``meta.vintage`` is its text as ESR prints it,
-    ESR's release identifier (``"2026-10-22T08:30:42.67"``). Takes no parameters: the
-    endpoint takes none.
+    One request to ``ESRData_GetDataReleaseInfo``, one record per commodity (44):
+    ``release_time_stamp``, the last release of that commodity's export data, which can
+    revise several market years; and the current market year, named by the year it ends
+    in, with its first and last day (wheat 2027 runs 2026-06-01 to 2027-05-31, corn and
+    soybeans September to August, cotton August to July, beef and pork the calendar year).
+    The time stamp is as ESR sends it, without a time zone, since the documentation names
+    none: ``meta.published_at`` is the latest release time stamp of the whole answer as
+    given, naive, with ``meta.published_at_naive`` true, and ``meta.vintage`` is its text
+    as ESR prints it, ESR's release identifier (``"2026-10-22T08:30:42.67"``), with or
+    without ``since``; both are empty only when ESR lists no commodity. To fetch only what
+    changed: store ``meta.vintage``, pass it as ``since`` on the next call, and call
+    ``get_exports`` for the commodities returned; an empty list means no commodity's data
+    was released since.
+
+    Args:
+        since: Keep only the commodities whose ``release_time_stamp`` is strictly later
+            than this time, the ``meta.vintage`` text of an earlier call, e.g.
+            ``"2026-10-22T08:30:42.67"``: an ISO date and time without a time zone, as ESR
+            prints it, e.g. ``"2026-10-01T00:00:00"`` (a date alone, ``"2026-10-01"``, is
+            its midnight). A release at exactly that time is not newer. A text with a zone
+            (``"2026-10-22T08:30:42+00:00"``, ``"...Z"``) or one that is not a date and
+            time is refused before the call. Omit (``None``) for every commodity.
     """
+    after = None if since is None else _since(since)
     releases = await api.get_data_release_info()
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
+    selected = (
+        releases
+        if after is None
+        else [release for release in releases if release.release_time_stamp > after]
+    )
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetDataReleaseInfo",
         published_at=published_at,
         published_at_naive=published_at is not None,
         vintage=None if newest is None else newest.release_time_stamp_text,
-        request={},
+        request={"since": since},
     )
-    return Result(data=releases, meta=meta)
+    return Result(data=selected, meta=meta)
 
 
 _FIELD_ATTRIBUTES: dict[str, str] = {

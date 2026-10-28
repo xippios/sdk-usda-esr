@@ -10,7 +10,7 @@ import httpx
 import pytest
 import respx
 from xippios.core import InvalidRequestError, NotFoundError, UnknownCode
-from xippios.core.testing import mcp_call, sent_urls
+from xippios.core.testing import ReplayFixture, mcp_call, mcp_call_text, sent_urls
 
 from xippios.usda.esr import get_exports, get_release_dates, tasks
 from xippios.usda.esr._client import BASE_URL
@@ -51,6 +51,10 @@ COUNTRY = "get_country_data"
 ALL = "get_all_countries_data"
 RELEASES = "get_data_release_info"
 EXPORTS = f"{BASE_URL}/api/esr/exports/commodityCode"
+RELEASE_DATES = f"{BASE_URL}/api/esr/datareleasedates"
+RELEASED = "2026-10-22T08:30:42.67"
+"""The one ``releaseTimeStamp`` of all 44 records of ``get_data_release_info/all``, as printed."""
+A_SECOND_EARLIER = "2026-10-22T08:30:41.67"
 
 
 def test_get_exports_for_one_country(replay_fixture: Callable[[str, str], respx.Route]) -> None:
@@ -123,6 +127,76 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
         date(2026, 6, 1),
         date(2027, 5, 31),
     )
+
+
+def test_get_release_dates_since_keeps_what_was_released_strictly_later(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """All 44 recorded records carry one release time: ``since`` equal to it keeps none, a
+    second earlier keeps all; the vintage is the whole answer's either way (Johannes,
+    2026-10-28)."""
+    route = replay_fixture(RELEASES, "all")
+    whole = tasks.get_release_dates()
+    same = tasks.get_release_dates(since=RELEASED)
+    earlier = tasks.get_release_dates(since=A_SECOND_EARLIER)
+    assert sent_urls(route) == [RELEASE_DATES] * 3, "one request each, filtered or not"
+    assert len(whole.data) == 44
+    assert whole.meta.request == {}, "since left None is left out (ADR-0022, rule 3)"
+    assert same.data == [], "a release at exactly since is not newer"
+    assert same.meta.request == {"since": RELEASED}
+    assert (same.meta.vintage, same.meta.published_at, same.meta.published_at_naive) == (
+        RELEASED,
+        datetime(2026, 10, 22, 8, 30, 42, 670000),
+        True,
+    ), "the whole answer's newest release, the marker to store for the next call"
+    assert (same.meta.vintage, same.meta.published_at) == (
+        whole.meta.vintage,
+        whole.meta.published_at,
+    )
+    assert earlier.data == whole.data, "every record, unchanged, in upstream's order"
+    assert earlier.meta.request == {"since": A_SECOND_EARLIER}
+    assert earlier.meta.vintage == RELEASED
+    assert len(tasks.get_release_dates(since="2026-10-22").data) == 44, "a date is its midnight"
+
+
+def test_get_release_dates_since_over_an_empty_answer(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """Both markers are empty only when upstream lists nothing. The recorded ``[]`` of
+    ``rye_2024`` is served at the release dates' URL (``url=``), moved, not written."""
+    route = replay_fixture(ALL, "rye_2024", url=RELEASE_DATES)
+    result = tasks.get_release_dates(since=RELEASED)
+    assert result.data == []
+    assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert result.meta.published_at_naive is False
+    assert result.meta.request == {"since": RELEASED}
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("since", "reason"),
+    [
+        ("not a time", "it is not an ISO date and time"),
+        ("", "it is not an ISO date and time"),
+        ("2026-10-22T08:30:42.67+00:00", "it carries a time zone"),
+        ("2026-10-22T08:30:42Z", "it carries a time zone"),
+        (datetime(2026, 10, 22, 8, 30, 42), "it is not an ISO date and time"),
+    ],
+    ids=["not_a_time", "empty", "utc_offset", "zulu", "a_datetime"],
+)
+def test_since_is_refused_before_the_request(
+    replay_fixture: Callable[[str, str], respx.Route], since: object, reason: str
+) -> None:
+    route = replay_fixture(RELEASES, "all")
+    with pytest.raises(InvalidRequestError) as info:
+        tasks.get_release_dates(since=since)  # type: ignore[arg-type]
+    message = str(info.value)
+    assert message.startswith(
+        "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
+        "date and time without a time zone such as '2026-10-22T08:30:42.67'; got "
+    )
+    assert reason in message
+    assert sent_urls(route) == [], "refused before any request"
 
 
 def test_a_market_year_esr_lacks_is_not_found(
@@ -267,6 +341,29 @@ async def test_release_dates_over_mcp(replay_fixture: Callable[[str, str], respx
     assert payload["meta"]["published_at_naive"] is True
 
 
+@pytest.mark.anyio
+async def test_release_dates_since_over_mcp(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    route = replay_fixture(RELEASES, "all")
+    every = await mcp_call(server, "usda_esr_get_release_dates", {"since": A_SECOND_EARLIER})
+    assert len(every["data"]) == 44
+    assert every["meta"]["request"] == {"since": A_SECOND_EARLIER}, "verbatim, no credential"
+    none_newer = await mcp_call(server, "usda_esr_get_release_dates", {"since": RELEASED})
+    assert none_newer["data"] == []
+    assert none_newer["meta"]["vintage"] == RELEASED, "the marker for the next call"
+    assert none_newer["meta"]["published_at"] == "2026-10-22T08:30:42.670000"
+    refused = await mcp_call_text(
+        server, "usda_esr_get_release_dates", {"since": "2026-10-22T08:30:42.67+00:00"}
+    )
+    assert refused.startswith(
+        "error: InvalidRequestError: since must be the meta.vintage text of an earlier "
+        "get_release_dates call"
+    )
+    assert "it carries a time zone" in refused
+    assert sent_urls(route) == [RELEASE_DATES] * 2, "the refusal sent nothing"
+
+
 def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     """The HTTP envelope carries the naive release time with its flag, as MCP's does."""
     from fastapi import FastAPI
@@ -285,6 +382,31 @@ def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Rout
         "2026-10-22T08:30:42.670000",
         True,
     )
+
+
+def test_release_dates_since_over_http(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from xippios.usda.esr.http import router
+
+    route = replay_fixture(RELEASES, "all")
+    app = FastAPI()
+    app.include_router(router)
+    http = TestClient(app)
+    response = http.get("/usda-esr/get_release_dates", params={"since": RELEASED})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["data"] == []
+    assert (body["meta"]["vintage"], body["meta"]["request"]) == (RELEASED, {"since": RELEASED})
+    earlier = http.get("/usda-esr/get_release_dates", params={"since": A_SECOND_EARLIER})
+    assert len(earlier.json()["data"]) == 44
+    refused = http.get("/usda-esr/get_release_dates", params={"since": "not a time"})
+    assert refused.status_code == 422
+    assert refused.json()["title"] == "InvalidRequestError"
+    assert sent_urls(route) == [RELEASE_DATES] * 2
 
 
 def test_quantities_are_json_numbers_over_http(
