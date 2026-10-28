@@ -35,8 +35,14 @@ SOURCES = {
     "regions": ("ESRData_GetRegions", "get_regions", Region),
     "unitsOfMeasure": ("ESRData_GetUnitsOfMeasure", "get_units_of_measure", UnitOfMeasure),
 }
-FETCHED = datetime(2026, 10, 25, tzinfo=UTC)
-"""The packaged lists' ``fetched``, a bare date in the files, read as 00:00 UTC (ADR-0022)."""
+FETCHED = {
+    "commodities": datetime(2026, 10, 28, 19, 19, 51, tzinfo=UTC),
+    "countries": datetime(2026, 10, 28, 19, 19, 52, tzinfo=UTC),
+    "regions": datetime(2026, 10, 28, 19, 19, 53, tzinfo=UTC),
+    "unitsOfMeasure": datetime(2026, 10, 28, 19, 19, 53, tzinfo=UTC),
+}
+"""The packaged lists' ``fetched``, each list's UTC time of the refresh to the second, as
+``PackagedList.write`` writes it (ADR-0022, amendment 2026-10-27, point 1)."""
 
 
 def _recorded(wrapper: str, case: str) -> list[dict[str, object]]:
@@ -77,7 +83,7 @@ def test_every_packaged_list_loads_and_parses() -> None:
     for name, (endpoint, _, model) in SOURCES.items():
         packaged = PackagedList.load(PACKAGE, name)
         assert (packaged.param, packaged.endpoint) == (name, endpoint)
-        assert packaged.fetched == FETCHED
+        assert packaged.fetched == FETCHED[name], name
         parsed = parse(list[model], packaged.records, source="usda-esr", endpoint=endpoint)  # type: ignore[valid-type]
         assert parsed, name
 
@@ -104,7 +110,7 @@ def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
 
 
 def test_packaged_lists_equal_the_recorded_answers() -> None:
-    """Fetched live ten minutes after the recordings; the records are the same."""
+    """Fetched live on 2026-10-28, three days after the recordings; the records are the same."""
     for name, (_, wrapper, _) in SOURCES.items():
         assert _records(name) == _recorded(wrapper, "all"), name
 
@@ -182,11 +188,11 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
     assert isinstance(error, InvalidRequestError)
     assert status_for(error) == 422
     assert (error.param, error.value, error.list_name) == ("commodity_code", 999, "commodities")
-    assert error.fetched == FETCHED
+    assert error.fetched == FETCHED["commodities"]
     assert error.closest == ((1001, "Flaxseed"), (902, "Soybean Oil"))
     assert error.source == "usda-esr"
     assert error.message == (
-        "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-25). "
+        "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-28). "
         "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers unknown codes with an "
         "empty result, so the package refuses them. If upstream added it since, the packaged "
         "list needs a refresh (/refresh-reference-data)."
