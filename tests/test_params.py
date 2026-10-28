@@ -1,8 +1,14 @@
 """Packaged reference lists, their enum and the argument checks built on them."""
 
+import ast
+import importlib.util
+import inspect
 import json
+import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from xippios.core import InvalidRequestError, PackagedList, UnknownCode, parse
@@ -21,6 +27,7 @@ from xippios.usda.esr.params import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "refresh_reference.py"
 SOURCES = {
     "commodities": ("ESRData_GetCommodities", Commodity),
     "countries": ("ESRData_GetCountries", Country),
@@ -42,6 +49,28 @@ def _records(name: str) -> list[dict[str, object]]:
     return PackagedList.load(PACKAGE, name).records
 
 
+def _refresh_script() -> ModuleType:
+    """``scripts/refresh_reference.py``, loaded without running it: no request, no key."""
+    spec = importlib.util.spec_from_file_location("refresh_reference", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _endpoint_literals(wrapper: Callable[[], object]) -> list[object]:
+    """Every ``endpoint=`` the wrapper's module passes, read from its source."""
+    tree = ast.parse(inspect.getsource(sys.modules[wrapper.__module__]))
+    return [
+        keyword.value.value if isinstance(keyword.value, ast.Constant) else keyword.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "endpoint"
+    ]
+
+
 def test_every_packaged_list_loads_and_parses() -> None:
     assert set(PACKAGED_LISTS) == set(SOURCES)
     for name, (endpoint, model) in SOURCES.items():
@@ -50,6 +79,25 @@ def test_every_packaged_list_loads_and_parses() -> None:
         assert packaged.fetched == FETCHED
         parsed = parse(list[model], packaged.records, source="usda-esr", endpoint=endpoint)  # type: ignore[valid-type]
         assert parsed, name
+
+
+def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
+    """The script writes a list's ``endpoint`` from the operation its entry names, not from
+    the wrapper's name (conventions 1.22 §2), so a refresh cannot drift from the verbatim
+    ``operationId``: the entry's operation is the packaged file's ``endpoint``, the one
+    ``endpoint=`` literal its wrapper passes and the first line of the wrapper's docstring."""
+    script = _refresh_script()
+    assert script.LISTS == {}, "ESR publishes no value list"
+    entries: dict[str, tuple[str, Callable[[], object]]] = {
+        **{name: (operation, fetch) for name, (operation, fetch) in script.TABLES.items()},
+        **{name: (operation, fetch) for name, (operation, fetch, _, _) in script.ID_LISTS.items()},
+    }
+    assert set(entries) == set(PACKAGED_LISTS) == set(SOURCES)
+    for name, (operation, fetch) in entries.items():
+        assert operation == SOURCES[name][0], name
+        assert operation == PackagedList.load(PACKAGE, name).endpoint, name
+        assert _endpoint_literals(fetch) == [operation], name
+        assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
 
 
 def test_packaged_lists_equal_the_recorded_answers() -> None:
