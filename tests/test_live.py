@@ -19,9 +19,10 @@ from typing import Any
 
 import httpx
 import pytest
+from xippios.core.data_gov import Gateway
 
 from xippios.usda.esr import api, tasks
-from xippios.usda.esr._client import BASE_URL, config, policy
+from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.models import ExportField
 from xippios.usda.esr.params import packaged_values
@@ -70,7 +71,7 @@ async def test_get_exports_for_one_country_live() -> None:
     assert max(weeks) < date(2024, 6, 14), "and ends in May 2024; its last week ends in June"
     assert result.meta.vintage == max(weeks).isoformat()
     assert result.meta.published_at is None
-    snapshot = policy.snapshot()
+    snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
     assert snapshot.limit == 1000
 
