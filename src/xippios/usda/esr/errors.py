@@ -1,10 +1,14 @@
-"""ESR failure modes with a distinct meaning (conventions §5)."""
+"""ESR failure modes with a distinct meaning (conventions §5).
 
-from xippios.core import InvalidRequestError, NotFoundError
+A code the packaged lists lack is refused with core's ``xippios.core.UnknownCode``
+(``params``, ADR-0022).
+"""
+
+from xippios.core import NotFoundError
 
 from xippios.usda.esr._client import SOURCE
 
-__all__ = ["NoDataForYear", "UnknownCode"]
+__all__ = ["NoDataForYear"]
 
 
 class NoDataForYear(NotFoundError):
@@ -31,48 +35,3 @@ class NoDataForYear(NotFoundError):
             source=SOURCE,
         )
         self.path = path
-
-
-class UnknownCode(InvalidRequestError):
-    """A code the packaged ESR reference list does not contain (HTTP 422).
-
-    ESR answers an unknown commodity or country code with HTTP 200 and an empty list
-    (``tests/fixtures/ESRData_GetCountryData/unknown_commodity.json``, 999, and
-    ``unknown_country.json``, 9999), which is indistinguishable from a query without
-    exports. The package therefore checks codes against the packaged lists before calling
-    upstream and refuses unknown ones, naming the closest known codes.
-
-    Attributes:
-        param: The parameter, as the package names it, e.g. ``"commodity_code"``.
-        value: The integer given, e.g. ``999``.
-        list_name: The packaged list checked, as upstream names it, e.g. ``"commodities"``.
-        fetched: The day the packaged list was fetched, an ISO date, e.g. ``"2026-10-25"``.
-        closest: The closest known codes with their upstream names, best match first.
-    """
-
-    def __init__(
-        self,
-        param: str,
-        value: int,
-        *,
-        list_name: str,
-        fetched: str,
-        closest: list[tuple[int, str]],
-    ) -> None:
-        hint = (
-            " Did you mean " + ", ".join(f"{code} ({name})" for code, name in closest) + "?"
-            if closest
-            else ""
-        )
-        super().__init__(
-            f"{value} is not a {param} in ESR's {list_name} list (packaged, fetched "
-            f"{fetched}).{hint} ESR answers unknown codes with an empty result, so the package "
-            "refuses them. If ESR added the code since, the packaged lists need a refresh "
-            "(/refresh-reference-data).",
-            source=SOURCE,
-        )
-        self.param = param
-        self.value = value
-        self.list_name = list_name
-        self.fetched = fetched
-        self.closest = closest

@@ -19,20 +19,21 @@ from typing import Any
 
 import httpx
 import pytest
+from xippios.core import PackagedList
+from xippios.core.data_gov import Gateway
 
 from xippios.usda.esr import api, tasks
-from xippios.usda.esr._client import BASE_URL, config, policy
+from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.models import ExportField
-from xippios.usda.esr.params import packaged_values
+from xippios.usda.esr.params import PACKAGE
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
 
 def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
     """The packaged code whose upstream name, stripped of padding, is ``name``."""
-    packaged = packaged_values(list_name)
-    assert packaged is not None
+    packaged = PackagedList.load(PACKAGE, list_name)
     codes = {str(r[name_field]).strip(): int(r[code_field]) for r in packaged.records}
     return codes[name]
 
@@ -47,9 +48,8 @@ MEXICO = _code("countries", "countryCode", "countryDescription", "MEXICO")
 async def test_upstream_answers() -> None:
     """The base URL answers without a server error.
 
-    A plain request, not the package's client, so no key goes out and no call counts
-    against the key's quota; a keyed gateway's answer to it (a 403 or a 404, say) still
-    shows the host is up.
+    A plain request, not the package's client, so no key goes out and it spends no keyed
+    call; a keyed gateway's answer to it (a 403 or a 404, say) still shows the host is up.
     """
     async with httpx.AsyncClient(
         headers={"User-Agent": config.user_agent},
@@ -70,7 +70,7 @@ async def test_get_exports_for_one_country_live() -> None:
     assert max(weeks) < date(2024, 6, 14), "and ends in May 2024; its last week ends in June"
     assert result.meta.vintage == max(weeks).isoformat()
     assert result.meta.published_at is None
-    snapshot = policy.snapshot()
+    snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
     assert snapshot.limit == 1000
 
@@ -95,9 +95,10 @@ async def test_get_release_dates_live() -> None:
     assert wheat.market_year == wheat.market_year_end.year, "named by its end year"
     assert (wheat.market_year_start.month, wheat.market_year_end.month) == (6, 5)
     assert all(r.release_time_stamp.tzinfo is None for r in result.data)
-    latest = max(r.release_time_stamp for r in result.data)
-    assert result.meta.vintage == latest.isoformat()
-    assert result.meta.published_at is None
+    latest = max(result.data, key=lambda r: r.release_time_stamp)
+    assert result.meta.vintage == latest.release_time_stamp_text, "upstream's text"
+    assert result.meta.published_at == latest.release_time_stamp, "naive, as upstream gives it"
+    assert result.meta.published_at_naive is True
 
 
 async def test_get_latest_week_live() -> None:
@@ -163,8 +164,9 @@ async def test_packaged_list_equals_the_live_list(task: str, endpoint: str) -> N
     new = [record for record in live if record not in packaged.data]
     behind = bool(stale or new)
     assert not behind, (
-        f"{task} is behind upstream (packaged {packaged.meta.vintage}): {len(stale)} packaged "
-        f"records upstream no longer sends, {len(new)} upstream records the package lacks; "
+        f"{task} is behind upstream (packaged {packaged.meta.retrieved_at:%Y-%m-%d}): "
+        f"{len(stale)} packaged records upstream no longer sends, {len(new)} upstream records "
+        "the package lacks; "
         f"first of each: {stale[:5]}, {new[:5]}. Refresh with /refresh-reference-data."
     )
     assert packaged.data == live, f"{task}: the same records in another order"

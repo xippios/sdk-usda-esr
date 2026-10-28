@@ -1,10 +1,11 @@
 # The org ruleset requires a check named `ci` on main. The matrix job is `test`;
 # the single `ci` job below aggregates it so the required check has one name.
+# Pull requests run it directly; a push to main runs it only through publish.yml, once,
+# for a release (the release train, conventions §12). It has no push trigger of its own and
+# gets none back: the strict up-to-date policy tests every tree before it merges.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_call:
 
@@ -20,8 +21,45 @@ jobs:
       matrix:
         python: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # both steps below diff against origin/<base>
+          persist-credentials: false
+      # Conventions §12: every PR but a release or Dependabot's (which writes no entry) adds
+      # a CHANGELOG entry; an adoption PR's names the versions it adopts (§15 item 9).
+      - name: CHANGELOG.md has an entry
+        if: >-
+          github.event_name == 'pull_request'
+          && !startsWith(github.head_ref, 'chore/release-')
+          && !startsWith(github.head_ref, 'dependabot/')
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          if ! git diff --name-only "origin/${BASE}...HEAD" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::CHANGELOG.md has no entry under Unreleased (conventions §12)"
+            exit 1
+          fi
+      # ADR-0019: the fixture files a PR adds or changes stay under 256 KiB. --no-renames
+      # lists a moved fixture as added, so one moved and grown is seen. LEVEL is error from
+      # template v0.3.0, when the cap binds a source; v0.2.1 and v0.2.2 warned.
+      - name: Fixture files under 256 KiB
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.base_ref }}
+          LEVEL: error
+        run: |
+          over=0
+          while IFS= read -r -d '' path; do
+            size="$(stat -c %s "$path")"
+            if [ "$size" -ge 262144 ]; then
+              echo "::${LEVEL} file=${path}::${size} bytes, over the 256 KiB cap (ADR-0019)"
+              over=1
+            fi
+          done < <(git diff -z --name-only --no-renames --diff-filter=AM "origin/${BASE}...HEAD" -- tests/fixtures/)
+          if [ "$LEVEL" = error ]; then
+            exit "$over"
+          fi
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
@@ -34,7 +72,7 @@ jobs:
       # hooks run the version uv.lock pins (keep their rev in step), so where the two ruff
       # steps above passed they change nothing; a hook that would change a file fails.
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-py${{ matrix.python }}-${{ hashFiles('.pre-commit-config.yaml') }}

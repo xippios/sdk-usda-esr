@@ -1,14 +1,15 @@
-"""The client's wiring and error mapping, and core's quota policy wired to the gateway.
+"""The client's wiring and error mapping, and core's api.data.gov gateway wired to it.
 
 Recorded answers come from ``tests/fixtures`` (2026-10-25). Cases the recordings do not
 cover are built in api.data.gov's documented shapes and say "NOT RECORDED": the
 gateway's 429 (``OVER_RATE_LIMIT``; spending the key's hourly quota, shared with
 sdk-usda-psd and sdk-usda-gats, to record it was not worth it; its shape is the one
 api.data.gov documents and sdk-usda-psd recorded on 2026-10-23), the gateway's
-``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes. The quota policy itself is core's
-(``QuotaPolicy``, ADR-0015) and is tested there; this module checks that the package
-installs it on the gateway's headers, that it reads a 429 and the recorded quota headers,
-and that ``classify`` shapes core's retries of a 429.
+``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes. The gateway and its quota policy are
+core's (``xippios.core.data_gov.Gateway``, ADR-0009, ADR-0015) and are tested there; this
+module checks that the package installs them, that the policy reads a 429 and the recorded
+quota headers through the package's client, that ``classify`` keeps ESR's own answers
+after the gateway's, and that it shapes core's retries of a 429.
 """
 
 import dataclasses
@@ -27,7 +28,8 @@ from xippios.core import (
     RateLimitError,
     RetryPolicy,
 )
-from xippios.core.testing import load_fixture
+from xippios.core.data_gov import Gateway
+from xippios.core.testing import CLOCK_SLACK, load_fixture, response_from_fixture
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import (
@@ -40,24 +42,15 @@ from xippios.usda.esr._client import (
     classify,
     client,
     config,
-    policy,
+    gateway,
 )
 from xippios.usda.esr.errors import NoDataForYear
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTRY = "ESRData_GetCountryData"
 EXPORTS = "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear"
-
-
-def recorded(endpoint: str, case: str) -> httpx.Response:
-    """A recorded answer as an ``httpx.Response``, for calling ``classify`` directly."""
-    fixture = load_fixture(FIXTURES / endpoint / f"{case}.json")
-    return httpx.Response(
-        fixture.response.status,
-        headers=fixture.response.headers,
-        content=fixture.response.content,
-        request=httpx.Request(fixture.request.method, fixture.request.url),
-    )
+SLACK = CLOCK_SLACK.total_seconds()
+"""A wait read through the client counts from the snapshot to now, a moment later."""
 
 
 def synthesised(
@@ -97,23 +90,24 @@ GATEWAY_NOT_FOUND = {
 
 
 def test_the_client_is_wired_for_the_gateway() -> None:
-    """One request per second, esr's classify, and core's quota policy on api.data.gov's
-    ``x-ratelimit-*`` headers, which count the rolling hour, not a pace; the gateway sends
-    no reset header, so one hour is the fallback wait (ADR-0010, ADR-0015)."""
+    """One request per second, esr's classify, and core's gateway: its key auth and its
+    one quota policy per process on api.data.gov's ``x-ratelimit-*`` headers, which count
+    the rolling hour, not a pace; one hour is the fallback wait (ADR-0009, ADR-0015)."""
     assert (RATE_LIMIT.per_minute, RATE_LIMIT.capacity) == (60, 1)
     assert config.rate_limit is RATE_LIMIT
     assert config.classify is classify
     assert client.config is config
     assert config.base_url == BASE_URL == "https://api.fas.usda.gov"
-    assert config.observe == policy.observe, "installed: every answer reaches the policy"
-    assert config.before_request is not None
-    assert (policy.limit_header, policy.remaining_header, policy.reset_header) == (
+    assert gateway.source == SOURCE == "usda-esr"
+    assert gateway.policy is Gateway.policy, "one policy per process for the shared key"
+    assert config.observe == Gateway.policy.observe, "installed: every answer reaches it"
+    assert config.before_request == Gateway.policy.before_request
+    assert (Gateway.policy.limit_header, Gateway.policy.remaining_header) == (
         "x-ratelimit-limit",
         "x-ratelimit-remaining",
-        None,
     )
-    assert (policy.window, policy.source) == (3600.0, SOURCE)
-    assert SOURCE == "usda-esr"
+    assert (Gateway.policy.window, Gateway.policy.source) == (3600.0, "api.data.gov")
+    assert auth is gateway.auth
     assert auth.header == "X-Api-Key"
     assert auth.env_var == API_KEY_ENV == "DATA_GOV_API_KEY"  # pragma: allowlist secret
 
@@ -133,7 +127,7 @@ async def test_the_key_goes_in_the_header_and_the_quota_headers_reach_the_policy
     await api.ESRData_GetCountryData(104, 1220, 2024)
     assert [call.request.headers.get("X-Api-Key") for call in route.calls] == [placeholder_api_key]
     assert [call.request.headers.get("Accept") for call in route.calls] == ["application/json"]
-    snapshot = policy.snapshot()
+    snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
     assert (snapshot.limit, snapshot.remaining, snapshot.resumes_at) == (1000, 987, None)
 
@@ -146,14 +140,18 @@ def test_the_data_path_covers_both_exports_forms_only() -> None:
 
 
 def test_invalid_key_is_an_auth_error_naming_the_code_and_the_variable() -> None:
-    response = recorded("ESRData_GetCommodities", "invalid_key")
+    """The gateway's text, from ``gateway.classify``: the code, the variable, never the key."""
+    response = response_from_fixture(
+        load_fixture(FIXTURES / "ESRData_GetCommodities" / "invalid_key.json")
+    )
     assert response.status_code == 403
     assert "x-ratelimit-remaining" not in response.headers, "no quota headers for a bad key"
     error = classify(response)
     assert isinstance(error, AuthError)
     assert error.status == 403
-    assert "API_KEY_INVALID" in error.message
-    assert API_KEY_ENV in error.message
+    assert error.message.startswith(
+        f"api.data.gov refused the key in {API_KEY_ENV} (HTTP 403 API_KEY_INVALID: "
+    )
     assert "An invalid api_key was supplied. Get one at <host>" in error.message
     assert "api.fas.usda.gov" not in error.message, "host-free (conventions §5)"
     assert error.source == SOURCE
@@ -201,7 +199,7 @@ async def test_unknown_codes_future_years_and_no_exports_answer_an_empty_list(
     """Recorded: an unknown commodity (999) or country (9999), market year 2099 and rye
     for 2024 (valid codes, no exports) all answer HTTP 200 with ``[]``: no error."""
     route = replay_fixture(endpoint, case)
-    response = recorded(endpoint, case)
+    response = response_from_fixture(load_fixture(FIXTURES / endpoint / f"{case}.json"))
     assert (response.status_code, response.json()) == (200, [])
     assert classify(response) is None
     assert response.request.url.path.startswith(path)
@@ -213,7 +211,7 @@ async def test_unknown_codes_future_years_and_no_exports_answer_an_empty_list(
 async def test_market_year_1900_answers_404_with_an_empty_body(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    response = recorded(COUNTRY, "year_1900")
+    response = response_from_fixture(load_fixture(FIXTURES / COUNTRY / "year_1900.json"))
     assert (response.status_code, response.content) == (404, b"")
     assert response.headers["content-type"].startswith("text/plain")
     error = classify(response)
@@ -263,7 +261,7 @@ async def test_a_path_value_that_is_not_an_integer_is_an_invalid_request(
     """Recorded: ``commodityCode/abc`` answers HTTP 400 ``{"message": "The request is
     invalid."}``. The package never sends one (its parameters are ``int``); classify maps
     it all the same, and core does not retry it."""
-    response = recorded(COUNTRY, "not_an_integer")
+    response = response_from_fixture(load_fixture(FIXTURES / COUNTRY / "not_an_integer.json"))
     assert response.status_code == 400
     assert response.json() == {"message": "The request is invalid."}
     error = classify(response)
@@ -293,19 +291,22 @@ def test_the_gateway_not_found_is_a_not_found_error() -> None:
 
 def test_other_statuses_fall_through_to_core() -> None:
     assert classify(synthesised(500, {"Message": "An error has occurred."})) is None
-    assert classify(recorded("ESRData_GetCommodities", "all")) is None
-    assert classify(recorded(COUNTRY, "wheat_white_canada_2024")) is None
+    for path in [
+        FIXTURES / "ESRData_GetCommodities" / "all.json",
+        FIXTURES / COUNTRY / "wheat_white_canada_2024.json",
+    ]:
+        assert classify(response_from_fixture(load_fixture(path))) is None, path.name
 
 
 def test_a_429_is_a_rate_limit_error_with_its_retry_after() -> None:
-    """NOT RECORDED: api.data.gov's 429 with ``Retry-After`` and the quota at zero."""
+    """NOT RECORDED: api.data.gov's 429 with ``Retry-After`` and the quota at zero.
+    ``classify`` called on its own gives the exact wait: no client has observed it."""
     error = classify(synthesised(429, OVER_RATE_LIMIT, QUOTA_SPENT))
     assert isinstance(error, RateLimitError)
     assert error.retry_after == 3151.0
     assert "OVER_RATE_LIMIT: You have exceeded your rate limit" in error.message
     assert "api.fas.usda.gov" not in error.message, "host-free (conventions §5)"
     assert "expected back in 3151 s" in error.message, "no snapshot without the client"
-    assert "Nothing was retried" in error.message
     assert "retry after" not in error.message, "core's adapters append the retry hint"
     assert API_KEY_ENV in error.message
     assert error.source == SOURCE
@@ -315,7 +316,7 @@ def test_a_429_without_retry_after_falls_back_to_the_quota_window() -> None:
     """NOT RECORDED: the 429 body without Retry-After or quota headers."""
     error = classify(synthesised(429, OVER_RATE_LIMIT))
     assert isinstance(error, RateLimitError)
-    assert error.retry_after == policy.window == 3600.0
+    assert error.retry_after == Gateway.policy.window == 3600.0
     assert "an hourly quota per key" in error.message, "no limit known, none invented"
     assert "expected back in 3600 s" in error.message
 
@@ -323,28 +324,33 @@ def test_a_429_without_retry_after_falls_back_to_the_quota_window() -> None:
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_the_policy_reads_a_429_through_core(respx_mock: respx.MockRouter) -> None:
-    """NOT RECORDED: the 429 through the package's client. Core's ``observe`` marks the quota
-    spent until its ``Retry-After``, ``classify`` raises after one request (3151 s is beyond
-    ``backoff_max``), and the next request is refused before it is sent. Marked
-    ``rate_limited``: the refusal is the policy's pause, which the plugin turns off."""
+    """NOT RECORDED: the 429 through the package's client. ``Gateway.policy``'s ``observe``
+    marks the quota spent until its ``Retry-After``, ``classify`` raises after one request
+    (3151 s is beyond ``backoff_max``) with the snapshot's wait from now, and the next
+    request is refused before it is sent, in the gateway's name. Marked ``rate_limited``:
+    the refusal is the policy's pause, which the plugin turns off."""
     route = respx_mock.get(f"{BASE_URL}/api/esr/commodities").mock(
         return_value=httpx.Response(429, json=OVER_RATE_LIMIT, headers=QUOTA_SPENT)
     )
     regions = respx_mock.get(f"{BASE_URL}/api/esr/regions")
     with pytest.raises(RateLimitError) as info:
         await api.ESRData_GetCommodities()
-    assert info.value.retry_after == 3151.0
+    assert info.value.retry_after is not None
+    assert 3151 - SLACK <= info.value.retry_after <= 3151
+    assert info.value.source == SOURCE
     assert route.call_count == 1, "not retried"
     assert "1000 requests per rolling hour per key" in info.value.message
     assert "0 of 1000 requests left" in info.value.message
-    snapshot = policy.snapshot()
+    snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
     assert (snapshot.limit, snapshot.remaining) == (1000, 0)
     assert snapshot.resumes_at == snapshot.observed_at + timedelta(seconds=3151)
     with pytest.raises(RateLimitError, match="nothing was sent") as refused:
         await api.ESRData_GetRegions()
+    assert refused.value.source == "api.data.gov", "the gateway's quota, not esr's"
+    assert refused.value.message.startswith(f"api.data.gov quota of the key in {API_KEY_ENV} spent")
     assert refused.value.retry_after is not None
-    assert 3140 <= refused.value.retry_after <= 3151
+    assert 3151 - SLACK <= refused.value.retry_after <= 3151
     assert regions.call_count == 0
 
 
@@ -383,6 +389,9 @@ async def test_core_retries_a_429_only_within_its_backoff(
     assert len(sleeps) == attempts - 1
     assert all(seconds <= RetryPolicy().backoff_max for seconds in sleeps)
     if shaped:
-        assert info.value.retry_after == float(retry_after or 3600)
+        # read through the client: the snapshot's wait from now, a moment under the header's
+        assert info.value.retry_after is not None
+        expected = float(retry_after or 3600)
+        assert expected - SLACK <= info.value.retry_after <= expected
     else:
         assert info.value.retry_after is None, "core's own mapping: no Retry-After, no wait"

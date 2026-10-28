@@ -1,43 +1,23 @@
-"""Structural checks every task must satisfy. Per-task tests with recorded fixtures go below.
+"""Replay tests on recorded fixtures, at least one per task (conventions §10).
 
-A replay test that checks what was sent compares ``xippios.core.testing.sent_urls(route)``,
-the URLs the route received with credentials redacted, rather than keep a request from
-``route.calls`` in its frame, where a failure or ``pytest -l`` would print it.
+``/add-endpoint`` and ``/record-fixture`` add them.
 """
 
-import inspect
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError
+from xippios.core import InvalidRequestError, NotFoundError, UnknownCode
 from xippios.core.testing import mcp_call, sent_urls
 
-from xippios.usda.esr import __version__, get_exports, get_release_dates, tasks
+from xippios.usda.esr import get_exports, get_release_dates, tasks
 from xippios.usda.esr._client import BASE_URL
 from xippios.usda.esr.enums import UnitId
-from xippios.usda.esr.errors import NoDataForYear, UnknownCode
+from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.params import latest_market_year
-
-TASKS = [getattr(tasks, name) for name in tasks.__all__]
-
-
-def test_package_has_a_version() -> None:
-    assert __version__
-
-
-@pytest.mark.parametrize("task", TASKS, ids=tasks.__all__)
-def test_task_is_a_sync_facade_with_an_agent_docstring(task: object) -> None:
-    assert callable(task)
-    assert hasattr(task, "async_fn"), "write the async function and derive the sync one with sync()"
-    doc = inspect.getdoc(task) or ""
-    assert doc, "task functions need a docstring: agents read it"
-    assert doc.splitlines()[0].endswith("."), "the first line is one sentence"
-    if inspect.signature(task).parameters:
-        assert "Args:" in doc, "explain every parameter under Args: with valid-value examples"
 
 
 def test_the_package_exports_the_tasks() -> None:
@@ -97,11 +77,9 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     result = tasks.get_exports(COTTONSEED, 2024)
     assert sent_urls(route) == [f"{EXPORTS}/1201/allCountries/marketYear/2024"]
     assert result.meta.endpoint == "ESRData_GetAllCountriesData"
-    assert result.meta.request == {
-        "commodity_code": 1201,
-        "market_year": 2024,
-        "country_code": None,
-    }
+    assert result.meta.request == {"commodity_code": 1201, "market_year": 2024}, (
+        "country_code left None is left out (ADR-0022, rule 3)"
+    )
     assert len(result.data) == 498
     assert len({r.country_code for r in result.data}) == 11
     assert result.meta.vintage == "2024-08-01", "cottonseed 2024 runs August 2023 to July 2024"
@@ -117,13 +95,13 @@ def test_valid_codes_without_exports_are_an_empty_result(
     result = tasks.get_exports(RYE, 2024)
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
-    assert result.meta.request == {"commodity_code": 501, "market_year": 2024, "country_code": None}
+    assert result.meta.request == {"commodity_code": 501, "market_year": 2024}
     assert route.call_count == 1
 
 
 def test_vintage_is_none_for_empty_answers() -> None:
     assert tasks._vintage([]) is None
-    assert tasks._release_vintage([]) is None
+    assert tasks._newest_release([]) is None, "no release: vintage and published_at None"
 
 
 def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) -> None:
@@ -133,10 +111,12 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
     assert len(result.data) == 44
     assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
     assert result.meta.request == {}
-    assert result.meta.vintage == "2026-10-22T08:30:42.670000", (
-        "the latest releaseTimeStamp's isoformat(): upstream's two fractional digits render six"
+    assert result.meta.vintage == "2026-10-22T08:30:42.67", (
+        "the latest releaseTimeStamp's text as upstream prints it, two fractional digits"
     )
-    assert result.meta.published_at is None, "the snapshot states no time zone"
+    assert result.meta.published_at == datetime(2026, 10, 22, 8, 30, 42, 670000)
+    assert result.meta.published_at.tzinfo is None, "the snapshot states no time zone"
+    assert result.meta.published_at_naive is True
     wheat = next(r for r in result.data if r.commodity_code == WHEAT_WHITE)
     assert (wheat.market_year, wheat.market_year_start, wheat.market_year_end) == (
         2027,
@@ -264,7 +244,7 @@ async def test_every_country_over_mcp_is_cut_with_a_note_naming_country_code(
         f"showing {shown} of 498 rows (cap: 200 rows or 65536 bytes); pass country_code, e.g. "
         "1220 (Canada), for one destination's weeks, up to 54 rows"
     )
-    assert payload["meta"]["request"]["country_code"] is None
+    assert "country_code" not in payload["meta"]["request"]
     assert payload["meta"]["vintage"] == "2024-08-01"
 
 
@@ -282,8 +262,29 @@ async def test_release_dates_over_mcp(replay_fixture: Callable[[str, str], respx
         "market_year": 2027,
         "release_time_stamp": "2026-10-22T08:30:42.670000",
     }
-    assert payload["meta"]["vintage"] == "2026-10-22T08:30:42.670000"
-    assert payload["meta"]["published_at"] is None
+    assert payload["meta"]["vintage"] == "2026-10-22T08:30:42.67"
+    assert payload["meta"]["published_at"] == "2026-10-22T08:30:42.670000", "no zone added"
+    assert payload["meta"]["published_at_naive"] is True
+
+
+def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+    """The HTTP envelope carries the naive release time with its flag, as MCP's does."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from xippios.usda.esr.http import router
+
+    replay_fixture(RELEASES, "all")
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).get("/usda-esr/get_release_dates")
+    assert response.status_code == 200, response.text
+    meta = response.json()["meta"]
+    assert (meta["vintage"], meta["published_at"], meta["published_at_naive"]) == (
+        "2026-10-22T08:30:42.67",
+        "2026-10-22T08:30:42.670000",
+        True,
+    )
 
 
 def test_quantities_are_json_numbers_over_http(

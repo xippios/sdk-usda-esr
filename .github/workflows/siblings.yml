@@ -1,10 +1,14 @@
-# Sibling proof for ADR-0006: this wheel, xippios-usda-psd and xippios-usda-nass install
-# side by side as portions of the namespaces xippios and xippios.usda
-# (scripts/check-siblings.sh). The source's own workflow (Johannes, 2026-10-25, as for
-# sdk-usda-psd): ci.yml is the template's, core's file byte for byte, and publish.yml runs
-# it, so a job there would tie this package's releases to its siblings. This job runs next
-# to it, on pull requests and pushes to main, a visible check the org ruleset does not
-# require.
+# Sibling proof for ADR-0006: this wheel installs beside every sibling under the same
+# provider namespace that is on PyPI, as portions of the namespaces between xippios and the
+# package (.github/scripts/check-siblings.sh says how it finds them), and beside the source
+# packages it depends on, as pyproject.toml declares them (ADR-0021).
+# sdk-template renders this workflow and the script where the import path nests or the
+# source declares a source package it depends on, and copier update keeps both as the
+# template's. It runs next to ci.yml, which is core's file and which publish.yml calls for
+# a release, so a job there would tie this package's releases to its siblings: `siblings`
+# is a visible check the org ruleset does not require.
+# Hardened as every workflow of the family (conventions §13): the actions pinned to the
+# commits ci.yml pins, the checkout keeps no credentials, the token reads only.
 name: Siblings
 
 on:
@@ -20,8 +24,14 @@ jobs:
     name: siblings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.12"
-      - run: scripts/check-siblings.sh
+      - run: .github/scripts/check-siblings.sh
+        env:
+          # The job's read-only token, for the listing of the organisation's repositories:
+          # GitHub limits an unauthenticated runner's API calls.
+          GITHUB_TOKEN: ${{ github.token }}

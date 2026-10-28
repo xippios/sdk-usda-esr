@@ -17,13 +17,20 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError, parse
-from xippios.core.testing import fixture_path, load_fixture, mcp_call, sent_urls
+from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core.testing import (
+    ReplayFixture,
+    fixture_path,
+    load_fixture,
+    mcp_call,
+    mcp_call_text,
+    sent_urls,
+)
 
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
-from xippios.usda.esr.errors import NoDataForYear, UnknownCode
+from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, ExportField
 
@@ -50,24 +57,6 @@ def _recorded(endpoint: str, case: str) -> list[CommodityData]:
 
 def _latest_week_recorded() -> list[CommodityData]:
     return [r for r in _recorded(ALL, "cottonseed_2024") if r.week_ending_date == LATEST]
-
-
-def _mount_recorded_404(respx_mock: respx.MockRouter, path: str) -> respx.Route:
-    """Serve ESR's recorded empty 404 for market year 1900 at ``path``.
-
-    ``year_1900`` was recorded on the one-country path (status 404, empty ``text/plain``
-    body); the every-country form was not recorded. The recorded answer is moved, not
-    written by hand, as sdk-usda-psd's slice tests do.
-    """
-    absent = load_fixture(fixture_path(FIXTURES, COUNTRY, "year_1900"))
-    assert (absent.response.status, absent.response.content) == (404, b"")
-    return respx_mock.get(f"{BASE_URL}{path}").mock(
-        return_value=httpx.Response(
-            absent.response.status,
-            headers=absent.response.headers,
-            content=absent.response.content,
-        )
-    )
 
 
 def test_every_slice_is_exported() -> None:
@@ -291,10 +280,15 @@ def test_the_weekly_series_names_a_market_year_esr_lacks(
     ids=["get_latest_week", "get_top_destinations"],
 )
 def test_every_destination_slices_name_a_market_year_esr_lacks(
-    respx_mock: respx.MockRouter, call: Callable[[], object]
+    replay_fixture: ReplayFixture, call: Callable[[], object]
 ) -> None:
+    """``year_1900`` was recorded on the one-country path (status 404, empty ``text/plain``
+    body); the every-country form was not recorded. The recorded answer is served at the
+    every-country path (``url=``), moved, not written by hand."""
+    absent = load_fixture(fixture_path(FIXTURES, COUNTRY, "year_1900"))
+    assert (absent.response.status, absent.response.content) == (404, b"")
     path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
-    route = _mount_recorded_404(respx_mock, path)
+    route = replay_fixture(COUNTRY, "year_1900", url=f"{BASE_URL}{path}")
     with pytest.raises(NoDataForYear) as info:
         call()
     assert info.value.path == path
@@ -409,10 +403,12 @@ async def test_top_destinations_tool_end_to_end(
     assert payload["meta"]["endpoint"] == ALL
     assert payload["meta"]["vintage"] == "2024-08-01"
     assert payload["meta"]["published_at"] is None
-    with pytest.raises(AssertionError, match=r"(?s)field.*Input should be 'weeklyExports'"):
-        await mcp_call(
-            server, "usda_esr_get_top_destinations", {**arguments, "field": "outstanding_sales"}
-        )
+    refused = await mcp_call_text(
+        server, "usda_esr_get_top_destinations", {**arguments, "field": "outstanding_sales"}
+    )
+    assert refused.startswith(
+        "error: InvalidRequestError: field: Input should be 'weeklyExports', "
+    ), "core's text for an argument the schema refuses"
     assert route.call_count == 1, "the schema refused the unknown field before any request"
 
 

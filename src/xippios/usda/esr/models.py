@@ -22,11 +22,13 @@ not ``enums.UnitId``, so that a unit ESR adds before the packaged lists are refr
 not fail an answer, and ``UnitId`` members compare equal to it.
 """
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any, Self
 
-from pydantic import Field
+from pydantic import Field, ModelWrapValidatorHandler, PrivateAttr, model_validator
 from xippios.core import UpstreamModel
 
 __all__ = [
@@ -134,8 +136,12 @@ class DataReleaseInfo(UpstreamModel):
     parsed to ``date`` (pydantic accepts a zero time for a date and refuses any other, so
     a time upstream starts sending would fail the answer rather than be dropped).
     ``releaseTimeStamp`` (``"2026-10-22T08:30:42.67"``) is a naive ``datetime``: the
-    snapshot names no time zone, so none is invented, and it never becomes
-    ``meta.published_at``.
+    snapshot names no time zone, so none is invented. ``get_release_dates`` gives the
+    newest one as ``meta.published_at``, flagged ``published_at_naive``, and its text as
+    upstream prints it, ``release_time_stamp_text``, as ``meta.vintage`` (ADR-0022, rule
+    2). The text is kept beside the parsed value in a private attribute, read through the
+    property ``release_time_stamp_text`` and serialised by no adapter: a record's fields
+    over MCP and HTTP are the first five below, the text not among them.
 
     Attributes:
         commodity_code: ``commodityCode``, e.g. ``104`` (Wheat - White).
@@ -146,6 +152,9 @@ class DataReleaseInfo(UpstreamModel):
             ``2027``.
         release_time_stamp: ``releaseTimeStamp``, the last release of the commodity's
             export data, naive, e.g. ``datetime(2026, 10, 22, 8, 30, 42, 670000)``.
+        release_time_stamp_text: ``releaseTimeStamp`` as upstream prints it, e.g.
+            ``"2026-10-22T08:30:42.67"``; read-only and not serialised. A record built
+            from a ``datetime`` rather than upstream's text carries its ``isoformat()``.
     """
 
     commodity_code: int = Field(validation_alias="commodityCode")
@@ -153,6 +162,31 @@ class DataReleaseInfo(UpstreamModel):
     market_year_end: date = Field(validation_alias="marketYearEnd")
     market_year: int = Field(validation_alias="marketYear")
     release_time_stamp: datetime = Field(validation_alias="releaseTimeStamp")
+    _release_time_stamp_text: str = PrivateAttr()
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _keep_the_release_text(cls, data: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        """Validate, then keep ``releaseTimeStamp``'s text as upstream sent it."""
+        record = handler(data)
+        text = None
+        if isinstance(data, Mapping):
+            text = data.get("releaseTimeStamp", data.get("release_time_stamp"))
+        if not isinstance(text, str):
+            text = getattr(record, "_release_time_stamp_text", None)
+        record._release_time_stamp_text = (
+            text if isinstance(text, str) else record.release_time_stamp.isoformat()
+        )
+        return record
+
+    @property
+    def release_time_stamp_text(self) -> str:
+        """``releaseTimeStamp`` as upstream prints it, e.g. ``"2026-10-22T08:30:42.67"``.
+
+        Unset on a record ``model_construct`` built, which skips validation, so reading it
+        there raises ``AttributeError``.
+        """
+        return self._release_time_stamp_text
 
 
 class CommodityData(UpstreamModel):

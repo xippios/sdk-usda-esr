@@ -5,17 +5,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from xippios.core import InvalidRequestError, parse
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode, parse
 from xippios.core.http import status_for
 from xippios.core.testing import load_fixture
 
 from xippios.usda.esr import enums
-from xippios.usda.esr.errors import UnknownCode
 from xippios.usda.esr.models import Commodity, CommodityData, Country, Region, UnitOfMeasure
 from xippios.usda.esr.params import (
+    PACKAGE,
     PACKAGED_LISTS,
     latest_market_year,
-    packaged_values,
     validate_commodity_code,
     validate_country_code,
     validate_market_year,
@@ -28,6 +27,8 @@ SOURCES = {
     "regions": ("ESRData_GetRegions", Region),
     "unitsOfMeasure": ("ESRData_GetUnitsOfMeasure", UnitOfMeasure),
 }
+FETCHED = datetime(2026, 10, 25, tzinfo=UTC)
+"""The packaged lists' ``fetched``, a bare date in the files, read as 00:00 UTC (ADR-0022)."""
 
 
 def _recorded(endpoint: str, case: str) -> list[dict[str, object]]:
@@ -38,18 +39,15 @@ def _recorded(endpoint: str, case: str) -> list[dict[str, object]]:
 
 
 def _records(name: str) -> list[dict[str, object]]:
-    packaged = packaged_values(name)
-    assert packaged is not None
-    return packaged.records
+    return PackagedList.load(PACKAGE, name).records
 
 
 def test_every_packaged_list_loads_and_parses() -> None:
     assert set(PACKAGED_LISTS) == set(SOURCES)
     for name, (endpoint, model) in SOURCES.items():
-        packaged = packaged_values(name)
-        assert packaged is not None, name
+        packaged = PackagedList.load(PACKAGE, name)
         assert (packaged.param, packaged.endpoint) == (name, endpoint)
-        assert packaged.fetched.isoformat() == "2026-10-25"
+        assert packaged.fetched == FETCHED
         parsed = parse(list[model], packaged.records, source="usda-esr", endpoint=endpoint)  # type: ignore[valid-type]
         assert parsed, name
 
@@ -58,10 +56,6 @@ def test_packaged_lists_equal_the_recorded_answers() -> None:
     """Fetched live ten minutes after the recordings; the records are the same."""
     for name, (endpoint, _) in SOURCES.items():
         assert _records(name) == _recorded(endpoint, "all"), name
-
-
-def test_unknown_list_is_none() -> None:
-    assert packaged_values("not_a_list") is None
 
 
 def test_the_enum_matches_the_packaged_units() -> None:
@@ -137,13 +131,15 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
     assert isinstance(error, InvalidRequestError)
     assert status_for(error) == 422
     assert (error.param, error.value, error.list_name) == ("commodity_code", 999, "commodities")
-    assert error.fetched == "2026-10-25"
-    assert error.closest == [(1001, "Flaxseed"), (902, "Soybean Oil")]
-    assert error.message.startswith(
-        "999 is not a commodity_code in ESR's commodities list (packaged, fetched 2026-10-25). "
-        "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)?"
+    assert error.fetched == FETCHED
+    assert error.closest == ((1001, "Flaxseed"), (902, "Soybean Oil"))
+    assert error.source == "usda-esr"
+    assert error.message == (
+        "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-25). "
+        "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers unknown codes with an "
+        "empty result, so the package refuses them. If upstream added it since, the packaged "
+        "list needs a refresh (/refresh-reference-data)."
     )
-    assert "ESR answers unknown codes with an empty result" in error.message
 
 
 def test_a_stray_digit_leads_to_the_code_by_its_digits() -> None:
@@ -161,7 +157,7 @@ def test_the_recorded_unknown_country_is_refused_naming_the_nearest() -> None:
     with pytest.raises(UnknownCode) as info:
         validate_country_code(9999)
     assert info.value.closest[0] == (9990, "UNKNOWN")
-    assert "9999 is not a country_code in ESR's countries list" in info.value.message
+    assert "9999 is not a country_code in the packaged countries list" in info.value.message
 
 
 def test_swapped_digits_lead_to_the_country() -> None:

@@ -5,7 +5,9 @@ measure, ship inside the package under ``reference/`` so argument checks and loo
 no network call. ``scripts/refresh_reference.py`` writes them through the ``api/``
 wrappers, never by hand, and regenerates the ``UnitId`` enum in ``enums.py``;
 ``reference/README.md`` carries the provenance of every file. Each file keeps upstream's
-records verbatim, under upstream's field names.
+records verbatim, under upstream's field names, and ``PackagedList.load(PACKAGE, name)``
+from ``xippios.core`` reads one (ADR-0022). A code a list lacks is refused with core's
+``UnknownCode``, naming the nearest codes by ESR's own integer strategy, ``_closest``.
 
 Codes are integers, as the snapshot types the path parameters (``int32``) and as every
 recorded record carries them (Johannes, 2026-10-25; ADR-0003): a check takes an ``int``
@@ -17,19 +19,15 @@ a validation failure names a code the package lacks.
 
 import difflib
 import functools
-from datetime import UTC, date, datetime
-from typing import Any
+from datetime import UTC, datetime
 
-from xippios.core import InvalidRequestError, UpstreamModel, load_json
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode
 
 from xippios.usda.esr._client import SOURCE
-from xippios.usda.esr.errors import UnknownCode
 
 __all__ = [
     "PACKAGED_LISTS",
-    "PackagedList",
     "latest_market_year",
-    "packaged_values",
     "validate_commodity_code",
     "validate_country_code",
     "validate_market_year",
@@ -56,51 +54,30 @@ begins is not established and no later bound is set.
 """
 
 
-class PackagedList(UpstreamModel):
-    """One packaged list: ``reference/<name>.json``.
-
-    Attributes:
-        param: The list, as the upstream path names it, e.g. ``"commodities"``.
-        endpoint: The upstream operation it was fetched from, e.g.
-            ``"ESRData_GetCommodities"``.
-        fetched: Day the list was fetched (UTC).
-        records: Upstream's records verbatim, under upstream's field names, in upstream
-            order, e.g. ``{"commodityCode": 104, "commodityName": "Wheat - White",
-            "unitId": 1}``.
-    """
-
-    param: str
-    endpoint: str
-    fetched: date
-    records: list[dict[str, Any]]
-
-
-def packaged_values(name: str) -> PackagedList | None:
-    """The packaged list ``name``, or ``None`` when it is not packaged."""
-    if name not in PACKAGED_LISTS:
-        return None
-    return PackagedList.model_validate(load_json(PACKAGE, f"{name}.json"))
+_REASON = "ESR answers unknown codes with an empty result, so the package refuses them."
+"""Why a code the packaged list lacks is refused before the call, for ``UnknownCode``."""
 
 
 @functools.cache
-def _codes(name: str, code_field: str, name_field: str) -> tuple[str, dict[int, str]]:
-    """Fetch date and ``{code: upstream name}`` of a packaged list, in upstream order.
+def _codes(name: str, code_field: str, name_field: str) -> tuple[datetime, dict[int, str]]:
+    """Fetch time and ``{code: upstream name}`` of a packaged list, in upstream order.
 
     The name is stripped of upstream's padding for messages and name matching
     (``"CANADA                         "`` reads ``"CANADA"``); the packaged records keep it.
     """
-    packaged = packaged_values(name)
-    if packaged is None:  # pragma: no cover - only the lists above are asked for
-        raise KeyError(name)
+    packaged = PackagedList.load(PACKAGE, name)
     codes = {
         int(record[code_field]): " ".join(str(record[name_field]).split())
         for record in packaged.records
     }
-    return packaged.fetched.isoformat(), codes
+    return packaged.fetched, codes
 
 
 def _closest(value: int, codes: dict[int, str]) -> list[tuple[int, str]]:
     """Up to three known codes close to ``value``: the nearest two by number, then by digits.
+
+    ESR's own strategy for integer codes, which core's ``closest`` (for string codes) does
+    not cover (ADR-0023, decision 4).
 
     The commodity ``999`` leads to ``1001`` (Flaxseed) and ``902`` (Soybean Oil), the
     nearest by number; ``1040``, a stray digit, also to ``104`` (Wheat - White), found by
@@ -144,13 +121,20 @@ def _validate_code(
             hint = f" Pass it as the integer {int(value)}."
         raise InvalidRequestError(
             f"{param} must be an integer code such as {example}, got {value!r}.{hint} ESR's "
-            f"codes are integers; the packaged {list_name} list (fetched {fetched}) names them.",
+            f"codes are integers; the packaged {list_name} list (fetched {fetched:%Y-%m-%d}) "
+            "names them.",
             source=SOURCE,
         )
     if value in codes:
         return value
     raise UnknownCode(
-        param, value, list_name=list_name, fetched=fetched, closest=_closest(value, codes)
+        param,
+        value,
+        list_name=list_name,
+        fetched=fetched,
+        closest=_closest(value, codes),
+        reason=_REASON,
+        source=SOURCE,
     )
 
 

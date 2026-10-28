@@ -68,14 +68,14 @@ from xippios.usda.esr import list_commodities, list_countries
 
 result = list_countries(region_id=11)  # ESR's region WESTERN HEMISPHERE (list_regions)
 [c.country_code for c in result.data][:3]  # [1010, 1220, 1610], 40 in upstream order
-result.meta.endpoint, result.meta.vintage  # "ESRData_GetCountries", "2026-10-25" (fetched)
+result.meta.endpoint, result.meta.retrieved_at  # "ESRData_GetCountries", 2026-10-25 (fetched)
 list_countries(search="united").data  # 4120, 5200, 7830: code, name, description or GENC code
 list_countries(search="deu").data  # 4280 GERMANY, by its GENC code "DEU"
 list_commodities(search="wheat").data  # 101 to 107 and 201 Wheat Products
 ```
 
-`meta.vintage` of a list is the day the package fetched it (upstream gives these lists no
-version), `meta.retrieved_at` when the task answered. Names are upstream's, padding
+`meta.retrieved_at` of a list is when the package fetched it, and its `meta.vintage` is
+`None`, since upstream gives these lists no version. Names are upstream's, padding
 included: `country_name` is `"CANADA  "`. The list tasks spend no request of the
 api.data.gov quota.
 
