@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (conventions §15).
+
+### Changed
+
+- **BREAKING:** depends on `xippios-core~=0.3.0`, and its `mcp`, `http` and `testing`
+  extras likewise, in place of `~=0.2.0`.
+- `get_release_dates`: `meta.published_at` is now set, the newest `releaseTimeStamp` as
+  ESR gives it, naive, with `meta.published_at_naive` true; `meta.vintage` is that time
+  stamp's text as upstream prints it (`"2026-10-22T08:30:42.67"`), no longer the
+  `isoformat()` of the parsed value (`"2026-10-22T08:30:42.670000"`); both `None` for an
+  empty answer. `models.DataReleaseInfo` keeps the text as the read-only
+  `release_time_stamp_text`, which no adapter serialises, so its rows are unchanged.
+- The `list_*` tasks' `meta`, now built by core's `PackagedList`: `retrieved_at` is when
+  the packaged list was fetched (2026-10-25, the files' bare date read as 00:00 UTC), no
+  longer when the task answered, and `vintage` is `None`, no longer the fetch date.
+- `meta.request` leaves out a parameter left `None`: `get_exports` without
+  `country_code`, `list_commodities` and `list_countries` without their filters.
+- The gateway's answers are mapped by `xippios.core.data_gov`'s `Gateway`: its
+  `API_KEY_*` refusals, its 429 and its `NOT_FOUND`, with the same error classes. Its
+  quota policy, one per process for `DATA_GOV_API_KEY`, refuses a request into a spent
+  quota with `source` `"api.data.gov"`, not `"usda-esr"`, and a message that starts
+  "api.data.gov quota of the key in DATA_GOV_API_KEY spent"; a 429's message no longer
+  says "Nothing was retried". `_client.policy` gives way to `_client.gateway`.
+- `xippios.usda.esr.errors.UnknownCode` is replaced by `xippios.core.UnknownCode`, an
+  `InvalidRequestError` as before: its message reads "999 is not a commodity_code in the
+  packaged commodities list (fetched 2026-10-25). Did you mean ...", its `fetched` is
+  a datetime and its `closest` a tuple.
+- An MCP tool argument the schema refuses is answered
+  `error: InvalidRequestError: <argument>: <message>` (core 0.3.0).
+- `enums.py` is rendered by core's `render_enums`; `UnitId` and its members are
+  unchanged.
+- `scripts/check-siblings.sh` is replaced by the template's
+  `.github/scripts/check-siblings.sh`, which `siblings.yml` runs and which finds the
+  siblings under `xippios.usda` itself.
+
+### Removed
+
+- `params.PackagedList` and `params.packaged_values`: core's
+  `PackagedList.load(params.PACKAGE, name)` reads a packaged list.
+
 ## [0.1.0] - 2026-10-26
 
 ### Added
