@@ -97,6 +97,7 @@ def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
     assert set(entries) == set(PACKAGED_LISTS) == set(SOURCES)
     for name, (operation, fetch) in entries.items():
         assert (operation, fetch.__name__) == SOURCES[name][:2], name
+        assert (FIXTURES / fetch.__name__ / "all.json").is_file(), name
         assert operation == PackagedList.load(PACKAGE, name).endpoint, name
         assert _endpoint_literals(fetch) == [operation], name
         assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
