@@ -1,48 +1,22 @@
 # Reference data for USDA FAS Export Sales Reporting
 
-The four code lists ESR publishes ship here as JSON, versioned with the package, and
-load through `xippios.usda.esr.params` (built on `xippios.core.reference`):
+Lists and tables the upstream publishes for every caller alike, shipped with the package
+(conventions §3): each `reference/<name>.json` holds `{"param", "endpoint", "fetched",
+"records"}` and an optional `"note"`, upstream's records under upstream's field names,
+written by `/refresh-reference-data`'s script with `PackagedList.write`, never by hand,
+and read with `PackagedList.load`. One row per file: Origin is the endpoint or URL it was
+fetched from, or the `docs/upstream/` file it was rebuilt from; Fetched is the UTC time
+of that fetch, or the snapshot's `Fetched` time for a rebuilt file.
 
-```python
-from xippios.usda.esr.params import packaged_values
-
-packaged_values("commodities").records  # [{"commodityCode": 101, ...}, ...], no network call
-```
-
-Each file holds upstream's records verbatim, under upstream's field names and in
-upstream order, padding included (`countryName` and `countryDescription` are padded with
-spaces upstream), plus the list name (`param`, as the upstream path names it), the
-operation it came from (`endpoint`) and the UTC fetch date (`fetched`). Codes and ids are
-integers, as upstream sends them.
-
-Rules:
-
-- Files come from the upstream through `scripts/refresh_reference.py`
-  (`/refresh-reference-data`), never typed in by hand; the script also regenerates
-  `enums.py` with `xippios.core.reference`: one `StrEnum` per value list
-  (`render_str_enums`), or one `IntEnum` per list of integer ids (`render_int_enums`).
-  ESR's one id list is `unitsOfMeasure`, which makes `UnitId`; commodity, country and
-  region codes stay tables, not enums.
-- Files keep upstream's names: a file is named as the upstream path names its list, and
-  a table and a list of integer ids alike hold their records under upstream's field
-  names (`unitNames` is plural upstream and stays so).
-- Every file has a row below naming the endpoint it came from, the date and the count.
-- A multi-tenant source packages no tenant data (ADR-0014); ESR is single-tenant, every
-  list is the same for every caller of the api.data.gov key.
-- Agents get a lookup task for every packaged list so they can form valid calls: one
-  lookup task per list, `list_<thing>`, served as the MCP tool `usda_esr_list_<thing>`,
-  or the upstream's own lookup operation when it serves every list through one. ESR
-  serves each list through an operation of its own, so each gets its task:
-  `list_commodities`, `list_countries`, `list_regions` and `list_units_of_measure`
-  answer from these files without an upstream call, with `meta.vintage` the file's
-  `fetched` date. `get_exports` checks its codes against the same files and names the
-  closest ones.
-- Freshness: the nightly live tests compare each packaged list with the live one
-  (`test_packaged_list_equals_the_live_list` in `tests/test_live.py`, one keyed call per
-  list) and fail naming the records that are gone and those that are new; that is the
-  signal to run `/refresh-reference-data`, not breakage.
-- Refresh policy: `/refresh-reference-data` inside `/release-prep`, and whenever a
-  validation failure names a code the package lacks.
+ESR's four code lists are records, kept in upstream order with upstream's padding
+(`countryName` and `countryDescription` are padded with spaces upstream), codes and ids
+integers as upstream sends them. `unitsOfMeasure`, a list of integer ids, makes
+`enums.UnitId`; the commodity, country and region codes stay tables. The `list_*` tasks
+answer from these files without an upstream call, and `get_exports` checks its codes
+against them. The nightly live tests compare each packaged list with the live one
+(`test_packaged_list_equals_the_live_list` in `tests/test_live.py`, one keyed call per
+list) and name the records that are gone and those that are new: the signal to run
+`/refresh-reference-data`.
 
 | File | Origin | Fetched (UTC) | Records |
 | --- | --- | --- | --- |
@@ -54,4 +28,6 @@ Rules:
 The 2026-10-25 files were written by `scripts/refresh_reference.py` against the live API
 at about 20:39 UTC, ten minutes after the same four lists were recorded under
 `tests/fixtures/<operation>/all.json`; the records are equal to the recorded ones, which
-`tests/test_params.py` checks.
+`tests/test_params.py` checks. Their `fetched` is the bare date the script then wrote,
+which `PackagedList.load` reads as 00:00 UTC of that day (so the list tasks'
+`meta.retrieved_at`) until the next refresh writes the full time.
