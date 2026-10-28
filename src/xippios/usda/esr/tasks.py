@@ -617,8 +617,8 @@ async def get_weekly_series_async(
     """
     validate_commodity_code(commodity_code)
     validate_country_code(country_code)
-    validate_market_year(start_year)
-    validate_market_year(end_year)
+    validate_market_year(start_year, name="start_year")
+    validate_market_year(end_year, name="end_year")
     _series_range(start_year, end_year)
     request: dict[str, int] = {
         "commodity_code": commodity_code,

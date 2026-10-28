@@ -56,7 +56,10 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   one a second, and orders the records of every year by `week_ending_date`, otherwise
   unchanged; a week in two market years comes once for each, the older year's row first.
   At most 10 market years per call: a longer range, or an `end_year` before
-  `start_year`, is refused with `InvalidRequestError` before any request.
+  `start_year`, is refused with `InvalidRequestError` before any request, and a year
+  refused by its shape or as future is named as `start_year` or `end_year`
+  (`params.validate_market_year` gains the keyword `name`, `"market_year"` by default,
+  so every other refusal reads as before).
   `meta.request` carries `start_year` and `end_year` in place of `market_year`;
   `meta.vintage` is the last week of the whole series. A market year ESR holds no data
   for (its empty 404) is skipped instead of raised, so `get_weekly_series(104, 1220, 1900,

@@ -627,10 +627,12 @@ def test_slices_check_their_arguments_before_any_request(respx_mock: respx.MockR
         tasks.get_weekly_series(999, CANADA, 2024, 2024)
     with pytest.raises(InvalidRequestError, match="must be an integer code"):
         tasks.get_weekly_series(WHEAT_WHITE, "1220", 2024, 2024)  # type: ignore[arg-type]
-    with pytest.raises(InvalidRequestError, match="four-digit year"):
+    with pytest.raises(InvalidRequestError, match=r"^start_year must be a four-digit year"):
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 24, 2024)
-    with pytest.raises(InvalidRequestError, match="four-digit year"):
+    with pytest.raises(InvalidRequestError, match=r"^end_year must be a four-digit year"):
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 24)
+    with pytest.raises(InvalidRequestError, match=r"^market_year must be a four-digit year"):
+        tasks.get_exports(WHEAT_WHITE, 24, CANADA)
     assert not respx_mock.calls
 
 
@@ -654,10 +656,12 @@ def test_the_weekly_series_checks_its_range_before_any_request(
         "start_year=2016, end_year=2025, or split it into calls of at most 10."
     )
     future = latest_market_year() + 1
-    with pytest.raises(InvalidRequestError, match="answers a future one"):
+    with pytest.raises(InvalidRequestError, match="answers a future one") as end:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, future)
-    with pytest.raises(InvalidRequestError, match="answers a future one"):
+    assert str(end.value).startswith(f"end_year must be no later than {future - 1}, ")
+    with pytest.raises(InvalidRequestError, match="answers a future one") as start:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, future, future)
+    assert str(start.value).startswith(f"start_year must be no later than {future - 1}, ")
     assert not respx_mock.calls
 
 

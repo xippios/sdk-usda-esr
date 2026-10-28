@@ -206,12 +206,16 @@ def latest_market_year() -> int:
     return datetime.now(UTC).year + 2
 
 
-def validate_market_year(market_year: int) -> int:
+def validate_market_year(market_year: int, *, name: str = "market_year") -> int:
     """Check that a market year is a four-digit integer no later than ``latest_market_year()``.
 
     Args:
         market_year: ESR's market year, named by its end year, e.g. ``2024`` (for wheat
             June 2023 to May 2024).
+        name: The caller's parameter the year came in, which a refusal names, as
+            ``UnknownCode`` names its ``param``: e.g. ``"start_year"`` or ``"end_year"``
+            for ``get_weekly_series``; ``"market_year"`` by default, the parameter of
+            every other task.
 
     Returns:
         The year, unchanged.
@@ -219,7 +223,7 @@ def validate_market_year(market_year: int) -> int:
     Raises:
         InvalidRequestError: When the year is not a four-digit integer (``24``, ``999``,
             ``10000``, ``-2024``), or when it is later than the current calendar year plus
-            two (``2099``); the message gives the reason that applies.
+            two (``2099``); the message names ``name`` and gives the reason that applies.
     """
     latest = latest_market_year()
     if (
@@ -228,14 +232,14 @@ def validate_market_year(market_year: int) -> int:
         or not EARLIEST_MARKET_YEAR <= market_year <= 9999
     ):
         raise InvalidRequestError(
-            f"market_year must be a four-digit year no later than {latest}, such as 2024, "
+            f"{name} must be a four-digit year no later than {latest}, such as 2024, "
             f"got {market_year!r}. ESR names a market year by the full year it ends in: for "
             "wheat, 2024 runs June 2023 to May 2024.",
             source=SOURCE,
         )
     if market_year > latest:
         raise InvalidRequestError(
-            f"market_year must be no later than {latest}, the current year plus two, got "
+            f"{name} must be no later than {latest}, the current year plus two, got "
             f"{market_year}. ESR names a market year by the year it ends in and answers a "
             "future one with an empty result, so the package refuses it.",
             source=SOURCE,
