@@ -15,7 +15,7 @@ class NoDataForYear(NotFoundError):
     """ESR's own answer for a market year it holds no data for (HTTP 404, empty ``text/plain``).
 
     Recorded for market year 1900 on the one-country form
-    (``tests/fixtures/ESRData_GetCountryData/year_1900.json``): status 404, an empty body,
+    (``tests/fixtures/get_country_data/year_1900.json``): status 404, an empty body,
     ``content-type: text/plain; charset=utf-8``. ``_client.classify`` raises it for that
     answer on an exports path only. A market year in the future answers differently, HTTP
     200 with ``[]`` (``year_2099.json``), which ``params.validate_market_year`` refuses

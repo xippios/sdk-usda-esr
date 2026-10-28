@@ -2,7 +2,7 @@
 
 Reference: ``docs/upstream/openapi/portal-document.json``, operation
 ``ESRData_GetCommodities``: no parameters, the response typed only as ``object``. The
-record shape is the recorded one, ``tests/fixtures/ESRData_GetCommodities/all.json``,
+record shape is the recorded one, ``tests/fixtures/get_commodities/all.json``,
 parsed into ``models.Commodity``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """
@@ -12,10 +12,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import Commodity
 
-__all__ = ["ESRData_GetCommodities"]
+__all__ = ["get_commodities"]
 
 
-async def ESRData_GetCommodities() -> list[Commodity]:
+async def get_commodities() -> list[Commodity]:
     """Call ``ESRData_GetCommodities``.
 
     Returns:

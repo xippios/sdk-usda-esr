@@ -1,7 +1,7 @@
 """The four list tasks answer from the packaged lists and never call upstream.
 
 The packaged files were written from the same answers as those recorded in
-``tests/fixtures/<operation>/all.json`` (``reference/README.md``), so a task returning
+``tests/fixtures/<wrapper>/all.json`` (``reference/README.md``), so a task returning
 exactly the records parsed from that recording proves the package answers what upstream
 answered. Every test here runs with ``respx`` active: a request no route matches fails
 loudly, and each test checks that the tasks sent none. Where the recording is mounted, a
@@ -31,12 +31,19 @@ from xippios.usda.esr.models import Commodity, Country, Region, UnitOfMeasure
 from xippios.usda.esr.params import PACKAGE
 
 FIXTURES = Path(__file__).parent / "fixtures"
-LISTS: list[tuple[str, str, str, type[BaseModel], int]] = [
-    # task, packaged list, operation it came from, model, records
-    ("list_commodities", "commodities", "ESRData_GetCommodities", Commodity, 44),
-    ("list_countries", "countries", "ESRData_GetCountries", Country, 211),
-    ("list_regions", "regions", "ESRData_GetRegions", Region, 12),
-    ("list_units_of_measure", "unitsOfMeasure", "ESRData_GetUnitsOfMeasure", UnitOfMeasure, 5),
+LISTS: list[tuple[str, str, str, str, type[BaseModel], int]] = [
+    # task, packaged list, operation it came from, wrapper (fixture directory), model, records
+    ("list_commodities", "commodities", "ESRData_GetCommodities", "get_commodities", Commodity, 44),
+    ("list_countries", "countries", "ESRData_GetCountries", "get_countries", Country, 211),
+    ("list_regions", "regions", "ESRData_GetRegions", "get_regions", Region, 12),
+    (
+        "list_units_of_measure",
+        "unitsOfMeasure",
+        "ESRData_GetUnitsOfMeasure",
+        "get_units_of_measure",
+        UnitOfMeasure,
+        5,
+    ),
 ]
 IDS = [task for task, *_ in LISTS]
 DEFAULT_ROWS, DEFAULT_BYTES = 200, 65_536
@@ -50,9 +57,9 @@ def _fetched(name: str) -> datetime:
     return PackagedList.load(PACKAGE, name).fetched
 
 
-def _recorded(endpoint: str, model: type[BaseModel]) -> list[Any]:
-    """The records of ``tests/fixtures/<endpoint>/all.json``, parsed into ``model``."""
-    body = json.loads(load_fixture(FIXTURES / endpoint / "all.json").response.body)
+def _recorded(wrapper: str, model: type[BaseModel]) -> list[Any]:
+    """The records of ``tests/fixtures/<wrapper>/all.json``, parsed into ``model``."""
+    body = json.loads(load_fixture(FIXTURES / wrapper / "all.json").response.body)
     return [model.model_validate(record) for record in body]
 
 
@@ -65,22 +72,23 @@ def test_every_list_task_is_exported() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.respx(assert_all_called=False)
-@pytest.mark.parametrize(("task", "name", "endpoint", "model", "count"), LISTS, ids=IDS)
+@pytest.mark.parametrize(("task", "name", "endpoint", "wrapper", "model", "count"), LISTS, ids=IDS)
 async def test_list_answers_the_recorded_records_without_a_call(
     replay_fixture: ReplayFixture,
     respx_mock: respx.MockRouter,
     task: str,
     name: str,
     endpoint: str,
+    wrapper: str,
     model: type[BaseModel],
     count: int,
 ) -> None:
     """The recording is mounted, so a call would succeed silently; none is made."""
-    route = replay_fixture(endpoint, "all")
+    route = replay_fixture(wrapper, "all")
     result = await getattr(tasks, f"{task}_async")()
     assert route.call_count == 0, f"{task} called upstream"
     assert not respx_mock.calls
-    assert result.data == _recorded(endpoint, model), "same records, same values, upstream order"
+    assert result.data == _recorded(wrapper, model), "same records, same values, upstream order"
     assert len(result.data) == count
     assert all(type(record) is model for record in result.data)
     assert result.meta.source == "usda-esr"
@@ -97,7 +105,7 @@ async def test_list_answers_the_recorded_records_without_a_call(
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("task", "name", "endpoint"),
-    [(task, name, endpoint) for task, name, endpoint, _, _ in LISTS],
+    [(task, name, endpoint) for task, name, endpoint, *_ in LISTS],
     ids=IDS,
 )
 async def test_list_tool_end_to_end(

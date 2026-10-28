@@ -45,7 +45,7 @@ __all__ = [
 class Commodity(UpstreamModel):
     """One record of ``ESRData_GetCommodities`` (``GET /api/esr/commodities``).
 
-    Shape from ``tests/fixtures/ESRData_GetCommodities/all.json`` (44 records, codes 101
+    Shape from ``tests/fixtures/get_commodities/all.json`` (44 records, codes 101
     to 1702).
 
     Attributes:
@@ -63,7 +63,7 @@ class Commodity(UpstreamModel):
 class Country(UpstreamModel):
     """One record of ``ESRData_GetCountries`` (``GET /api/esr/countries``).
 
-    Shape from ``tests/fixtures/ESRData_GetCountries/all.json`` (211 records, codes 1 to
+    Shape from ``tests/fixtures/get_countries/all.json`` (211 records, codes 1 to
     9990, 50 of them without a GENC code). Both names are kept verbatim, padding included:
     upstream pads every ``countryName`` but ``"UNKNOWN"`` with spaces to eight characters,
     and every ``countryDescription`` but those of ``1`` and ``9990`` to 31.
@@ -90,7 +90,7 @@ class Country(UpstreamModel):
 class Region(UpstreamModel):
     """One record of ``ESRData_GetRegions`` (``GET /api/esr/regions``).
 
-    Shape from ``tests/fixtures/ESRData_GetRegions/all.json`` (12 records, ids 1 to 11 and
+    Shape from ``tests/fixtures/get_regions/all.json`` (12 records, ids 1 to 11 and
     99, in upstream's alphabetical order of names).
 
     Attributes:
@@ -106,7 +106,7 @@ class Region(UpstreamModel):
 class UnitOfMeasure(UpstreamModel):
     """One record of ``ESRData_GetUnitsOfMeasure`` (``GET /api/esr/unitsOfMeasure``).
 
-    Shape from ``tests/fixtures/ESRData_GetUnitsOfMeasure/all.json`` (5 records). The name
+    Shape from ``tests/fixtures/get_units_of_measure/all.json`` (5 records). The name
     field is plural upstream, ``unitNames``, and stays so here.
 
     Attributes:
@@ -121,7 +121,7 @@ class UnitOfMeasure(UpstreamModel):
 class DataReleaseInfo(UpstreamModel):
     """One record of ``ESRData_GetDataReleaseInfo`` (``GET /api/esr/datareleasedates``).
 
-    Shape from ``tests/fixtures/ESRData_GetDataReleaseInfo/all.json``: 44 records, one per
+    Shape from ``tests/fixtures/get_data_release_info/all.json``: 44 records, one per
     commodity, each naming the commodity's current market year and the time of the last
     release of its export data. A market year is named by the year it ends in: wheat's
     ``marketYear`` 2027 runs from 2026-06-01 to 2027-05-31. Market years differ per
@@ -197,8 +197,8 @@ class CommodityData(UpstreamModel):
     records" (the summaries of the two exports operations); the model takes the first
     name. Both operations answer the same record: one per destination country and week of
     the market year, in upstream order. Shape from the fixtures
-    ``ESRData_GetCountryData/wheat_white_canada_2024`` (54 records) and
-    ``ESRData_GetAllCountriesData/cottonseed_2024`` (498 records, 11 destinations).
+    ``get_country_data/wheat_white_canada_2024`` (54 records) and
+    ``get_all_countries_data/cottonseed_2024`` (498 records, 11 destinations).
 
     The eight quantities arrive as JSON integers in the unit ``unit_id`` names (metric
     tons for wheat) and become ``Decimal`` (ADR-0008, the package's decision): every

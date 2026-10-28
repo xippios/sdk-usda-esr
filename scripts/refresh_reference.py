@@ -3,8 +3,9 @@
 Every list in ``LISTS``, ``ID_LISTS`` or ``TABLES`` is fetched through its layer-1 wrapper
 in ``api/``, never through a task that might answer from the package; once all are
 fetched, each is written to ``reference/<name>.json`` by core's ``PackagedList.write``:
-the list's name, the operation it came from, the UTC time of the fetch to the second and
-upstream's records under upstream's field names (``dump_upstream``), a value list as
+the list's name, the upstream operation it came from (the ``operationId`` its entry
+names, never the wrapper's name: conventions §2), the UTC time of the fetch to the second
+and upstream's records under upstream's field names (``dump_upstream``), a value list as
 records of one field named by the list (conventions §3). Then ``enums.py`` is regenerated
 from the packaged files by one ``xippios.core.reference.render_enums`` call, a ``StrEnum``
 per value list in ``LISTS`` and an ``IntEnum`` per list of integer ids and names in
@@ -53,46 +54,47 @@ ENUMS = PACKAGE_DIR / "enums.py"
 GENERATOR = "scripts/refresh_reference.py"
 
 Fetcher = Callable[[], Coroutine[Any, Any, Sequence[UpstreamModel]]]
-"""An endpoint wrapper in ``api/`` that returns a list's records, named after its operation."""
+"""An endpoint wrapper in ``api/`` that returns a list's records."""
 
-LISTS: dict[str, Callable[[], Coroutine[Any, Any, Sequence[str]]]] = {}
+LISTS: dict[str, tuple[str, Callable[[], Coroutine[Any, Any, Sequence[str]]]]] = {}
 """Value lists, one ``StrEnum`` each: ESR publishes none, its lists are records."""
 
-ID_LISTS: dict[str, tuple[str, str, Fetcher]] = {
-    "unitsOfMeasure": ("unitId", "unitNames", api.ESRData_GetUnitsOfMeasure),
+ID_LISTS: dict[str, tuple[str, Fetcher, str, str]] = {
+    "unitsOfMeasure": (
+        "ESRData_GetUnitsOfMeasure",
+        api.get_units_of_measure,
+        "unitId",
+        "unitNames",
+    ),
 }
 """Lists of integer ids and names, one ``IntEnum`` each (conventions §3), in module order.
 
-List name, as the upstream path names it, to (id field, name field, wrapper), the fields
-as upstream names them (``unitNames`` is plural upstream). Each enum is keyed by its id
-field and named after it, so ``unitId`` makes ``UnitId``, whose docstring reads "Values of
-``unitId``".
+List name, as the upstream path names it, to (upstream operation, wrapper, id field, name
+field): the operation verbatim, as the snapshot's ``operationId`` and the wrapper's
+``endpoint=`` give it, which the file keeps as its ``endpoint`` and the list task as its
+``meta.endpoint``; the fields as upstream names them (``unitNames`` is plural upstream).
+Each enum is keyed by its id field and named after it, so ``unitId`` makes ``UnitId``,
+whose docstring reads "Values of ``unitId``".
 """
 
-TABLES: dict[str, Fetcher] = {
-    "commodities": api.ESRData_GetCommodities,
-    "countries": api.ESRData_GetCountries,
-    "regions": api.ESRData_GetRegions,
+TABLES: dict[str, tuple[str, Fetcher]] = {
+    "commodities": ("ESRData_GetCommodities", api.get_commodities),
+    "countries": ("ESRData_GetCountries", api.get_countries),
+    "regions": ("ESRData_GetRegions", api.get_regions),
 }
 """Record lists packaged as tables, with no enum: commodity, country and region codes.
 
-List name, as the upstream path names it, to its wrapper. Packaged like an id list, as
-upstream's records under upstream's field names, which ``params`` reads; the three lists
-together with ``ID_LISTS`` are ``params.PACKAGED_LISTS``.
+List name, as the upstream path names it, to (upstream operation, wrapper), the operation
+verbatim as in ``ID_LISTS``. Packaged like an id list, as upstream's records under
+upstream's field names, which ``params`` reads; the three lists together with
+``ID_LISTS`` are ``params.PACKAGED_LISTS``.
 """
 
 
-def operation(fetch: Callable[[], object]) -> str:
-    """The upstream operation a wrapper calls: its name, as ``api/`` names every wrapper."""
-    return fetch.__name__
-
-
-def packaged(
-    name: str, fetch: Callable[[], object], records: Sequence[dict[str, Any]]
-) -> PackagedList:
-    """The list ``name`` as just fetched through ``fetch``, for ``reference/<name>.json``."""
+def packaged(name: str, endpoint: str, records: Sequence[dict[str, Any]]) -> PackagedList:
+    """The list ``name`` as just fetched from ``endpoint``, for ``reference/<name>.json``."""
     return PackagedList(
-        param=name, endpoint=operation(fetch), fetched=datetime.now(UTC), records=list(records)
+        param=name, endpoint=endpoint, fetched=datetime.now(UTC), records=list(records)
     )
 
 
@@ -109,14 +111,14 @@ def render() -> None:
     lists: dict[str, Sequence[str] | Sequence[tuple[int, str]]] = {}
     fetched: dict[str, str] = {}
     class_names: dict[str, str] = {}
-    keys = [*LISTS, *(id_field for id_field, _, _ in ID_LISTS.values())]
+    keys = [*LISTS, *(id_field for _, _, id_field, _ in ID_LISTS.values())]
     if len(set(keys)) < len(keys):
         raise SystemExit("an id field of ID_LISTS names a list of LISTS: one enum each")
     for name in LISTS:
         values = read(name)
         lists[name] = [record[name] for record in values.records]
         fetched[name] = f"{values.fetched:%Y-%m-%d}"
-    for name, (id_field, name_field, _) in ID_LISTS.items():
+    for name, (_, _, id_field, name_field) in ID_LISTS.items():
         ids = read(name)
         lists[id_field] = id_name_pairs(ids.records, id_field=id_field, name_field=name_field)
         fetched[id_field] = f"{ids.fetched:%Y-%m-%d}"
@@ -137,16 +139,16 @@ def refresh() -> None:
         raise SystemExit("LISTS, ID_LISTS and TABLES name other lists than params.PACKAGED_LISTS")
     lists = [
         *(
-            packaged(name, fetch, [{name: value} for value in sync(fetch)()])
-            for name, fetch in LISTS.items()
+            packaged(name, endpoint, [{name: value} for value in sync(fetch)()])
+            for name, (endpoint, fetch) in LISTS.items()
         ),
         *(
-            packaged(name, fetch, [record.dump_upstream() for record in sync(fetch)()])
-            for name, fetch in TABLES.items()
+            packaged(name, endpoint, [record.dump_upstream() for record in sync(fetch)()])
+            for name, (endpoint, fetch) in TABLES.items()
         ),
         *(
-            packaged(name, fetch, [record.dump_upstream() for record in sync(fetch)()])
-            for name, (_, _, fetch) in ID_LISTS.items()
+            packaged(name, endpoint, [record.dump_upstream() for record in sync(fetch)()])
+            for name, (endpoint, fetch, _, _) in ID_LISTS.items()
         ),
     ]
     REFERENCE.mkdir(exist_ok=True)

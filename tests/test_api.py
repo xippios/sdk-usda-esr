@@ -33,8 +33,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 async def test_get_commodities(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetCommodities", "all")
-    commodities = await api.ESRData_GetCommodities()
+    route = replay_fixture("get_commodities", "all")
+    commodities = await api.get_commodities()
     assert len(commodities) == 44
     assert commodities[0] == Commodity(commodity_code=101, commodity_name="Wheat - HRW", unit_id=1)
     by_code = {c.commodity_code: c for c in commodities}
@@ -50,8 +50,8 @@ async def test_get_commodities(replay_fixture: Callable[[str, str], respx.Route]
 
 
 async def test_get_countries(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetCountries", "all")
-    countries = await api.ESRData_GetCountries()
+    route = replay_fixture("get_countries", "all")
+    countries = await api.get_countries()
     assert len(countries) == 211
     by_code = {c.country_code: c for c in countries}
     assert by_code[1220] == Country(
@@ -70,8 +70,8 @@ async def test_get_countries(replay_fixture: Callable[[str, str], respx.Route]) 
 
 
 async def test_get_regions(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetRegions", "all")
-    regions = await api.ESRData_GetRegions()
+    route = replay_fixture("get_regions", "all")
+    regions = await api.get_regions()
     assert len(regions) == 12
     assert regions[0] == Region(region_id=10, region_name="AFRICA")
     assert {r.region_id: r.region_name for r in regions}[99] == "UNKNOWN"
@@ -82,15 +82,15 @@ async def test_get_regions(replay_fixture: Callable[[str, str], respx.Route]) ->
 async def test_every_country_names_a_listed_region(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    replay_fixture("ESRData_GetCountries", "all")
-    replay_fixture("ESRData_GetRegions", "all")
-    regions = {r.region_id for r in await api.ESRData_GetRegions()}
-    assert {c.region_id for c in await api.ESRData_GetCountries()} == regions
+    replay_fixture("get_countries", "all")
+    replay_fixture("get_regions", "all")
+    regions = {r.region_id for r in await api.get_regions()}
+    assert {c.region_id for c in await api.get_countries()} == regions
 
 
 async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetUnitsOfMeasure", "all")
-    units = await api.ESRData_GetUnitsOfMeasure()
+    route = replay_fixture("get_units_of_measure", "all")
+    units = await api.get_units_of_measure()
     assert units == [
         UnitOfMeasure(unit_id=1, unit_names="Metric Tons"),
         UnitOfMeasure(unit_id=2, unit_names="Running Bales"),
@@ -102,8 +102,8 @@ async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.R
 
 
 async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetDataReleaseInfo", "all")
-    releases = await api.ESRData_GetDataReleaseInfo()
+    route = replay_fixture("get_data_release_info", "all")
+    releases = await api.get_data_release_info()
     assert len(releases) == 44
     wheat = next(r for r in releases if r.commodity_code == 104)
     # Compared field by field: a record's equality includes the release text it keeps, which
@@ -133,15 +133,15 @@ async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.
 async def test_the_release_list_names_every_commodity(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    replay_fixture("ESRData_GetDataReleaseInfo", "all")
-    replay_fixture("ESRData_GetCommodities", "all")
-    released = {r.commodity_code for r in await api.ESRData_GetDataReleaseInfo()}
-    assert released == {c.commodity_code for c in await api.ESRData_GetCommodities()}
+    replay_fixture("get_data_release_info", "all")
+    replay_fixture("get_commodities", "all")
+    released = {r.commodity_code for r in await api.get_data_release_info()}
+    assert released == {c.commodity_code for c in await api.get_commodities()}
 
 
 async def test_get_country_data(replay_fixture: Callable[[str, str], respx.Route]) -> None:
-    route = replay_fixture("ESRData_GetCountryData", "wheat_white_canada_2024")
-    records = await api.ESRData_GetCountryData(104, 1220, 2024)
+    route = replay_fixture("get_country_data", "wheat_white_canada_2024")
+    records = await api.get_country_data(104, 1220, 2024)
     assert len(records) == 54
     assert records[0] == CommodityData(
         commodity_code=104,
@@ -168,8 +168,8 @@ async def test_get_country_data(replay_fixture: Callable[[str, str], respx.Route
 async def test_get_all_countries_data(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     """``allCountries``: one record per destination and week, no paging. Cottonseed 2024:
     498 records for 11 destinations, 139,119 bytes of JSON."""
-    route = replay_fixture("ESRData_GetAllCountriesData", "cottonseed_2024")
-    records = await api.ESRData_GetAllCountriesData(1201, 2024)
+    route = replay_fixture("get_all_countries_data", "cottonseed_2024")
+    records = await api.get_all_countries_data(1201, 2024)
     assert len(records) == 498
     destinations = {r.country_code for r in records}
     assert len(destinations) == 11
@@ -188,16 +188,16 @@ async def test_get_all_countries_data(replay_fixture: Callable[[str, str], respx
 async def test_valid_codes_without_exports_are_an_empty_list(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    route = replay_fixture("ESRData_GetAllCountriesData", "rye_2024")
-    assert await api.ESRData_GetAllCountriesData(501, 2024) == []
+    route = replay_fixture("get_all_countries_data", "rye_2024")
+    assert await api.get_all_countries_data(501, 2024) == []
     assert route.call_count == 1
 
 
 async def test_quantities_are_whole_numbers_as_recorded(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    replay_fixture("ESRData_GetAllCountriesData", "cottonseed_2024")
-    records = await api.ESRData_GetAllCountriesData(1201, 2024)
+    replay_fixture("get_all_countries_data", "cottonseed_2024")
+    records = await api.get_all_countries_data(1201, 2024)
     quantities = [
         value
         for record in records
@@ -212,7 +212,7 @@ def test_the_release_text_round_trips_and_is_not_serialised() -> None:
     """``releaseTimeStamp`` as upstream prints it, two fractional digits, kept beside the
     parsed value for ``get_release_dates``' ``meta.vintage``; no dump carries it, so the
     adapters' rows keep their five fields (Johannes, 2026-10-28)."""
-    fixture = load_fixture(fixture_path(FIXTURES, "ESRData_GetDataReleaseInfo", "all"))
+    fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
     body = json.loads(fixture.response.body)
     releases = parse(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
@@ -243,7 +243,7 @@ def test_the_release_text_through_a_copy_a_dump_and_a_revalidation() -> None:
     time; a round trip through ``model_dump()`` or ``dump_upstream()`` has only the
     datetime to go on, so it carries the ``isoformat()`` text and compares unequal;
     ``model_validate`` of an existing instance returns it with its text unchanged."""
-    fixture = load_fixture(fixture_path(FIXTURES, "ESRData_GetDataReleaseInfo", "all"))
+    fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
     record = parse(
         list[DataReleaseInfo],
         json.loads(fixture.response.body),

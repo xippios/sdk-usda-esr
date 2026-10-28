@@ -149,17 +149,18 @@ async def test_get_weekly_series_live() -> None:
 
 
 LISTS = [
-    ("list_commodities", "ESRData_GetCommodities"),
-    ("list_countries", "ESRData_GetCountries"),
-    ("list_regions", "ESRData_GetRegions"),
-    ("list_units_of_measure", "ESRData_GetUnitsOfMeasure"),
+    # task, the operation its list came from, its wrapper (conventions §2)
+    ("list_commodities", "ESRData_GetCommodities", "get_commodities"),
+    ("list_countries", "ESRData_GetCountries", "get_countries"),
+    ("list_regions", "ESRData_GetRegions", "get_regions"),
+    ("list_units_of_measure", "ESRData_GetUnitsOfMeasure", "get_units_of_measure"),
 ]
 
 
-@pytest.mark.parametrize(("task", "endpoint"), LISTS, ids=[task for task, _ in LISTS])
-async def test_packaged_list_equals_the_live_list(task: str, endpoint: str) -> None:
+@pytest.mark.parametrize(("task", "endpoint", "wrapper"), LISTS, ids=[task for task, *_ in LISTS])
+async def test_packaged_list_equals_the_live_list(task: str, endpoint: str, wrapper: str) -> None:
     packaged = await getattr(tasks, f"{task}_async")()
-    live: list[Any] = await getattr(api, endpoint)()
+    live: list[Any] = await getattr(api, wrapper)()
     stale = [record for record in packaged.data if record not in live]
     new = [record for record in live if record not in packaged.data]
     behind = bool(stale or new)

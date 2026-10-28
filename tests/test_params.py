@@ -1,8 +1,14 @@
 """Packaged reference lists, their enum and the argument checks built on them."""
 
+import ast
+import importlib.util
+import inspect
 import json
+import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from xippios.core import InvalidRequestError, PackagedList, UnknownCode, parse
@@ -21,19 +27,21 @@ from xippios.usda.esr.params import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "refresh_reference.py"
 SOURCES = {
-    "commodities": ("ESRData_GetCommodities", Commodity),
-    "countries": ("ESRData_GetCountries", Country),
-    "regions": ("ESRData_GetRegions", Region),
-    "unitsOfMeasure": ("ESRData_GetUnitsOfMeasure", UnitOfMeasure),
+    # packaged list: the operation it came from, its wrapper (the fixture directory), model
+    "commodities": ("ESRData_GetCommodities", "get_commodities", Commodity),
+    "countries": ("ESRData_GetCountries", "get_countries", Country),
+    "regions": ("ESRData_GetRegions", "get_regions", Region),
+    "unitsOfMeasure": ("ESRData_GetUnitsOfMeasure", "get_units_of_measure", UnitOfMeasure),
 }
 FETCHED = datetime(2026, 10, 25, tzinfo=UTC)
 """The packaged lists' ``fetched``, a bare date in the files, read as 00:00 UTC (ADR-0022)."""
 
 
-def _recorded(endpoint: str, case: str) -> list[dict[str, object]]:
+def _recorded(wrapper: str, case: str) -> list[dict[str, object]]:
     body: list[dict[str, object]] = json.loads(
-        load_fixture(FIXTURES / endpoint / f"{case}.json").response.body
+        load_fixture(FIXTURES / wrapper / f"{case}.json").response.body
     )
     return body
 
@@ -42,9 +50,31 @@ def _records(name: str) -> list[dict[str, object]]:
     return PackagedList.load(PACKAGE, name).records
 
 
+def _refresh_script() -> ModuleType:
+    """``scripts/refresh_reference.py``, loaded without running it: no request, no key."""
+    spec = importlib.util.spec_from_file_location("refresh_reference", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _endpoint_literals(wrapper: Callable[[], object]) -> list[object]:
+    """Every ``endpoint=`` the wrapper's module passes, read from its source."""
+    tree = ast.parse(inspect.getsource(sys.modules[wrapper.__module__]))
+    return [
+        keyword.value.value if isinstance(keyword.value, ast.Constant) else keyword.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "endpoint"
+    ]
+
+
 def test_every_packaged_list_loads_and_parses() -> None:
     assert set(PACKAGED_LISTS) == set(SOURCES)
-    for name, (endpoint, model) in SOURCES.items():
+    for name, (endpoint, _, model) in SOURCES.items():
         packaged = PackagedList.load(PACKAGE, name)
         assert (packaged.param, packaged.endpoint) == (name, endpoint)
         assert packaged.fetched == FETCHED
@@ -52,10 +82,31 @@ def test_every_packaged_list_loads_and_parses() -> None:
         assert parsed, name
 
 
+def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
+    """The script writes a list's ``endpoint`` from the operation its entry names, not from
+    the wrapper's name (conventions 1.22 §2), so a refresh cannot drift from the verbatim
+    ``operationId``: the entry's operation is the packaged file's ``endpoint``, the one
+    ``endpoint=`` literal its wrapper passes and the first line of the wrapper's docstring;
+    the wrapper names the list's fixture directory (conventions §10)."""
+    script = _refresh_script()
+    assert script.LISTS == {}, "ESR publishes no value list"
+    entries: dict[str, tuple[str, Callable[[], object]]] = {
+        **{name: (operation, fetch) for name, (operation, fetch) in script.TABLES.items()},
+        **{name: (operation, fetch) for name, (operation, fetch, _, _) in script.ID_LISTS.items()},
+    }
+    assert set(entries) == set(PACKAGED_LISTS) == set(SOURCES)
+    for name, (operation, fetch) in entries.items():
+        assert (operation, fetch.__name__) == SOURCES[name][:2], name
+        assert (FIXTURES / fetch.__name__ / "all.json").is_file(), name
+        assert operation == PackagedList.load(PACKAGE, name).endpoint, name
+        assert _endpoint_literals(fetch) == [operation], name
+        assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
+
+
 def test_packaged_lists_equal_the_recorded_answers() -> None:
     """Fetched live ten minutes after the recordings; the records are the same."""
-    for name, (endpoint, _) in SOURCES.items():
-        assert _records(name) == _recorded(endpoint, "all"), name
+    for name, (_, wrapper, _) in SOURCES.items():
+        assert _records(name) == _recorded(wrapper, "all"), name
 
 
 def test_the_enum_matches_the_packaged_units() -> None:
@@ -83,17 +134,17 @@ def test_every_recorded_unit_id_is_in_the_packaged_list() -> None:
     answer names a unit the packaged list lacks: run ``/refresh-reference-data``."""
     units = {member.value for member in enums.UnitId}
     assert {r["unitId"] for r in _records("commodities")} <= units
-    for endpoint, case in [
-        ("ESRData_GetCountryData", "wheat_white_canada_2024"),
-        ("ESRData_GetAllCountriesData", "cottonseed_2024"),
+    for wrapper, case in [
+        ("get_country_data", "wheat_white_canada_2024"),
+        ("get_all_countries_data", "cottonseed_2024"),
     ]:
-        assert {r["unitId"] for r in _recorded(endpoint, case)} <= units, case
+        assert {r["unitId"] for r in _recorded(wrapper, case)} <= units, case
 
 
 def test_every_recorded_destination_is_in_the_packaged_list() -> None:
     countries = {r["countryCode"] for r in _records("countries")}
     destinations = {
-        r["countryCode"] for r in _recorded("ESRData_GetAllCountriesData", "cottonseed_2024")
+        r["countryCode"] for r in _recorded("get_all_countries_data", "cottonseed_2024")
     }
     assert destinations <= countries
 
@@ -191,7 +242,7 @@ def test_the_latest_market_year_is_this_year_plus_two() -> None:
 
 def test_the_latest_market_year_covers_the_release_list_and_the_next_year() -> None:
     """The release list's latest market year (2027 on 2026-10-25), and the one after it."""
-    years = [r["marketYear"] for r in _recorded("ESRData_GetDataReleaseInfo", "all")]
+    years = [r["marketYear"] for r in _recorded("get_data_release_info", "all")]
     assert all(isinstance(year, int) for year in years)
     latest = max(int(str(year)) for year in years)
     assert latest == 2027

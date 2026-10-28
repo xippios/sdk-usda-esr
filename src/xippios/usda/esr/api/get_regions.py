@@ -3,7 +3,7 @@
 Reference: ``docs/upstream/openapi/portal-document.json``, operation
 ``ESRData_GetRegions``: no parameters, the response typed only as ``object``; upstream:
 "Use it to associate Region Name with Country records obtained by querying Country end
-point". The record shape is the recorded one, ``tests/fixtures/ESRData_GetRegions/all.json``,
+point". The record shape is the recorded one, ``tests/fixtures/get_regions/all.json``,
 parsed into ``models.Region``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """
@@ -13,10 +13,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import Region
 
-__all__ = ["ESRData_GetRegions"]
+__all__ = ["get_regions"]
 
 
-async def ESRData_GetRegions() -> list[Region]:
+async def get_regions() -> list[Region]:
     """Call ``ESRData_GetRegions``.
 
     Returns:

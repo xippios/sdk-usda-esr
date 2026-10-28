@@ -69,23 +69,23 @@ def classify(response: httpx.Response) -> XippiosError | None:
     """The gateway's documented and ESR's recorded error shapes, mapped once (ADR-0008).
 
     The gateway's answers come first, mapped by ``gateway.classify``: its ``API_KEY_*``
-    refusals (recorded: ``API_KEY_INVALID``, ``ESRData_GetCommodities/invalid_key.json``),
+    refusals (recorded: ``API_KEY_INVALID``, ``get_commodities/invalid_key.json``),
     its 429 and its ``NOT_FOUND`` 404 (neither recorded for ESR; the tests build them in
     the shapes api.data.gov documents and sdk-usda-psd recorded). ESR's own follow:
 
     - 404 with an empty ``text/plain`` body on an exports path (``DATA_PATH``) is ESR's own
       answer for a market year it holds no data for, recorded for 1900
-      (``ESRData_GetCountryData/year_1900.json``). It is ``errors.NoDataForYear``, a
+      (``get_country_data/year_1900.json``). It is ``errors.NoDataForYear``, a
       ``NotFoundError``; an empty 404 anywhere else is a plain ``NotFoundError``.
     - 400 with ESR's ``{"message": "The request is invalid."}`` is ``InvalidRequestError``:
       a path value that is not an integer (``exports/commodityCode/abc/...``, recorded as
-      ``ESRData_GetCountryData/not_an_integer.json``). The package never sends one, since
+      ``get_country_data/not_an_integer.json``). The package never sends one, since
       its parameters are ``int``.
 
     An unknown commodity or country code answers HTTP 200 with ``[]``
     (``unknown_commodity``, ``unknown_country``), and so do a market year in the future
     (``year_2099``) and valid codes without exports (rye, market year 2024,
-    ``ESRData_GetAllCountriesData/rye_2024.json``): empty means empty, not an error; the
+    ``get_all_countries_data/rye_2024.json``): empty means empty, not an error; the
     package refuses unknown codes and future years before the call (``params``).
     Everything else falls through to core's status mapping. Messages name the path, never
     the host.

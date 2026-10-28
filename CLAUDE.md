@@ -87,7 +87,8 @@ src/xippios/usda/esr/
   _version.py      __version__ from distribution metadata
   _client.py       the configured client (base URL, key, rate limit, classify, quota)
   models.py        pydantic models mirroring upstream payloads (UpstreamModel)
-  api/             endpoint wrappers, one module per upstream operation
+  api/             endpoint wrappers, one module per upstream operation, named after it in
+                   snake case without the ESRData_ prefix (conventions §2): get_country_data
   tasks.py         task functions; __all__ is what the adapters register, MCP_CAPS any
                    per-tool result caps
   mcp.py           xippios-usda-esr-mcp entry point
@@ -103,7 +104,7 @@ scripts/
                          regenerates enums.py; --render-only renders it without a call
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
-  fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
+  fixtures/        recorded responses, <wrapper>/<case>.json, never hand-written
   test_family.py   core's family check, one line: namespace levels, py.typed, __version__,
                    the adapters serving exactly the tasks, task shapes and docstrings, the
                    README status table, the template tag, the core bound

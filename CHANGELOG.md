@@ -12,6 +12,15 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
 
 - **BREAKING:** depends on `xippios-core~=0.3.0`, and its `mcp`, `http` and `testing`
   extras likewise, in place of `~=0.2.0`.
+- **BREAKING:** the seven endpoint wrappers take conventions 1.22 §2's names, module and
+  function alike: the upstream operation in snake case without the `ESRData_` prefix
+  every operation shares, so `ESRData_GetCountryData` is `get_country_data` in
+  `api/get_country_data.py`, and likewise `get_all_countries_data`, `get_commodities`,
+  `get_countries`, `get_data_release_info`, `get_regions` and `get_units_of_measure`.
+  The old names are no longer importable from `xippios.usda.esr.api`. The fixture
+  directories follow (`tests/fixtures/get_country_data/`, conventions §10).
+  `meta.endpoint` keeps the verbatim operation id (`"ESRData_GetCountryData"`), and the
+  tasks and MCP tools are unchanged.
 - `get_release_dates`: `meta.published_at` is now set, the newest `releaseTimeStamp` as
   ESR gives it, naive, with `meta.published_at_naive` true; `meta.vintage` is that time
   stamp's text as upstream prints it (`"2026-10-22T08:30:42.67"`), no longer the
