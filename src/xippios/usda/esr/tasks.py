@@ -52,10 +52,14 @@ excluded, and nothing is compared with another source. ``get_latest_week`` and
 ``get_top_destinations`` make its one request; ``get_weekly_series`` makes its
 one-country request once per market year from ``start_year`` to ``end_year``, at most
 ``SERIES_MAX_YEARS`` of them (Johannes, 2026-10-28; conventions §4's period series, as
-sdk-usda-psd's ``get_time_series``). Their ``meta.endpoint`` is the operation called,
-``meta.request`` carries every parameter (``field`` as its upstream name), ``meta.vintage``
-is the latest ``weekEndingDate`` among the records considered as an ISO date, ``None`` for
-an empty answer, and ``meta.published_at`` stays ``None``, as for ``get_exports``.
+sdk-usda-psd's ``get_time_series``), and, for a range past the current calendar year,
+reads the release list first and refuses a range past the commodity's current market year
+with ``NotFoundError``, since ESR answers an unreleased market year with ``[]`` as it
+answers a year without exports (Johannes, 2026-10-28; ADR-0022, amendment points 6 and
+7). Their ``meta.endpoint`` is the operation the records come from, ``meta.request``
+carries every parameter (``field`` as its upstream name), ``meta.vintage`` is the latest
+``weekEndingDate`` among the records considered as an ISO date, ``None`` for an empty
+answer, and ``meta.published_at`` stays ``None``, as for ``get_exports``.
 
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
 upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
@@ -73,7 +77,7 @@ codes, as digits, on names and, for countries, on GENC codes (``xippios.core.mat
 """
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 
 from xippios.core import (
     InvalidRequestError,
@@ -189,8 +193,19 @@ SERIES_MAX_YEARS = 10
 """Most market years one ``get_weekly_series`` call spans, ends included (Johannes,
 2026-10-28; conventions §4): one request per market year, so ten years are ten requests,
 about ten seconds at ``RATE_LIMIT``'s pace of one a second, of the 1,000 an hour the
-api.data.gov key shares with every package that uses it. The same in Python, over HTTP
+api.data.gov key shares with every package that uses it, and one more for the release
+list when the range runs past the current calendar year. The same in Python, over HTTP
 and over MCP; a longer range is refused before the first request."""
+
+
+def _calendar_year() -> int:
+    """The current UTC calendar year.
+
+    A market year named by it or by an earlier year has begun: market years start between
+    the October before the year they are named for and its January. ``get_weekly_series``
+    reads the release list only for a range that ends after it.
+    """
+    return datetime.now(UTC).year
 
 
 def _vintage(records: list[CommodityData]) -> str | None:
@@ -353,6 +368,23 @@ async def get_release_dates_async(since: str | None = None) -> Result[list[DataR
     return Result(data=selected, meta=meta)
 
 
+def _release_of(commodity_code: int, releases: list[DataReleaseInfo]) -> DataReleaseInfo:
+    """The commodity's record of ESR's release list, unchanged; ``NotFoundError`` if absent.
+
+    A commodity the packaged list names and the release list lacks is one upstream has
+    dropped: ``get_market_year`` and ``get_weekly_series`` refuse it alike.
+    """
+    record = next((r for r in releases if r.commodity_code == commodity_code), None)
+    if record is None:
+        raise NotFoundError(
+            f"ESR lists no market year for commodity {commodity_code}: GET "
+            "/api/esr/datareleasedates (ESRData_GetDataReleaseInfo) answered without a record "
+            "for it, although the packaged commodities list names it.",
+            source=SOURCE,
+        )
+    return record
+
+
 async def get_market_year_async(commodity_code: int) -> Result[DataReleaseInfo]:
     """Which ESR market year a commodity is in now, and the days it starts and ends.
 
@@ -377,15 +409,7 @@ async def get_market_year_async(commodity_code: int) -> Result[DataReleaseInfo]:
             calendar year); ``list_commodities`` lists them.
     """
     validate_commodity_code(commodity_code)
-    releases = await api.get_data_release_info()
-    record = next((r for r in releases if r.commodity_code == commodity_code), None)
-    if record is None:
-        raise NotFoundError(
-            f"ESR lists no market year for commodity {commodity_code}: GET "
-            "/api/esr/datareleasedates (ESRData_GetDataReleaseInfo) answered without a record "
-            "for it, although the packaged commodities list names it.",
-            source=SOURCE,
-        )
+    record = _release_of(commodity_code, await api.get_data_release_info())
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetDataReleaseInfo",
@@ -585,24 +609,37 @@ async def get_weekly_series_async(
     first, at the client's pace of one request per second; each counts against
     api.data.gov's 1,000 requests per hour per key, shared with every package using the
     key: wheat 2022 to 2024 is three requests and about three seconds, and the ceiling,
-    10 market years, is ten requests and about ten seconds. A longer range, or one whose
-    ``end_year`` is before ``start_year``, raises ``InvalidRequestError`` before any
-    request. The records of every year, one per week, are put together and ordered by
-    ``week_ending_date`` ascending, and otherwise unchanged: nothing is filled, a week ESR
-    sends no record for is absent. A week that straddles two market years comes once for
-    each, the older market year's row first, and the rows carry no market year: wheat
-    white to Canada 2023 to 2024 is 53 and 54 rows, and the week ending 2023-06-01 both
-    closes 2023 and opens 2024, with ``accumulated_exports`` starting again. A market year
-    ESR holds no data for (its empty 404, 1900) is skipped and adds no rows, and so is a
-    year ESR answers with an empty list, which means no exports; a range of such years is
-    an empty list, a range of one year included (``1900`` to ``1900``). Any other error
-    is raised and stops the call, nothing partial returned. ``9990`` (UNKNOWN in
-    ``list_countries``) is a destination code like any other. Quantities are in the unit
-    ``unit_id`` names (``enums.UnitId``). ``meta.vintage`` is the last week's ending date
+    10 market years, is ten requests and about ten seconds. A range of more than 10
+    market years, or one whose ``end_year`` is before ``start_year``, raises
+    ``InvalidRequestError`` before any request.
+
+    ESR answers a market year it has not begun to release with an empty list, the same
+    answer as a year without exports, so a range past the commodity's current market
+    year is refused. When ``end_year`` is after the current calendar year, one request
+    more comes first, the release list ``get_market_year`` reads, which names the
+    commodity's current market year: an ``end_year`` after it raises ``NotFoundError``
+    naming the latest released market year and the range asked, before any yearly
+    request, nothing partial returned (wheat in October 2026: current market year 2027,
+    so 2024 to 2027 is five requests and 2024 to 2028 is refused after one). A range
+    ending in the current calendar year or earlier makes no such request: every market
+    year named by such a year has begun.
+
+    Inside a released range, the records of every year, one per week, are put together
+    and ordered by ``week_ending_date`` ascending, and otherwise unchanged: nothing is
+    filled, a week ESR sends no record for is absent. A week that straddles two market
+    years comes once for each, the older market year's row first, and the rows carry no
+    market year: wheat white to Canada 2023 to 2024 is 53 and 54 rows, and the week
+    ending 2023-06-01 both closes 2023 and opens 2024, with ``accumulated_exports``
+    starting again. A market year ESR holds no data for (its empty 404, 1900) is skipped
+    and adds no rows, and a released year that answers an empty list had no exports to
+    that destination and adds none either; a range of such years is an empty list, a
+    range of one year included (``1900`` to ``1900``). Any other error is raised and
+    stops the call, nothing partial returned. ``9990`` (UNKNOWN in ``list_countries``) is
+    a destination code like any other. Quantities are in the unit ``unit_id`` names
+    (``enums.UnitId``). ``meta.vintage`` is the last week's ending date
     (``"2024-06-06"``), empty for an empty list; ``meta.published_at`` stays empty,
     ``get_release_dates`` tells when ESR released the data. Codes and both years are
-    checked before the first request. The MCP tool returns at most 200 rows, about three
-    market years, and its note says to narrow the range.
+    checked before the first request.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
@@ -613,7 +650,8 @@ async def get_weekly_series_async(
             June 2021 to May 2022); ``get_market_year`` names a commodity's current one.
         end_year: Last ESR market year, included, e.g. ``2024``; not before
             ``start_year`` and at most nine years after it (``start_year`` itself for one
-            market year), no later than the current calendar year plus two.
+            market year), and no later than the commodity's current market year
+            (``get_market_year``; wheat: 2027 in October 2026).
     """
     validate_commodity_code(commodity_code)
     validate_country_code(country_code)
@@ -626,6 +664,20 @@ async def get_weekly_series_async(
         "start_year": start_year,
         "end_year": end_year,
     }
+    if end_year > _calendar_year():
+        # An unreleased market year answers [] as a year without exports does, so it is
+        # refused, naming the latest released one (conventions §4; ADR-0022 points 6, 7).
+        latest = _release_of(commodity_code, await api.get_data_release_info()).market_year
+        if end_year > latest:
+            raise NotFoundError(
+                f"ESR has not released market year {end_year} of commodity {commodity_code} "
+                f"yet: its latest released market year is {latest}, the current one in ESR's "
+                "release list (ESRData_GetDataReleaseInfo). ESR answers a market year it has "
+                "not released with an empty list, the same answer as a year without exports, "
+                f"so the range {start_year} to {end_year} is refused rather than returned "
+                f"without it; ask for market years up to {latest}.",
+                source=SOURCE,
+            )
     records: list[CommodityData] = []
     for market_year in range(start_year, end_year + 1):
         try:
