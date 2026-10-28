@@ -14,6 +14,7 @@ to a year inside the range (``url=``) rather than writing an answer.
 
 import dataclasses
 import json
+import re
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
@@ -262,16 +263,23 @@ def test_get_weekly_series_spans_market_years_oldest_first(
     assert result.meta.total is None
 
 
-def test_the_requests_go_out_oldest_first(
-    replay_fixture: ReplayFixture, respx_mock: respx.MockRouter
-) -> None:
-    replay_fixture(COUNTRY, "wheat_white_canada_2023")
-    replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
-    assert [str(call.request.url.path) for call in respx_mock.calls] == [
-        "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/2023",
-        "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/2024",
+def test_the_requests_go_out_oldest_first(respx_mock: respx.MockRouter) -> None:
+    """One route for every year's URL, so ``sent_urls`` shows the order the requests went
+    out in; it serves the two recorded answers in turn, as recorded."""
+    answers = [
+        load_fixture(fixture_path(FIXTURES, COUNTRY, f"wheat_white_canada_{year}")).response
+        for year in (2023, 2024)
     ]
+    every_year = re.escape(f"{EXPORTS}/104/countryCode/1220/marketYear/") + r"\d{4}$"
+    route = respx_mock.get(url__regex=every_year)
+    route.mock(
+        side_effect=[
+            httpx.Response(a.status, headers=a.headers, content=a.content) for a in answers
+        ]
+    )
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    assert sent_urls(route) == [_country_url(2023), _country_url(2024)], "oldest first"
+    assert len(result.data) == 53 + 54
 
 
 def test_a_weekly_series_of_one_market_year_is_its_weeks(
