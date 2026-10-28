@@ -7,7 +7,7 @@ the URLs the route received with credentials redacted, rather than keep a reques
 
 import inspect
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 import pytest
@@ -123,7 +123,7 @@ def test_valid_codes_without_exports_are_an_empty_result(
 
 def test_vintage_is_none_for_empty_answers() -> None:
     assert tasks._vintage([]) is None
-    assert tasks._release_vintage([]) is None
+    assert tasks._newest_release([]) is None, "no release: vintage and published_at None"
 
 
 def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) -> None:
@@ -133,10 +133,12 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
     assert len(result.data) == 44
     assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
     assert result.meta.request == {}
-    assert result.meta.vintage == "2026-10-22T08:30:42.670000", (
-        "the latest releaseTimeStamp's isoformat(): upstream's two fractional digits render six"
+    assert result.meta.vintage == "2026-10-22T08:30:42.67", (
+        "the latest releaseTimeStamp's text as upstream prints it, two fractional digits"
     )
-    assert result.meta.published_at is None, "the snapshot states no time zone"
+    assert result.meta.published_at == datetime(2026, 10, 22, 8, 30, 42, 670000)
+    assert result.meta.published_at.tzinfo is None, "the snapshot states no time zone"
+    assert result.meta.published_at_naive is True
     wheat = next(r for r in result.data if r.commodity_code == WHEAT_WHITE)
     assert (wheat.market_year, wheat.market_year_start, wheat.market_year_end) == (
         2027,
@@ -282,8 +284,29 @@ async def test_release_dates_over_mcp(replay_fixture: Callable[[str, str], respx
         "market_year": 2027,
         "release_time_stamp": "2026-10-22T08:30:42.670000",
     }
-    assert payload["meta"]["vintage"] == "2026-10-22T08:30:42.670000"
-    assert payload["meta"]["published_at"] is None
+    assert payload["meta"]["vintage"] == "2026-10-22T08:30:42.67"
+    assert payload["meta"]["published_at"] == "2026-10-22T08:30:42.670000", "no zone added"
+    assert payload["meta"]["published_at_naive"] is True
+
+
+def test_release_dates_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+    """The HTTP envelope carries the naive release time with its flag, as MCP's does."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from xippios.usda.esr.http import router
+
+    replay_fixture(RELEASES, "all")
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).get("/usda-esr/get_release_dates")
+    assert response.status_code == 200, response.text
+    meta = response.json()["meta"]
+    assert (meta["vintage"], meta["published_at"], meta["published_at_naive"]) == (
+        "2026-10-22T08:30:42.67",
+        "2026-10-22T08:30:42.670000",
+        True,
+    )
 
 
 def test_quantities_are_json_numbers_over_http(

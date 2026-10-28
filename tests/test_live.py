@@ -96,9 +96,10 @@ async def test_get_release_dates_live() -> None:
     assert wheat.market_year == wheat.market_year_end.year, "named by its end year"
     assert (wheat.market_year_start.month, wheat.market_year_end.month) == (6, 5)
     assert all(r.release_time_stamp.tzinfo is None for r in result.data)
-    latest = max(r.release_time_stamp for r in result.data)
-    assert result.meta.vintage == latest.isoformat()
-    assert result.meta.published_at is None
+    latest = max(result.data, key=lambda r: r.release_time_stamp)
+    assert result.meta.vintage == latest.release_time_stamp_text, "upstream's text"
+    assert result.meta.published_at == latest.release_time_stamp, "naive, as upstream gives it"
+    assert result.meta.published_at_naive is True
 
 
 async def test_get_latest_week_live() -> None:
