@@ -132,10 +132,10 @@ destination, and its note says to narrow `start_year` and `end_year`.
 | `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |
 | `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | `list_units_of_measure()` | `usda_esr_list_units_of_measure` | packaged, `enums.UnitId`; `list_*` task |
 
-0.1.0, the first release, covered nine of these tasks; `get_market_year`, `since` on
-`get_release_dates` and the range of `get_weekly_series`, which replaces its 0.1.0
-`market_year`, are unreleased. Alpha: the public surface may change in a minor version
-before 1.0 (conventions §12); `CHANGELOG.md` lists every change.
+0.1.0, the first release, covered nine of these tasks; 0.2.0 adds `get_market_year`,
+`since` on `get_release_dates` and the range of `get_weekly_series`, which replaces its
+0.1.0 `market_year`. Alpha: the public surface may change in a minor version before 1.0
+(conventions §12); `CHANGELOG.md` lists every change.
 
 Every request counts against api.data.gov's quota of 1,000 requests per hour per key,
 shared by every package using the same `DATA_GOV_API_KEY`; the `list_*` tasks spend none.
