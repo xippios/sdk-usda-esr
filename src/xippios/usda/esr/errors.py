@@ -35,4 +35,3 @@ class NoDataForYear(NotFoundError):
             source=SOURCE,
         )
         self.path = path
-
