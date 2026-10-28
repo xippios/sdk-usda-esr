@@ -13,7 +13,10 @@ with ``[]`` (``unknown_commodity``, 999; ``unknown_country``, 9999), and so is a
 year in the future (``year_2099``); market year 1900 is HTTP 404 with an empty
 ``text/plain`` body (``year_1900``), which ``_client.classify`` maps to
 ``errors.NoDataForYear``; a path value that is not an integer is HTTP 400
-(``not_an_integer``), never sent here since every parameter is an ``int``.
+(``not_an_integer``), never sent here since every parameter is an ``int``. Recorded
+2026-10-28: market year 2023 of the same pair, 53 weekly records from 2022-06-02 to
+2023-06-01, 14,829 bytes of JSON (``wheat_white_canada_2023``); its last week is the first
+of 2024 as well, with other values, since the week straddles wheat's market years.
 """
 
 from xippios.core import parse
