@@ -12,10 +12,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import Commodity
 
-__all__ = ["ESRData_GetCommodities"]
+__all__ = ["get_commodities"]
 
 
-async def ESRData_GetCommodities() -> list[Commodity]:
+async def get_commodities() -> list[Commodity]:
     """Call ``ESRData_GetCommodities``.
 
     Returns:

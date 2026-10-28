@@ -15,10 +15,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import DataReleaseInfo
 
-__all__ = ["ESRData_GetDataReleaseInfo"]
+__all__ = ["get_data_release_info"]
 
 
-async def ESRData_GetDataReleaseInfo() -> list[DataReleaseInfo]:
+async def get_data_release_info() -> list[DataReleaseInfo]:
     """Call ``ESRData_GetDataReleaseInfo``.
 
     Returns:

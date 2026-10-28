@@ -228,7 +228,7 @@ def test_weekly_series_orders_what_upstream_sends_out_of_order(
     async def reversed_answer(*_: int) -> list[CommodityData]:
         return recorded[::-1]
 
-    monkeypatch.setattr(api, "ESRData_GetCountryData", reversed_answer)
+    monkeypatch.setattr(api, "get_country_data", reversed_answer)
     result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024)
     assert result.data == recorded
     assert result.meta.vintage == "2024-06-06"

@@ -14,10 +14,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import UnitOfMeasure
 
-__all__ = ["ESRData_GetUnitsOfMeasure"]
+__all__ = ["get_units_of_measure"]
 
 
-async def ESRData_GetUnitsOfMeasure() -> list[UnitOfMeasure]:
+async def get_units_of_measure() -> list[UnitOfMeasure]:
     """Call ``ESRData_GetUnitsOfMeasure``.
 
     Returns:

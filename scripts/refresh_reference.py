@@ -62,7 +62,7 @@ LISTS: dict[str, tuple[str, Callable[[], Coroutine[Any, Any, Sequence[str]]]]] =
 ID_LISTS: dict[str, tuple[str, Fetcher, str, str]] = {
     "unitsOfMeasure": (
         "ESRData_GetUnitsOfMeasure",
-        api.ESRData_GetUnitsOfMeasure,
+        api.get_units_of_measure,
         "unitId",
         "unitNames",
     ),
@@ -78,9 +78,9 @@ whose docstring reads "Values of ``unitId``".
 """
 
 TABLES: dict[str, tuple[str, Fetcher]] = {
-    "commodities": ("ESRData_GetCommodities", api.ESRData_GetCommodities),
-    "countries": ("ESRData_GetCountries", api.ESRData_GetCountries),
-    "regions": ("ESRData_GetRegions", api.ESRData_GetRegions),
+    "commodities": ("ESRData_GetCommodities", api.get_commodities),
+    "countries": ("ESRData_GetCountries", api.get_countries),
+    "regions": ("ESRData_GetRegions", api.get_regions),
 }
 """Record lists packaged as tables, with no enum: commodity, country and region codes.
 

@@ -214,10 +214,10 @@ async def get_exports_async(
     try:
         if country_code is None:
             endpoint = "ESRData_GetAllCountriesData"
-            records = await api.ESRData_GetAllCountriesData(commodity_code, market_year)
+            records = await api.get_all_countries_data(commodity_code, market_year)
         else:
             endpoint = "ESRData_GetCountryData"
-            records = await api.ESRData_GetCountryData(commodity_code, country_code, market_year)
+            records = await api.get_country_data(commodity_code, country_code, market_year)
     except NoDataForYear as exc:
         country = "every country" if country_code is None else f"country {country_code}"
         raise _absent(exc, commodity_code, country, market_year) from exc
@@ -240,7 +240,7 @@ async def get_release_dates_async() -> Result[list[DataReleaseInfo]]:
     ESR's release identifier (``"2026-10-22T08:30:42.67"``). Takes no parameters: the
     endpoint takes none.
     """
-    releases = await api.ESRData_GetDataReleaseInfo()
+    releases = await api.get_data_release_info()
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
     meta = ResultMeta(
@@ -291,7 +291,7 @@ def _export_field(field: object) -> ExportField:
 async def _every_destination(commodity_code: int, market_year: int) -> list[CommodityData]:
     """``ESRData_GetAllCountriesData``'s records; ESR's empty 404 raised again, naming the ask."""
     try:
-        return await api.ESRData_GetAllCountriesData(commodity_code, market_year)
+        return await api.get_all_countries_data(commodity_code, market_year)
     except NoDataForYear as exc:
         raise _absent(exc, commodity_code, "every country", market_year) from exc
 
@@ -444,7 +444,7 @@ async def get_weekly_series_async(
         "market_year": market_year,
     }
     try:
-        records = await api.ESRData_GetCountryData(commodity_code, country_code, market_year)
+        records = await api.get_country_data(commodity_code, country_code, market_year)
     except NoDataForYear as exc:
         raise _absent(exc, commodity_code, f"country {country_code}", market_year) from exc
     series = sorted(records, key=lambda record: record.week_ending_date)

@@ -12,10 +12,10 @@ from xippios.core import parse
 from xippios.usda.esr._client import SOURCE, client
 from xippios.usda.esr.models import Country
 
-__all__ = ["ESRData_GetCountries"]
+__all__ = ["get_countries"]
 
 
-async def ESRData_GetCountries() -> list[Country]:
+async def get_countries() -> list[Country]:
     """Call ``ESRData_GetCountries``.
 
     Returns:
