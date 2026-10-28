@@ -272,6 +272,20 @@ def test_valid_codes_without_exports_are_an_empty_result(
     assert route.call_count == 2
 
 
+def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture) -> None:
+    """ESR's ``[]`` for one destination: the recorded body of ``year_2099`` (HTTP 200,
+    ``[]``) served at a valid year's URL (``url=``), moved, not written. Nothing is
+    filled, and an empty answer has no vintage."""
+    path = "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/2025"
+    route = replay_fixture(COUNTRY, "year_2099", url=f"{BASE_URL}{path}")
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2025)
+    assert sent_urls(route) == [f"{BASE_URL}{path}"]
+    assert result.data == []
+    assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert result.meta.request == {"commodity_code": 104, "country_code": 1220, "market_year": 2025}
+    assert result.meta.endpoint == OPERATIONS[COUNTRY]
+
+
 def test_the_weekly_series_names_a_market_year_esr_lacks(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
