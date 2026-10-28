@@ -55,6 +55,8 @@ own (the four operations take no parameters), a case-insensitive substring match
 codes, as digits, on names and, for countries, on GENC codes (``xippios.core.matches``).
 """
 
+from collections.abc import Mapping
+
 from xippios.core import (
     InvalidRequestError,
     PackagedList,
@@ -99,7 +101,7 @@ __all__ = [
 # A task named here is Python-only: no tool, no route; the adapters skip it (ADR-0019 decision 4).
 BULK_TASKS: frozenset[str] = frozenset()
 
-MCP_CAPS = {
+MCP_CAPS: Mapping[str, ResultCap] = {
     "get_exports": ResultCap(
         note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
     ),
