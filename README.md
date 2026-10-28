@@ -119,8 +119,8 @@ destination, and its note says to narrow `start_year` and `end_year`.
 | `ESRData_GetAllCountriesData` (`exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year)` | `usda_esr_get_exports` | alpha |
 | `ESRData_GetAllCountriesData` | `get_latest_week(commodity_code, market_year)` | `usda_esr_get_latest_week` | alpha; slice |
 | `ESRData_GetAllCountriesData` | `get_top_destinations(commodity_code, market_year, field, n=10)` | `usda_esr_get_top_destinations` | alpha; slice |
-| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, start_year, end_year)`; one request per market year, at most 10 | `usda_esr_get_weekly_series` | alpha; slice over a range of market years |
-| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)`; `since` keeps the commodities released after an earlier call's `meta.vintage` | `usda_esr_get_release_dates` | alpha |
+| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, start_year, end_year)` | `usda_esr_get_weekly_series` | alpha; slice over a range of market years, one request per market year, at most 10 |
+| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)` | `usda_esr_get_release_dates` | alpha; `since` keeps the commodities released after an earlier call's `meta.vintage` |
 | `ESRData_GetDataReleaseInfo` | `get_market_year(commodity_code)` | `usda_esr_get_market_year` | alpha; one commodity's record |
 | `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
 | `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |

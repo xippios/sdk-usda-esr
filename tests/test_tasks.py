@@ -13,7 +13,6 @@ import pytest
 import respx
 from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
 from xippios.core.testing import (
-    ReplayFixture,
     fixture_path,
     load_fixture,
     mcp_call,
@@ -55,6 +54,7 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
     ``test_slices.py``."""
     assert set(tasks.MCP_CAPS) == {
         "get_exports",
+        "get_release_dates",
         "get_weekly_series",
         "list_commodities",
         "list_countries",
@@ -63,6 +63,17 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
     assert "country_code" in cap.note
+    assert "get_market_year" not in tasks.MCP_CAPS, "one record, no filter"
+
+
+def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
+    """A filtered tool names its filter in its cap's note even when its answer fits, as
+    ``list_commodities`` names ``search`` (conventions §8, ADR-0016)."""
+    cap = tasks.MCP_CAPS["get_release_dates"]
+    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
+    assert cap.note is not None
+    assert cap.note.startswith("pass since, ")
+    assert '"2026-10-22T08:30:42.67"' in cap.note
 
 
 WHEAT_WHITE, COTTONSEED, RYE = 104, 1201, 501
@@ -179,18 +190,29 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     assert len(tasks.get_release_dates(since="2026-10-22").data) == 44, "a date is its midnight"
 
 
-def test_get_release_dates_since_over_an_empty_answer(
-    replay_fixture: ReplayFixture,
-) -> None:
-    """Both markers are empty only when upstream lists nothing. The recorded ``[]`` of
-    ``rye_2024`` is served at the release dates' URL (``url=``), moved, not written."""
-    route = replay_fixture(ALL, "rye_2024", url=RELEASE_DATES)
+def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """``api.get_data_release_info`` answering ``[]``, in memory (a function input, not a
+    fixture file: that operation was never observed to answer empty); the list counts the
+    calls."""
+    calls: list[int] = []
+
+    async def empty() -> list[DataReleaseInfo]:
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(api, "get_data_release_info", empty)
+    return calls
+
+
+def test_get_release_dates_since_over_an_empty_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both markers are empty only when upstream lists nothing."""
+    calls = _no_releases(monkeypatch)
     result = tasks.get_release_dates(since=RELEASED)
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
     assert result.meta.published_at_naive is False
     assert result.meta.request == {"since": RELEASED}
-    assert route.call_count == 1
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -284,16 +306,17 @@ NOT_LISTED = (
 )
 
 
-def test_a_commodity_the_release_list_lacks_is_not_found(replay_fixture: ReplayFixture) -> None:
-    """A packaged code the answer lacks: upstream dropped it. The recorded ``[]`` of
-    ``rye_2024`` is served at the release dates' URL (``url=``), an answer without any
-    commodity, moved, not written."""
-    route = replay_fixture(ALL, "rye_2024", url=RELEASE_DATES)
+def test_a_commodity_the_release_list_lacks_is_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A packaged code the answer lacks: upstream dropped it. Here the answer lists no
+    commodity at all (``_no_releases``)."""
+    calls = _no_releases(monkeypatch)
     with pytest.raises(NotFoundError) as info:
         tasks.get_market_year(WHEAT_WHITE)
     assert not isinstance(info.value, InvalidRequestError), "the request was valid"
     assert str(info.value) == NOT_LISTED
-    assert route.call_count == 1
+    assert len(calls) == 1
 
 
 def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyPatch) -> None:
