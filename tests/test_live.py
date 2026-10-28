@@ -1,18 +1,18 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, eleven keyed calls in all: ``get_exports`` for
-wheat white to Canada and for soybeans to Mexico, market year 2024, and
-``get_release_dates``, once whole and once with ``since``; the slices, one call each,
-``get_latest_week`` for wheat HRW, ``get_top_destinations`` for soybeans and
-``get_weekly_series`` for wheat white to Canada, market year 2024. The codes are taken
-from the packaged lists by their upstream names, so a renamed or recoded commodity or
-country fails here first. The four list tasks answer from the package without a call, so
-their test fetches the list through its endpoint wrapper, one call each, and checks that
-the packaged records equal it: the freshness check ``reference/README.md`` promises. A
-difference fails the test naming what is gone and what is new;
-``/refresh-reference-data`` then refreshes the package. Next to them, the template's
-reachability check, ``test_upstream_answers``, sends no key: a plain request to
-``BASE_URL`` that spends no quota call.
+One live smoke test per task function, twelve keyed calls in all: ``get_exports`` for
+wheat white to Canada and for soybeans to Mexico, market year 2024;
+``get_release_dates``, once whole and once with ``since``, and ``get_market_year`` for
+wheat white; the slices, one call each, ``get_latest_week`` for wheat HRW,
+``get_top_destinations`` for soybeans and ``get_weekly_series`` for wheat white to
+Canada, market year 2024. The codes are taken from the packaged lists by their upstream
+names, so a renamed or recoded commodity or country fails here first. The four list
+tasks answer from the package without a call, so their test fetches the list through its
+endpoint wrapper, one call each, and checks that the packaged records equal it: the
+freshness check ``reference/README.md`` promises. A difference fails the test naming
+what is gone and what is new; ``/refresh-reference-data`` then refreshes the package.
+Next to them, the template's reachability check, ``test_upstream_answers``, sends no
+key: a plain request to ``BASE_URL`` that spends no quota call.
 """
 
 from datetime import date, datetime
@@ -112,6 +112,19 @@ async def test_get_release_dates_since_live() -> None:
     assert result.meta.request == {"since": since}
     latest = max(result.data, key=lambda r: r.release_time_stamp)
     assert result.meta.vintage == latest.release_time_stamp_text
+
+
+async def test_get_market_year_live() -> None:
+    result = await tasks.get_market_year_async(WHEAT_WHITE)
+    year = result.data
+    assert year.commodity_code == WHEAT_WHITE
+    assert year.market_year >= 2027, "wheat's 2027 began on 2026-06-01"
+    assert year.market_year_start < year.market_year_end
+    assert year.market_year == year.market_year_end.year, "named by its end year"
+    assert datetime.fromisoformat(year.release_time_stamp_text) == year.release_time_stamp
+    assert result.meta.vintage == year.release_time_stamp_text, "upstream's text"
+    assert result.meta.published_at == year.release_time_stamp
+    assert result.meta.published_at_naive is True
 
 
 async def test_get_latest_week_live() -> None:

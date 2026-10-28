@@ -40,6 +40,10 @@ being no newer, and only selects (ADR-0003). ``meta.vintage`` and ``meta.publish
 stay the newest release of upstream's whole answer, filtered or not, so an empty
 filtered answer still hands the caller the marker to store for the next call. It is one
 request either way, and no answer is cached: ``retrieved_at`` is the wire time.
+``get_market_year`` (Johannes, 2026-10-28) makes the same one request and selects one
+commodity's record, unchanged, with that record's release as its ``meta.vintage`` and
+``meta.published_at``; a commodity the packaged list names and the release list lacks is
+``NotFoundError``, upstream having dropped it.
 
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
 Johannes, 2026-10-25) each make the one request ``get_exports`` makes and only select and
@@ -70,6 +74,7 @@ from datetime import datetime
 
 from xippios.core import (
     InvalidRequestError,
+    NotFoundError,
     PackagedList,
     Result,
     ResultCap,
@@ -100,6 +105,7 @@ from xippios.usda.esr.params import (
 __all__ = [
     "get_exports",
     "get_latest_week",
+    "get_market_year",
     "get_release_dates",
     "get_top_destinations",
     "get_weekly_series",
@@ -133,7 +139,8 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
 at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
-(wheat white to Canada 2024). ``get_release_dates``, 44 rows, keeps the default.
+(wheat white to Canada 2024). ``get_release_dates``, 44 rows, and ``get_market_year``, one
+record, keep the default.
 
 The slices have no entry and keep the family's bounds (§8; ADR-0016): none returns more
 than one market year of one destination or one week of every destination.
@@ -312,6 +319,50 @@ async def get_release_dates_async(since: str | None = None) -> Result[list[DataR
         request={"since": since},
     )
     return Result(data=selected, meta=meta)
+
+
+async def get_market_year_async(commodity_code: int) -> Result[DataReleaseInfo]:
+    """Which ESR market year a commodity is in now, and the days it starts and ends.
+
+    One request to ``ESRData_GetDataReleaseInfo``, the call ``get_release_dates`` makes;
+    of its records, one per commodity, the one of ``commodity_code`` is returned as ESR
+    sends it: ``market_year``, the current market year, named by the year it ends in;
+    ``market_year_start`` and ``market_year_end``, its first and last day; and
+    ``release_time_stamp``, the last release of the commodity's export data. Market years
+    differ per commodity: wheat 2027 runs 2026-06-01 to 2027-05-31, corn and soybeans run
+    September to August, cotton August to July, beef and pork the calendar year. Pass
+    ``market_year`` to ``get_exports`` or a slice for the current year's sales.
+    ``meta.vintage`` is the record's release time stamp as ESR prints it
+    (``"2026-10-22T08:30:42.67"``) and ``meta.published_at`` its value as given, without
+    a time zone, with ``meta.published_at_naive`` true. The code is checked before the
+    call: an unknown code raises ``InvalidRequestError`` naming the closest known codes; a
+    commodity ESR's release list lacks raises ``NotFoundError``.
+
+    Args:
+        commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White,
+            June to May), ``401`` (Corn, September to August), ``801`` (Soybeans),
+            ``1404`` (All Upland Cotton, August to July), ``1701`` (beef muscle cuts, the
+            calendar year); ``list_commodities`` lists them.
+    """
+    validate_commodity_code(commodity_code)
+    releases = await api.get_data_release_info()
+    record = next((r for r in releases if r.commodity_code == commodity_code), None)
+    if record is None:
+        raise NotFoundError(
+            f"ESR lists no market year for commodity {commodity_code}: GET "
+            "/api/esr/datareleasedates (ESRData_GetDataReleaseInfo) answered without a record "
+            "for it, although the packaged commodities list names it.",
+            source=SOURCE,
+        )
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint="ESRData_GetDataReleaseInfo",
+        published_at=record.release_time_stamp,
+        published_at_naive=True,
+        vintage=record.release_time_stamp_text,
+        request={"commodity_code": commodity_code},
+    )
+    return Result(data=record, meta=meta)
 
 
 _FIELD_ATTRIBUTES: dict[str, str] = {
@@ -625,6 +676,7 @@ async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
 
 get_exports = sync(get_exports_async)
 get_latest_week = sync(get_latest_week_async)
+get_market_year = sync(get_market_year_async)
 get_release_dates = sync(get_release_dates_async)
 get_top_destinations = sync(get_top_destinations_async)
 get_weekly_series = sync(get_weekly_series_async)
