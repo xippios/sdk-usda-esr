@@ -19,21 +19,21 @@ from typing import Any
 
 import httpx
 import pytest
+from xippios.core import PackagedList
 from xippios.core.data_gov import Gateway
 
 from xippios.usda.esr import api, tasks
 from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.models import ExportField
-from xippios.usda.esr.params import packaged_values
+from xippios.usda.esr.params import PACKAGE
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
 
 def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
     """The packaged code whose upstream name, stripped of padding, is ``name``."""
-    packaged = packaged_values(list_name)
-    assert packaged is not None
+    packaged = PackagedList.load(PACKAGE, list_name)
     codes = {str(r[name_field]).strip(): int(r[code_field]) for r in packaged.records}
     return codes[name]
 
@@ -164,8 +164,9 @@ async def test_packaged_list_equals_the_live_list(task: str, endpoint: str) -> N
     new = [record for record in live if record not in packaged.data]
     behind = bool(stale or new)
     assert not behind, (
-        f"{task} is behind upstream (packaged {packaged.meta.vintage}): {len(stale)} packaged "
-        f"records upstream no longer sends, {len(new)} upstream records the package lacks; "
+        f"{task} is behind upstream (packaged {packaged.meta.retrieved_at:%Y-%m-%d}): "
+        f"{len(stale)} packaged records upstream no longer sends, {len(new)} upstream records "
+        "the package lacks; "
         f"first of each: {stale[:5]}, {new[:5]}. Refresh with /refresh-reference-data."
     )
     assert packaged.data == live, f"{task}: the same records in another order"

@@ -5,20 +5,22 @@ The packaged files were written from the same answers as those recorded in
 exactly the records parsed from that recording proves the package answers what upstream
 answered. Every test here runs with ``respx`` active: a request no route matches fails
 loudly, and each test checks that the tasks sent none. Where the recording is mounted, a
-call would succeed silently; its route's call count shows that none is made.
+call would succeed silently; its route's call count shows that none is made. ``meta`` is
+core's ``PackagedList.meta`` (ADR-0022, rule 1): ``retrieved_at`` the list's fetch time,
+``vintage`` ``None``, and ``request`` without the filters left ``None``.
 """
 
 import dataclasses
 import json
 from collections import Counter
 from datetime import UTC, datetime
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import pytest
 import respx
 from pydantic import BaseModel
+from xippios.core import PackagedList
 from xippios.core.mcp import cap_result
 from xippios.core.testing import ReplayFixture, load_fixture, mcp_call
 
@@ -26,21 +28,15 @@ import xippios.usda.esr as package
 from xippios.usda.esr import tasks
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import Commodity, Country, Region, UnitOfMeasure
+from xippios.usda.esr.params import PACKAGE
 
 FIXTURES = Path(__file__).parent / "fixtures"
-LISTS: list[tuple[str, str, str, type[BaseModel], int, dict[str, Any]]] = [
-    # task, packaged list, operation it came from, model, records, meta.request unfiltered
-    ("list_commodities", "commodities", "ESRData_GetCommodities", Commodity, 44, {"search": None}),
-    (
-        "list_countries",
-        "countries",
-        "ESRData_GetCountries",
-        Country,
-        211,
-        {"region_id": None, "search": None},
-    ),
-    ("list_regions", "regions", "ESRData_GetRegions", Region, 12, {}),
-    ("list_units_of_measure", "unitsOfMeasure", "ESRData_GetUnitsOfMeasure", UnitOfMeasure, 5, {}),
+LISTS: list[tuple[str, str, str, type[BaseModel], int]] = [
+    # task, packaged list, operation it came from, model, records
+    ("list_commodities", "commodities", "ESRData_GetCommodities", Commodity, 44),
+    ("list_countries", "countries", "ESRData_GetCountries", Country, 211),
+    ("list_regions", "regions", "ESRData_GetRegions", Region, 12),
+    ("list_units_of_measure", "unitsOfMeasure", "ESRData_GetUnitsOfMeasure", UnitOfMeasure, 5),
 ]
 IDS = [task for task, *_ in LISTS]
 DEFAULT_ROWS, DEFAULT_BYTES = 200, 65_536
@@ -49,12 +45,9 @@ WHEAT = [101, 102, 103, 104, 105, 106, 107, 201]
 """The commodities whose name holds "wheat": the six classes, All Wheat, Wheat Products."""
 
 
-def _fetched(name: str) -> str:
-    """``fetched`` as the packaged file stores it, read from the file itself."""
-    path = resources.files("xippios.usda.esr").joinpath("reference", f"{name}.json")
-    fetched = json.loads(path.read_text(encoding="utf-8"))["fetched"]
-    assert isinstance(fetched, str)
-    return fetched
+def _fetched(name: str) -> datetime:
+    """The packaged list's ``fetched``, read from its file by core's ``PackagedList``."""
+    return PackagedList.load(PACKAGE, name).fetched
 
 
 def _recorded(endpoint: str, model: type[BaseModel]) -> list[Any]:
@@ -72,7 +65,7 @@ def test_every_list_task_is_exported() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.respx(assert_all_called=False)
-@pytest.mark.parametrize(("task", "name", "endpoint", "model", "count", "request_"), LISTS, ids=IDS)
+@pytest.mark.parametrize(("task", "name", "endpoint", "model", "count"), LISTS, ids=IDS)
 async def test_list_answers_the_recorded_records_without_a_call(
     replay_fixture: ReplayFixture,
     respx_mock: respx.MockRouter,
@@ -81,13 +74,10 @@ async def test_list_answers_the_recorded_records_without_a_call(
     endpoint: str,
     model: type[BaseModel],
     count: int,
-    request_: dict[str, Any],
 ) -> None:
     """The recording is mounted, so a call would succeed silently; none is made."""
     route = replay_fixture(endpoint, "all")
-    before = datetime.now(UTC)
     result = await getattr(tasks, f"{task}_async")()
-    after = datetime.now(UTC)
     assert route.call_count == 0, f"{task} called upstream"
     assert not respx_mock.calls
     assert result.data == _recorded(endpoint, model), "same records, same values, upstream order"
@@ -95,25 +85,23 @@ async def test_list_answers_the_recorded_records_without_a_call(
     assert all(type(record) is model for record in result.data)
     assert result.meta.source == "usda-esr"
     assert result.meta.endpoint == endpoint
-    assert result.meta.vintage == _fetched(name) == "2026-10-25"
+    assert result.meta.retrieved_at == _fetched(name) == datetime(2026, 10, 25, tzinfo=UTC), (
+        "retrieved_at is when the package fetched the list, its bare date read as 00:00 UTC"
+    )
+    assert result.meta.vintage is None, "a fetch date is not a release identifier"
     assert result.meta.published_at is None
     assert result.meta.total is None, "upstream reports no count (ADR-0012)"
-    assert result.meta.request == request_
-    assert before <= result.meta.retrieved_at <= after, "retrieved_at is when the task answered"
+    assert result.meta.request == {}, "a filter left None is left out"
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("task", "name", "endpoint", "request_"),
-    [(task, name, endpoint, request_) for task, name, endpoint, _, _, request_ in LISTS],
+    ("task", "name", "endpoint"),
+    [(task, name, endpoint) for task, name, endpoint, _, _ in LISTS],
     ids=IDS,
 )
 async def test_list_tool_end_to_end(
-    respx_mock: respx.MockRouter,
-    task: str,
-    name: str,
-    endpoint: str,
-    request_: dict[str, Any],
+    respx_mock: respx.MockRouter, task: str, name: str, endpoint: str
 ) -> None:
     """Every list reaches an agent whole: ``list_countries`` through its own cap."""
     payload = await mcp_call(server, f"usda_esr_{task}", {})
@@ -122,10 +110,11 @@ async def test_list_tool_end_to_end(
     assert "note" not in payload
     assert payload["meta"]["source"] == "usda-esr"
     assert payload["meta"]["endpoint"] == endpoint
-    assert payload["meta"]["vintage"] == _fetched(name)
+    assert datetime.fromisoformat(payload["meta"]["retrieved_at"]) == _fetched(name)
+    assert payload["meta"]["vintage"] is None
     assert payload["meta"]["published_at"] is None
     assert payload["meta"]["total"] is None
-    assert payload["meta"]["request"] == request_
+    assert payload["meta"]["request"] == {}
     assert not respx_mock.calls
 
 
@@ -167,10 +156,10 @@ async def test_countries_over_mcp_are_whole_under_their_own_cap(
         payload = await mcp_call(server, "usda_esr_list_countries", {"region_id": region_id})
         assert len(payload["data"]) == count, region_id
         assert "note" not in payload, region_id
-        assert payload["meta"]["request"] == {"region_id": region_id, "search": None}
+        assert payload["meta"]["request"] == {"region_id": region_id}
     united = await mcp_call(server, "usda_esr_list_countries", {"search": "united"})
     assert [row["country_code"] for row in united["data"]] == [4120, 5200, 7830]
-    assert united["meta"]["request"] == {"region_id": None, "search": "united"}
+    assert united["meta"]["request"] == {"search": "united"}
     assert not respx_mock.calls
 
 
@@ -212,7 +201,7 @@ def test_list_countries_by_region(respx_mock: respx.MockRouter) -> None:
     assert western.data[:3] == [c for c in every if c.region_id == 11][:3]
     assert [c.country_code for c in western.data[:3]] == [1010, 1220, 1610], "upstream order"
     assert western.data == [c for c in every if c.region_id == 11]
-    assert western.meta.request == {"region_id": 11, "search": None}
+    assert western.meta.request == {"region_id": 11}
     eastern = tasks.list_countries(region_id=3).data
     assert [c.country_code for c in eastern] == [4290, 4350]  # GDR, Czechoslovakia
     european_union = [c.country_code for c in tasks.list_countries(region_id=1).data]
@@ -232,8 +221,8 @@ def test_an_unknown_region_is_an_empty_list(respx_mock: respx.MockRouter) -> Non
     """No validation: a region no country carries has no countries, a correct answer."""
     unknown = tasks.list_countries(region_id=12)
     assert unknown.data == []
-    assert unknown.meta.request == {"region_id": 12, "search": None}
-    assert unknown.meta.vintage == "2026-10-25"
+    assert unknown.meta.request == {"region_id": 12}
+    assert unknown.meta.retrieved_at == _fetched("countries")
     assert tasks.list_countries(region_id=0).data == []
     assert not respx_mock.calls
 
@@ -247,7 +236,7 @@ def test_list_countries_search_by_code_or_name_ignoring_case(
         (5200, "UNITED ARAB EMIRATES"),
         (7830, "TANZANIA, UNITED REPUBLIC OF"),
     ]
-    assert united.meta.request == {"region_id": None, "search": "united"}
+    assert united.meta.request == {"search": "united"}
     assert tasks.list_countries(search="UNITED").data == united.data
     assert tasks.list_countries(search="United").data == united.data
     assert [c.country_code for c in tasks.list_countries(search="korea").data] == [5790, 5800]
@@ -355,8 +344,8 @@ def test_list_routes_are_whole_over_http(respx_mock: respx.MockRouter) -> None:
     assert len(countries.json()["data"]) == 211
     western = http.get("/usda-esr/list_countries", params={"region_id": 11}).json()
     assert len(western["data"]) == 40
-    assert western["meta"]["request"] == {"region_id": 11, "search": None}
-    assert western["meta"]["vintage"] == "2026-10-25"
+    assert western["meta"]["request"] == {"region_id": 11}
+    assert western["meta"]["vintage"] is None
     regions = http.get("/usda-esr/list_regions").json()
     assert len(regions["data"]) == 12
     assert regions["meta"]["request"] == {}

@@ -39,22 +39,23 @@ ISO date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``
 ``get_exports``.
 
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
-upstream call (Johannes, 2026-10-25). ``meta.endpoint`` is the operation the list was
-fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the task answered,
-and ``meta.vintage`` is the day the package fetched the list (``"2026-10-25"``, UTC), the
-``fetched`` date as the file stores it: upstream gives these lists no version identifier.
-``meta.published_at`` stays ``None``, and so does ``meta.total``, since upstream reports no
-count (ADR-0012). The records keep upstream's order, field names (snake_cased) and values,
-padding included. Their filters only select records of the packaged list (ADR-0003), and
-``meta.request`` carries them: ``region_id`` is named after upstream's ``regionId`` and
-matches it exactly, ``search`` is the package's own (the four operations take no
-parameters), a case-insensitive substring match on codes, as digits, on names and, for
-countries, on GENC codes.
+upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
+``meta`` (ADR-0022, rule 1): ``meta.endpoint`` is the operation the list was fetched from
+(``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the package fetched the list,
+the file's ``fetched`` (a bare date, ``2026-10-25``, reads as 00:00 UTC of that day), and
+``meta.vintage`` is ``None``: upstream gives these lists no release identifier, and a
+fetch date is not one. ``meta.published_at`` stays ``None``, and so does ``meta.total``,
+since upstream reports no count (ADR-0012). The records keep upstream's order, field
+names (snake_cased) and values, padding included. Their filters only select records of
+the packaged list (ADR-0003), and ``meta.request`` carries those given: ``region_id`` is
+named after upstream's ``regionId`` and matches it exactly, ``search`` is the package's
+own (the four operations take no parameters), a case-insensitive substring match on
+codes, as digits, on names and, for countries, on GENC codes (``xippios.core.matches``).
 """
 
 from collections.abc import Mapping
 
-from xippios.core import InvalidRequestError, Result, ResultMeta, parse, sync
+from xippios.core import InvalidRequestError, PackagedList, Result, ResultMeta, matches, sync
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
@@ -69,8 +70,7 @@ from xippios.usda.esr.models import (
     UnitOfMeasure,
 )
 from xippios.usda.esr.params import (
-    PackagedList,
-    packaged_values,
+    PACKAGE,
     validate_commodity_code,
     validate_country_code,
     validate_market_year,
@@ -169,40 +169,6 @@ def _absent(
         f"ESR has no data for commodity {commodity_code}, {country}, market year "
         f"{market_year}: GET {exc.path} answered HTTP 404 with an empty body.",
     )
-
-
-def _packaged[M](name: str, kind: type[list[M]]) -> tuple[list[M], PackagedList]:
-    """The packaged list ``name`` parsed into ``kind``, in upstream order, with its file."""
-    packaged = packaged_values(name)
-    if packaged is None:  # pragma: no cover - the four lists ship with the package
-        raise KeyError(name)
-    return parse(kind, packaged.records, source=SOURCE, endpoint=packaged.endpoint), packaged
-
-
-def _packaged_meta(packaged: PackagedList, request: dict[str, int | str | None]) -> ResultMeta:
-    """Answered now, from the list the package fetched on ``packaged.fetched``.
-
-    ``total`` stays ``None``: upstream reports no count for these lists (ADR-0012).
-    """
-    return ResultMeta(
-        source=SOURCE,
-        endpoint=packaged.endpoint,
-        vintage=packaged.fetched.isoformat(),
-        request=request,
-    )
-
-
-def _matches(search: str | None, *fields: str | int | None) -> bool:
-    """Case-insensitive substring match of ``search`` in any of ``fields``.
-
-    A ``search`` of ``None`` matches every record; a code is matched as its digits
-    (``"122"`` finds ``1220``); a field that is ``None`` (a country without a GENC code)
-    matches nothing. Fields are matched one at a time, never joined.
-    """
-    if search is None:
-        return True
-    needle = search.casefold()
-    return any(needle in str(field).casefold() for field in fields if field is not None)
 
 
 async def get_exports_async(
@@ -498,8 +464,9 @@ async def list_commodities_async(search: str | None = None) -> Result[list[Commo
     Frozen Muscle Cuts of Pork), each with the ``unit_id`` ESR reports it in
     (``list_units_of_measure``), e.g. ``104`` Wheat - White, ``401`` Corn, ``801``
     Soybeans (all ``1``, Metric Tons), ``1404`` All Upland Cotton (``2``, Running Bales).
-    Names are upstream's, unchanged. ``meta.vintage`` is the day the package fetched the
-    list (``"2026-10-25"``), ``meta.retrieved_at`` when this task answered.
+    Names are upstream's, unchanged. ``meta.retrieved_at`` is when the package fetched the
+    list (2026-10-25, UTC); ``meta.vintage`` is empty, as upstream gives the list no
+    release identifier.
 
     Args:
         search: Keep the commodities where this text occurs, ignoring case, in the code
@@ -509,9 +476,10 @@ async def list_commodities_async(search: str | None = None) -> Result[list[Commo
             1404, and 1498 and 1499, rough rice: the code matches as text). Omit
             (``None``) for all.
     """
-    commodities, packaged = _packaged("commodities", list[Commodity])
-    selected = [c for c in commodities if _matches(search, c.commodity_code, c.commodity_name)]
-    return Result(data=selected, meta=_packaged_meta(packaged, {"search": search}))
+    packaged = PackagedList.load(PACKAGE, "commodities")
+    commodities = packaged.parse(Commodity, source=SOURCE)
+    selected = [c for c in commodities if matches(search, c.commodity_code, c.commodity_name)]
+    return Result(data=selected, meta=packaged.meta(SOURCE, request={"search": search}))
 
 
 async def list_countries_async(
@@ -527,9 +495,9 @@ async def list_countries_async(
     the EUROPEAN UNION - 27 aggregate and ``9990`` UNKNOWN. The names are upstream's,
     padded with spaces, and kept so: ``country_name`` to eight characters
     (``"CANADA  "``), ``country_description`` to 31 (``"CANADA"`` and 25 spaces); only
-    ``9990`` and the description of ``1`` are unpadded. ``meta.vintage`` is the day the
-    package fetched the list (``"2026-10-25"``), ``meta.retrieved_at`` when this task
-    answered.
+    ``9990`` and the description of ``1`` are unpadded. ``meta.retrieved_at`` is when the
+    package fetched the list (2026-10-25, UTC); ``meta.vintage`` is empty, as upstream
+    gives the list no release identifier.
 
     Args:
         region_id: Keep the countries of this ESR region, an integer as ``list_regions``
@@ -547,15 +515,16 @@ async def list_countries_async(
             ``"korea"`` (5790 and 5800), ``"DEU"`` (4280 GERMANY, by its GENC code),
             ``"1220"`` (CANADA). Omit (``None``) for every country.
     """
-    countries, packaged = _packaged("countries", list[Country])
+    packaged = PackagedList.load(PACKAGE, "countries")
+    countries = packaged.parse(Country, source=SOURCE)
     selected = [
         c
         for c in countries
         if (region_id is None or c.region_id == region_id)
-        and _matches(search, c.country_code, c.country_name, c.country_description, c.genc_code)
+        and matches(search, c.country_code, c.country_name, c.country_description, c.genc_code)
     ]
     request: dict[str, int | str | None] = {"region_id": region_id, "search": search}
-    return Result(data=selected, meta=_packaged_meta(packaged, request))
+    return Result(data=selected, meta=packaged.meta(SOURCE, request=request))
 
 
 async def list_regions_async() -> Result[list[Region]]:
@@ -567,11 +536,12 @@ async def list_regions_async() -> Result[list[Region]]:
     ``1`` EUROPEAN UNION - 27, ``4`` FORMER SOVIET UNION-12, ``8`` INDIA, ``5`` JAPAN,
     ``9`` OTHER ASIA AND OCEANIA, ``2`` OTHER EUROPE, ``6`` TAIWAN, ``99`` UNKNOWN, ``11``
     WESTERN HEMISPHERE. Every one holds at least one country of ``list_countries``.
-    ``meta.vintage`` is the day the package fetched the list (``"2026-10-25"``),
-    ``meta.retrieved_at`` when this task answered. Takes no parameters.
+    ``meta.retrieved_at`` is when the package fetched the list (2026-10-25, UTC);
+    ``meta.vintage`` is empty, as upstream gives the list no release identifier. Takes no
+    parameters.
     """
-    regions, packaged = _packaged("regions", list[Region])
-    return Result(data=regions, meta=_packaged_meta(packaged, {}))
+    packaged = PackagedList.load(PACKAGE, "regions")
+    return Result(data=packaged.parse(Region, source=SOURCE), meta=packaged.meta(SOURCE))
 
 
 async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
@@ -583,12 +553,12 @@ async def list_units_of_measure_async() -> Result[list[UnitOfMeasure]]:
     and pork), ``2`` Running Bales (the cottons, 1301 to 1404), ``3`` Pieces (whole hides
     and skins, 1601 to 1603), ``4`` NUMBER (1604, 1606, 1607) and ``5`` Pounds (1605,
     1608). The name field is plural upstream, ``unit_names``, and stays so; the names are
-    upstream's, unchanged. ``enums.UnitId`` names the same ids. ``meta.vintage`` is the day
-    the package fetched the list (``"2026-10-25"``), ``meta.retrieved_at`` when this task
-    answered. Takes no parameters.
+    upstream's, unchanged. ``enums.UnitId`` names the same ids. ``meta.retrieved_at`` is
+    when the package fetched the list (2026-10-25, UTC); ``meta.vintage`` is empty, as
+    upstream gives the list no release identifier. Takes no parameters.
     """
-    units, packaged = _packaged("unitsOfMeasure", list[UnitOfMeasure])
-    return Result(data=units, meta=_packaged_meta(packaged, {}))
+    packaged = PackagedList.load(PACKAGE, "unitsOfMeasure")
+    return Result(data=packaged.parse(UnitOfMeasure, source=SOURCE), meta=packaged.meta(SOURCE))
 
 
 get_exports = sync(get_exports_async)

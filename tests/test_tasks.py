@@ -12,13 +12,13 @@ from datetime import date
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError
+from xippios.core import InvalidRequestError, NotFoundError, UnknownCode
 from xippios.core.testing import mcp_call, sent_urls
 
 from xippios.usda.esr import __version__, get_exports, get_release_dates, tasks
 from xippios.usda.esr._client import BASE_URL
 from xippios.usda.esr.enums import UnitId
-from xippios.usda.esr.errors import NoDataForYear, UnknownCode
+from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.params import latest_market_year
 

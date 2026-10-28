@@ -17,13 +17,13 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError, parse
+from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
 from xippios.core.testing import fixture_path, load_fixture, mcp_call, sent_urls
 
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
-from xippios.usda.esr.errors import NoDataForYear, UnknownCode
+from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, ExportField
 
