@@ -53,9 +53,15 @@ own (the four operations take no parameters), a case-insensitive substring match
 codes, as digits, on names and, for countries, on GENC codes (``xippios.core.matches``).
 """
 
-from collections.abc import Mapping
-
-from xippios.core import InvalidRequestError, PackagedList, Result, ResultMeta, matches, sync
+from xippios.core import (
+    InvalidRequestError,
+    PackagedList,
+    Result,
+    ResultCap,
+    ResultMeta,
+    matches,
+    sync,
+)
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
@@ -88,26 +94,24 @@ __all__ = [
     "list_units_of_measure",
 ]
 
-try:
-    from xippios.core.mcp import ResultCap
-except ImportError:  # pragma: no cover - a base install, without the mcp extra, has no server
-    MCP_CAPS: "Mapping[str, ResultCap]" = {}
-else:
-    MCP_CAPS = {
-        "get_exports": ResultCap(
-            note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+# A task named here is Python-only: no tool, no route; the adapters skip it (ADR-0019 decision 4).
+BULK_TASKS: frozenset[str] = frozenset()
+
+MCP_CAPS = {
+    "get_exports": ResultCap(
+        note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+    ),
+    "list_commodities": ResultCap(
+        note='pass search, e.g. "wheat" or "104", to narrow by code or name'
+    ),
+    "list_countries": ResultCap(
+        max_rows=250,
+        note=(
+            'pass region_id, e.g. 11 (WESTERN HEMISPHERE), or search, e.g. "korea" or '
+            '"1220", to narrow by region or by code, name, description or GENC code'
         ),
-        "list_commodities": ResultCap(
-            note='pass search, e.g. "wheat" or "104", to narrow by code or name'
-        ),
-        "list_countries": ResultCap(
-            max_rows=250,
-            note=(
-                'pass region_id, e.g. 11 (WESTERN HEMISPHERE), or search, e.g. "korea" or '
-                '"1220", to narrow by region or by code, name, description or GENC code'
-            ),
-        ),
-    }
+    ),
+}
 """MCP result caps of their own, by task function name (conventions §8, ADR-0016).
 
 ``get_exports`` keeps the family's bounds, 200 rows or 64 KB, with a note of its own: a
@@ -132,8 +136,6 @@ within the default 64 KB, which it keeps. Its note names its filters, ``region_i
 ``search`` (§8). ``list_commodities``, 44 rows, fits the default and keeps the family's bounds, but
 it has a filter, so its entry carries a note naming ``search`` and nothing else.
 ``list_regions`` (12 rows) and ``list_units_of_measure`` (5) have no filter and no entry.
-``ResultCap`` lives in ``xippios.core.mcp``, which needs the ``mcp`` extra, so a base
-install, which serves no MCP tool, has no caps.
 """
 
 
@@ -189,10 +191,9 @@ async def get_exports_async(
     records for that combination; a market year ESR holds no data for (1900) raises
     ``NotFoundError``. ``meta.vintage`` is the latest week ending date among the records
     (``"2024-06-06"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells
-    when ESR released the data. The MCP server returns at most 200 rows per call, and
-    every country at once is one row per destination and week (cottonseed 2024: 498 rows
-    for 11 destinations; wheat HRW 2024: 1,136 rows for 28), so pass ``country_code``
-    there to narrow; one country is up to 54 rows.
+    when ESR released the data. Every country at once is one row per destination and week
+    (cottonseed 2024: 498 rows for 11 destinations; wheat HRW 2024: 1,136 rows for 28);
+    one country is up to 54 rows.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
