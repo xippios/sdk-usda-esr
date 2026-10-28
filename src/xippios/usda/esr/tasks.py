@@ -198,8 +198,8 @@ async def get_exports_async(
     net sales and commitments, in the unit ``unit_id`` names (``1`` metric tons, ``2``
     running bales for cotton; ``enums.UnitId``). A market year is named by the year it
     ends in and differs per commodity: for wheat 2024 runs June 2023 to May 2024, for corn
-    and soybeans September to August, for cotton August to July (``get_release_dates``
-    lists each commodity's current one). Codes and the year are checked before any call:
+    and soybeans September to August, for cotton August to July (``get_market_year``
+    names a commodity's current one). Codes and the year are checked before any call:
     an unknown code raises ``InvalidRequestError`` naming the closest known codes, and a
     market year that is not four digits or is after the current calendar year plus two
     raises ``InvalidRequestError`` with the reason. An empty list means ESR has no
