@@ -1,18 +1,20 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, twelve keyed calls in all: ``get_exports`` for
+One live smoke test per task function, thirteen keyed calls in all: ``get_exports`` for
 wheat white to Canada and for soybeans to Mexico, market year 2024;
 ``get_release_dates``, once whole and once with ``since``, and ``get_market_year`` for
-wheat white; the slices, one call each, ``get_latest_week`` for wheat HRW,
-``get_top_destinations`` for soybeans and ``get_weekly_series`` for wheat white to
-Canada, market year 2024. The codes are taken from the packaged lists by their upstream
-names, so a renamed or recoded commodity or country fails here first. The four list
-tasks answer from the package without a call, so their test fetches the list through its
-endpoint wrapper, one call each, and checks that the packaged records equal it: the
-freshness check ``reference/README.md`` promises. A difference fails the test naming
-what is gone and what is new; ``/refresh-reference-data`` then refreshes the package.
-Next to them, the template's reachability check, ``test_upstream_answers``, sends no
-key: a plain request to ``BASE_URL`` that spends no quota call.
+wheat white; the slices, ``get_latest_week`` for wheat HRW and ``get_top_destinations``
+for soybeans, one call each, and ``get_weekly_series`` for wheat white to Canada, market
+years 2023 to 2024, two calls, one per market year, and no release-list call, since the
+range ends before the current calendar year (a range ending this year or later adds
+one). The codes are taken from the packaged lists by their upstream names, so a renamed
+or recoded commodity or country fails here first. The four list tasks answer from the
+package without a call, so their test fetches the list through its endpoint wrapper, one
+call each, and checks that the packaged records equal it: the freshness check
+``reference/README.md`` promises. A difference fails the test naming what is gone and
+what is new; ``/refresh-reference-data`` then refreshes the package. Next to them, the
+template's reachability check, ``test_upstream_answers``, sends no key: a plain request
+to ``BASE_URL`` that spends no quota call.
 """
 
 from datetime import date, datetime
@@ -163,13 +165,22 @@ async def test_get_top_destinations_live() -> None:
 
 
 async def test_get_weekly_series_live() -> None:
-    result = await tasks.get_weekly_series_async(WHEAT_WHITE, CANADA, 2024)
+    result = await tasks.get_weekly_series_async(WHEAT_WHITE, CANADA, 2023, 2024)
     weeks = [r.week_ending_date for r in result.data]
     assert weeks
     assert weeks == sorted(weeks), "oldest first"
-    assert len(set(weeks)) == len(weeks), "one row per week"
+    assert date(2022, 5, 25) < weeks[0], "wheat's market year 2023 starts in June 2022"
+    assert weeks[0] < date(2023, 5, 25) < weeks[-1], "weeks of both market years"
+    assert weeks[-1] < date(2024, 6, 14), "2024 ends in May 2024; its last week ends in June"
+    assert len(weeks) - len(set(weeks)) <= 1, "one row per week, but the one 2023 and 2024 share"
     assert {(r.commodity_code, r.country_code) for r in result.data} == {(WHEAT_WHITE, CANADA)}
     assert result.meta.endpoint == "ESRData_GetCountryData"
+    assert result.meta.request == {
+        "commodity_code": WHEAT_WHITE,
+        "country_code": CANADA,
+        "start_year": 2023,
+        "end_year": 2024,
+    }
     assert result.meta.vintage == weeks[-1].isoformat()
     assert result.meta.published_at is None
 

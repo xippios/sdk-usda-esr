@@ -50,10 +50,12 @@ def test_the_package_exports_the_tasks() -> None:
 
 
 def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
-    """The list tasks' caps are checked in ``test_lists.py``."""
+    """The list tasks' caps are checked in ``test_lists.py``, the weekly series' in
+    ``test_slices.py``."""
     assert set(tasks.MCP_CAPS) == {
         "get_exports",
         "get_release_dates",
+        "get_weekly_series",
         "list_commodities",
         "list_countries",
     }

@@ -30,6 +30,9 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   for it, as 0.1.0 assumed without a recording. Wheat white 2027 carries a `9990`
   (UNKNOWN) destination in every week, and the slices keep and rank it like any other
   code.
+- A recording of `ESRData_GetCountryData` for wheat white to Canada, market year 2023:
+  53 weeks from 2022-06-02 to 2023-06-01, the last of them also the first week of market
+  year 2024 with other values, so the two-year series replays two recorded years.
 
 ### Changed
 
@@ -44,6 +47,35 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   directories follow (`tests/fixtures/get_country_data/`, conventions §10).
   `meta.endpoint` keeps the verbatim operation id (`"ESRData_GetCountryData"`), and the
   tasks and MCP tools are unchanged.
+- **BREAKING:** `get_weekly_series(commodity_code, country_code, start_year, end_year)`
+  replaces `get_weekly_series(commodity_code, country_code, market_year)`, in Python, as
+  the MCP tool `usda_esr_get_weekly_series` and as the HTTP route alike, both years
+  required, as sdk-usda-psd's `get_time_series` takes them: `get_weekly_series(104, 1220,
+  2024)` is now `get_weekly_series(104, 1220, 2024, 2024)`. It makes one
+  `ESRData_GetCountryData` request per market year, oldest first, at the client's pace of
+  one a second, and orders the records of every year by `week_ending_date`, otherwise
+  unchanged; a week in two market years comes once for each, the older year's row first.
+  At most 10 market years per call: a longer range, or an `end_year` before
+  `start_year`, is refused with `InvalidRequestError` before any request, and a year
+  refused by its shape or as future is named as `start_year` or `end_year`
+  (`params.validate_market_year` gains the keyword `name`, `"market_year"` by default,
+  so every other refusal reads as before).
+  `meta.request` carries `start_year` and `end_year` in place of `market_year`;
+  `meta.vintage` is the last week of the whole series. A market year ESR holds no data
+  for (its empty 404) is skipped instead of raised, so `get_weekly_series(104, 1220, 1900,
+  1900)` answers `[]` where 0.1.0's `get_weekly_series(104, 1220, 1900)` raised
+  `NoDataForYear`; `get_exports` still raises it for a single year. A released year that
+  answers `[]` had no exports and adds no rows. Any other error stops the series. ESR
+  answers a market year it has not released with `[]` too, so a range whose `end_year`
+  is the current calendar year or later makes one request more, first, to the release
+  list (`ESRData_GetDataReleaseInfo`), and an `end_year` after the commodity's current
+  market year raises `NotFoundError` naming the latest released market year and the
+  range asked, before any yearly request: wheat's 2024 to 2028 is refused in October
+  2026, its current market year being 2027, and in January a calendar-year commodity's
+  new year is refused until ESR's release list names it. A range ending before the
+  current calendar year makes no such request. Over MCP the default cap of 200 rows or
+  64 KB applies, about three market years, with a note that names `start_year` and
+  `end_year`.
 - `get_release_dates`: `meta.published_at` is now set, the newest `releaseTimeStamp` as
   ESR gives it, naive, with `meta.published_at_naive` true; `meta.vintage` is that time
   stamp's text as upstream prints it (`"2026-10-22T08:30:42.67"`), no longer the

@@ -270,6 +270,25 @@ def test_a_future_market_year_is_refused_as_future() -> None:
     assert "four-digit" not in info.value.message
 
 
+def test_a_refusal_names_the_parameter_the_year_came_in() -> None:
+    """``market_year`` by default, as every task with one market year has it; the weekly
+    series passes ``start_year`` or ``end_year``, as ``UnknownCode`` names its ``param``."""
+    with pytest.raises(InvalidRequestError) as default:
+        validate_market_year(24)
+    assert default.value.message.startswith("market_year must be a four-digit year no later")
+    with pytest.raises(InvalidRequestError) as start:
+        validate_market_year(24, name="start_year")
+    assert start.value.message.startswith("start_year must be a four-digit year no later")
+    assert "market_year must" not in start.value.message
+    with pytest.raises(InvalidRequestError) as end:
+        validate_market_year(2099, name="end_year")
+    assert end.value.message.startswith(
+        f"end_year must be no later than {latest_market_year()}, the current year plus two, "
+        "got 2099."
+    )
+    assert validate_market_year(2024, name="start_year") == 2024
+
+
 @pytest.mark.parametrize("year", [24, 999, 10000, -2024, True, 2024.0])
 def test_a_market_year_that_is_not_four_digits_is_refused_as_such(year: int) -> None:
     """The shape reason, not the future one: 10000 is a five-digit year before it is a future

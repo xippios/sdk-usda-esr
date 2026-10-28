@@ -28,7 +28,7 @@ keeps ESR's own answers after it, the empty 404 and the 400 below.
 ## Upstream behaviour established by fixtures
 
 The snapshot types every response as `object` and defines no schema, so these facts come
-from the answers recorded on 2026-10-25, and two on 2026-10-28, under `tests/fixtures/`;
+from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/fixtures/`;
 `_client.classify` maps them once.
 
 - Codes are integers on the wire and in the snapshot (`int32` path parameters), and the
@@ -41,13 +41,21 @@ from the answers recorded on 2026-10-25, and two on 2026-10-28, under `tests/fix
 - Exports records (`ESRData_GetCountryData`, `ESRData_GetAllCountriesData`;
   `models.CommodityData`): one per destination and week, eight quantities as JSON
   integers (`Decimal` here; net sales can be negative), `unitId`, and `weekEndingDate` as
-  a midnight without zone (`date` here). Wheat white to Canada 2024: 54 weeks.
+  a midnight without zone (`date` here). Wheat white to Canada 2024: 54 weeks
+  (`wheat_white_canada_2024`, 18,010 bytes); 2023, recorded 2026-10-28
+  (`wheat_white_canada_2023`, 17,669 bytes): 53 weeks from 2022-06-02 to 2023-06-01. The
+  week ending 2023-06-01 is in both, with other values: a week that straddles two market
+  years comes in each, and the records carry no market year, so `get_weekly_series` keeps
+  both, the older year's row first.
 - `allCountries` has no paging: cottonseed 2024 is 498 records for 11 destinations,
   139,119 bytes (`cottonseed_2024`); wheat HRW 2024, measured and not kept, 1,136 records
   for 28 destinations, 319,532 bytes. Over MCP `get_exports` keeps the family's cap, 200
   rows or 64 KB, with a note of its own that names `country_code` (`tasks.MCP_CAPS`;
   conventions §8, ADR-0016; Johannes, 2026-10-25), and the cap's note tells agents to pass
-  it: one destination is up to 54 rows.
+  it: one destination is up to 54 rows. `get_weekly_series` makes one request per market
+  year, at most 10 per call (`tasks.SERIES_MAX_YEARS`) in Python, over HTTP and over MCP
+  alike, and over MCP keeps the same cap, about three market years, with a note of its
+  own that names `start_year` and `end_year` (Johannes, 2026-10-28).
 - Destination `9990` (UNKNOWN) arrives in `allCountries` as a row like any country:
   wheat white 2027, recorded 2026-10-28 (`wheat_white_2027`, 119,811 bytes), is 385
   records for 22 destinations over 20 weeks, a `9990` row in each of them; wheat white
@@ -58,10 +66,21 @@ from the answers recorded on 2026-10-25, and two on 2026-10-28, under `tests/fix
   future market year (2099) and valid codes without exports (rye `allCountries` 2024).
   Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
   the nearest codes) and market years after the current UTC year plus two before the call.
+  Market year 2028 of wheat white to Canada answers HTTP 200 with `[]` as well (probed
+  2026-10-28, one keyed call, not kept; wheat's current market year is 2027), so a market
+  year ESR has not released cannot be told from one without exports: `get_weekly_series`
+  reads the release list for a range that ends in the current UTC year or later and
+  refuses one past the commodity's current market year with `NotFoundError` naming the
+  latest released one (Johannes, 2026-10-28; conventions §4; ADR-0022, amendment points
+  6 and 7). The current year counts too: a market year named by it may have begun
+  without a week released, as a calendar-year commodity's does in January (market years
+  start in June, August, September, October or January, per the recorded release list).
 - Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
   one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
   bytes, recorded 2026-10-28), mapped to `errors.NoDataForYear`, a `NotFoundError` (only
-  that answer on an exports path).
+  that answer on an exports path). `get_weekly_series` skips such a year inside its range,
+  as sdk-usda-psd's `get_time_series` does, and a released year answering `[]` adds no
+  rows (Johannes, 2026-10-28).
   Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
   so where ESR's data begins is not established and no lower bound beyond four digits is
   set.
@@ -122,9 +141,10 @@ tests/
   test_api.py      replay tests for the endpoint wrappers
   test_client.py   wiring, classify on recorded error bodies, core's quota policy on a 429
   test_params.py   packaged lists, the enum and the code and year checks
-  test_live.py     @pytest.mark.live smoke tests, one per task (12 keyed calls in all: the
-                   list tasks' test compares each packaged list with the live one), and the
-                   template's keyless reachability check
+  test_live.py     @pytest.mark.live smoke tests, one per task (13 keyed calls in all: the
+                   weekly series spans two market years, and the list tasks' test compares
+                   each packaged list with the live one), and the template's keyless
+                   reachability check
 docs/upstream/     documentation snapshot and FETCHED.md
 .github/workflows/ ci.yml (the required ci check), publish.yml (tag to PyPI), live.yml (nightly live tests),
                    gates.yml (the merge gates as jobs, off until GATES_CALLER is 1),
@@ -166,5 +186,6 @@ the key, from the org secret `DATA_GOV_API_KEY`.
   quota's 429 to `RateLimitError` with `retry_after` (ADR-0009, ADR-0010, ADR-0015). An
   endpoint added here installs no policy of its own; only ESR's own error shapes go into
   `classify`, after the gateway's.
-- The live run, `uv run pytest -m live --tb=short`, spends 12 keyed calls of the shared
-  quota: one per test in `tests/test_live.py` but the keyless reachability check.
+- The live run, `uv run pytest -m live --tb=short`, spends 13 keyed calls of the shared
+  quota: one per test in `tests/test_live.py`, two for the weekly series' two market
+  years, and none for the keyless reachability check.
