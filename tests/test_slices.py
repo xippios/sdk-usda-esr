@@ -9,9 +9,10 @@ a ``9990`` (UNKNOWN) destination, and ``get_all_countries_data/year_1900`` is ES
 404 on the every-country path. ``get_weekly_series`` makes one request per market year, so
 its range replays two one-country recordings, ``wheat_white_canada_2023`` (recorded
 2026-10-28) and ``wheat_white_canada_2024``, and moves the recorded empty 404 and ``[]``
-to a year inside the range (``url=``) rather than writing an answer. A range past the
-current calendar year reads the release list first (``get_data_release_info/all``,
-recorded 2026-10-25), so those tests pin the calendar year to 2026 (``in_2026``).
+to a year inside the range (``url=``) rather than writing an answer. A range ending in
+the current calendar year or later reads the release list first
+(``get_data_release_info/all``, recorded 2026-10-25), so those tests pin the calendar
+year to 2026 (``in_2026``), or to 2027 for the January case.
 """
 
 import dataclasses
@@ -426,7 +427,9 @@ def test_a_range_into_next_year_reads_the_release_list_first(
 ) -> None:
     """2024 to 2027 in 2026: the release list (wheat white's current market year 2027),
     then the four yearly requests, oldest first. 2025 to 2027 were not recorded for this
-    pair: ``year_2099``'s recorded ``[]`` is moved to their URLs; the order is the point."""
+    pair: ``year_2099``'s recorded ``[]`` is moved to their URLs and stands in for the
+    request order only (upstream's ``wheat_white_2027`` recording has 20 rows to Canada),
+    so the rows are not asserted."""
     route = _serve(
         respx_mock,
         {
@@ -443,7 +446,6 @@ def test_a_range_into_next_year_reads_the_release_list_first(
         _country_url(2026),
         _country_url(2027),
     ], "one request more, first"
-    assert result.data == _recorded(COUNTRY, "wheat_white_canada_2024")
     assert result.meta.endpoint == OPERATIONS[COUNTRY], "the records' operation"
     assert result.meta.request == {
         "commodity_code": 104,
@@ -456,11 +458,37 @@ def test_a_range_into_next_year_reads_the_release_list_first(
 
 
 @pytest.mark.usefixtures("in_2026")
-def test_a_range_ending_this_year_or_before_reads_no_release_list(
+def test_a_range_ending_this_year_reads_the_release_list_first(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """2024 to 2026 in 2026: a market year named by the current year may not be released
+    yet, so the release list comes first, then the three yearly requests (Johannes,
+    2026-10-28). ``year_2099``'s ``[]`` at 2025 and 2026 stands in for the order only."""
+    route = _serve(
+        respx_mock,
+        {
+            RELEASE_DATES: (RELEASES, "all"),
+            _country_url(2024): (COUNTRY, "wheat_white_canada_2024"),
+            _country_url(2025): (COUNTRY, "year_2099"),
+            _country_url(2026): (COUNTRY, "year_2099"),
+        },
+    )
+    tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2026)
+    assert sent_urls(route) == [
+        RELEASE_DATES,
+        _country_url(2024),
+        _country_url(2025),
+        _country_url(2026),
+    ], "four requests"
+
+
+@pytest.mark.usefixtures("in_2026")
+def test_a_range_ending_before_this_year_reads_no_release_list(
     replay_fixture: ReplayFixture, respx_mock: respx.MockRouter
 ) -> None:
-    """2024 to 2026 in 2026, and 2023 to 2024: every market year named by them has begun,
-    so only the yearly requests go out (``year_2099``'s ``[]`` moved to 2025 and 2026)."""
+    """2023 to 2024 and 2024 to 2025 in 2026: ESR has released every market year named by
+    a past year, so only the yearly requests go out (``year_2099``'s ``[]`` moved to 2025,
+    for the order only)."""
     releases = replay_fixture(RELEASES, "all")
     route = _serve(
         respx_mock,
@@ -468,14 +496,17 @@ def test_a_range_ending_this_year_or_before_reads_no_release_list(
             _country_url(2023): (COUNTRY, "wheat_white_canada_2023"),
             _country_url(2024): (COUNTRY, "wheat_white_canada_2024"),
             _country_url(2025): (COUNTRY, "year_2099"),
-            _country_url(2026): (COUNTRY, "year_2099"),
         },
     )
-    this_year = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2026)
-    assert sent_urls(route) == [_country_url(2024), _country_url(2025), _country_url(2026)]
-    assert this_year.data == _recorded(COUNTRY, "wheat_white_canada_2024")
     historical = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
     assert len(historical.data) == 53 + 54
+    tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2025)
+    assert sent_urls(route) == [
+        _country_url(2023),
+        _country_url(2024),
+        _country_url(2024),
+        _country_url(2025),
+    ]
     assert sent_urls(releases) == [], "no release list for either range"
 
 
@@ -524,6 +555,29 @@ def test_a_calendar_year_commodity_is_refused_past_this_year(
     assert "ask for market years up to 2026." in str(info.value)
     assert sent_urls(releases) == [RELEASE_DATES]
     assert len(respx_mock.calls) == 1
+
+
+def test_a_calendar_year_commodity_in_january_is_refused(
+    replay_fixture: ReplayFixture,
+    respx_mock: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The January window: with the calendar at 2027 and the recorded list still naming
+    2026 as beef muscle cuts' current market year, as it would until ESR releases a week
+    of 2027, 2026 to 2027 is refused naming 2026 after the release-list request alone,
+    where a gate on years after the current one would have read 2027's ``[]`` as a year
+    without exports (Johannes, 2026-10-28)."""
+    monkeypatch.setattr(tasks, "_calendar_year", lambda: 2027)
+    releases = replay_fixture(RELEASES, "all")
+    with pytest.raises(NotFoundError) as info:
+        tasks.get_weekly_series(1701, CANADA, 2026, 2027)
+    assert str(info.value).startswith(
+        "ESR has not released market year 2027 of commodity 1701 yet: its latest released "
+        "market year is 2026, "
+    )
+    assert "the range 2026 to 2027 is refused" in str(info.value)
+    assert sent_urls(releases) == [RELEASE_DATES]
+    assert len(respx_mock.calls) == 1, "no yearly request"
 
 
 @pytest.mark.usefixtures("in_2026")

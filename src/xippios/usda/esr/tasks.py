@@ -52,14 +52,15 @@ excluded, and nothing is compared with another source. ``get_latest_week`` and
 ``get_top_destinations`` make its one request; ``get_weekly_series`` makes its
 one-country request once per market year from ``start_year`` to ``end_year``, at most
 ``SERIES_MAX_YEARS`` of them (Johannes, 2026-10-28; conventions §4's period series, as
-sdk-usda-psd's ``get_time_series``), and, for a range past the current calendar year,
-reads the release list first and refuses a range past the commodity's current market year
-with ``NotFoundError``, since ESR answers an unreleased market year with ``[]`` as it
-answers a year without exports (Johannes, 2026-10-28; ADR-0022, amendment points 6 and
-7). Their ``meta.endpoint`` is the operation the records come from, ``meta.request``
-carries every parameter (``field`` as its upstream name), ``meta.vintage`` is the latest
-``weekEndingDate`` among the records considered as an ISO date, ``None`` for an empty
-answer, and ``meta.published_at`` stays ``None``, as for ``get_exports``.
+sdk-usda-psd's ``get_time_series``), and, for a range ending in the current calendar year
+or later, reads the release list first and refuses a range past the commodity's current
+market year with ``NotFoundError``, since ESR answers an unreleased market year with
+``[]`` as it answers a year without exports (Johannes, 2026-10-28; ADR-0022, amendment
+points 6 and 7). Their ``meta.endpoint`` is the operation the records come from,
+``meta.request`` carries every parameter (``field`` as its upstream name),
+``meta.vintage`` is the latest ``weekEndingDate`` among the records considered as an ISO
+date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``, as for
+``get_exports``.
 
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
 upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
@@ -194,16 +195,20 @@ SERIES_MAX_YEARS = 10
 2026-10-28; conventions §4): one request per market year, so ten years are ten requests,
 about ten seconds at ``RATE_LIMIT``'s pace of one a second, of the 1,000 an hour the
 api.data.gov key shares with every package that uses it, and one more for the release
-list when the range runs past the current calendar year. The same in Python, over HTTP
-and over MCP; a longer range is refused before the first request."""
+list when the range ends in the current calendar year or later. The same in Python, over
+HTTP and over MCP; a longer range is refused before the first request."""
 
 
 def _calendar_year() -> int:
     """The current UTC calendar year.
 
-    A market year named by it or by an earlier year has begun: market years start between
-    the October before the year they are named for and its January. ``get_weekly_series``
-    reads the release list only for a range that ends after it.
+    Market years start between the June before the year they are named for and that
+    year's January: in the recorded release list 13 commodities start in June (wheat), 13
+    in August (cotton), 3 in September (corn, soybeans), 5 in October and 10 in January
+    (beef, pork, hides, the calendar year). A market year named by the current year may
+    have begun without ESR having released a week of it, and one named by a later year
+    may not have begun, so ``get_weekly_series`` reads the release list for a range that
+    ends in the current year or later (Johannes, 2026-10-28).
     """
     return datetime.now(UTC).year
 
@@ -615,14 +620,16 @@ async def get_weekly_series_async(
 
     ESR answers a market year it has not begun to release with an empty list, the same
     answer as a year without exports, so a range past the commodity's current market
-    year is refused. When ``end_year`` is after the current calendar year, one request
+    year is refused. When ``end_year`` is the current calendar year or later, one request
     more comes first, the release list ``get_market_year`` reads, which names the
     commodity's current market year: an ``end_year`` after it raises ``NotFoundError``
     naming the latest released market year and the range asked, before any yearly
-    request, nothing partial returned (wheat in October 2026: current market year 2027,
-    so 2024 to 2027 is five requests and 2024 to 2028 is refused after one). A range
-    ending in the current calendar year or earlier makes no such request: every market
-    year named by such a year has begun.
+    request, nothing partial returned. In October 2026, wheat's current market year being
+    2027, 2024 to 2026 is four requests, 2024 to 2027 five, and 2024 to 2028 is refused
+    after one; beef muscle cuts (1701), on the calendar year, have 2026 as current, so
+    2025 to 2027 is refused. A range ending before the current calendar year makes no
+    such request (2023 to 2024 is two): ESR has released every market year named by
+    such a year.
 
     Inside a released range, the records of every year, one per week, are put together
     and ordered by ``week_ending_date`` ascending, and otherwise unchanged: nothing is
@@ -664,7 +671,7 @@ async def get_weekly_series_async(
         "start_year": start_year,
         "end_year": end_year,
     }
-    if end_year > _calendar_year():
+    if end_year >= _calendar_year():
         # An unreleased market year answers [] as a year without exports does, so it is
         # refused, naming the latest released one (conventions §4; ADR-0022 points 6, 7).
         latest = _release_of(commodity_code, await api.get_data_release_info()).market_year

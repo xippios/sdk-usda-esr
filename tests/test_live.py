@@ -6,11 +6,11 @@ wheat white to Canada and for soybeans to Mexico, market year 2024;
 wheat white; the slices, ``get_latest_week`` for wheat HRW and ``get_top_destinations``
 for soybeans, one call each, and ``get_weekly_series`` for wheat white to Canada, market
 years 2023 to 2024, two calls, one per market year, and no release-list call, since the
-range ends before the current calendar year (a range into next year adds one). The codes
-are taken from the packaged lists by their upstream names, so a renamed or recoded
-commodity or country fails here first. The four list tasks answer from the package
-without a call, so their test fetches the list through its endpoint wrapper, one call
-each, and checks that the packaged records equal it: the freshness check
+range ends before the current calendar year (a range ending this year or later adds
+one). The codes are taken from the packaged lists by their upstream names, so a renamed
+or recoded commodity or country fails here first. The four list tasks answer from the
+package without a call, so their test fetches the list through its endpoint wrapper, one
+call each, and checks that the packaged records equal it: the freshness check
 ``reference/README.md`` promises. A difference fails the test naming what is gone and
 what is new; ``/refresh-reference-data`` then refreshes the package. Next to them, the
 template's reachability check, ``test_upstream_answers``, sends no key: a plain request
