@@ -1,15 +1,16 @@
 """The client's wiring and error mapping, and core's api.data.gov gateway wired to it.
 
-Recorded answers come from ``tests/fixtures`` (2026-10-25). Cases the recordings do not
-cover are built in api.data.gov's documented shapes and say "NOT RECORDED": the
-gateway's 429 (``OVER_RATE_LIMIT``; spending the key's hourly quota, shared with
-sdk-usda-psd and sdk-usda-gats, to record it was not worth it; its shape is the one
-api.data.gov documents and sdk-usda-psd recorded on 2026-10-23), the gateway's
-``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes. The gateway and its quota policy are
-core's (``xippios.core.data_gov.Gateway``, ADR-0009, ADR-0015) and are tested there; this
-module checks that the package installs them, that the policy reads a 429 and the recorded
-quota headers through the package's client, that ``classify`` keeps ESR's own answers
-after the gateway's, and that it shapes core's retries of a 429.
+Recorded answers come from ``tests/fixtures`` (2026-10-25; the every-country form's
+1900, 2026-10-28). Cases the recordings do not cover are built in api.data.gov's
+documented shapes and say "NOT RECORDED": the gateway's 429 (``OVER_RATE_LIMIT``;
+spending the key's hourly quota, shared with sdk-usda-psd and sdk-usda-gats, to record
+it was not worth it; its shape is the one api.data.gov documents and sdk-usda-psd
+recorded on 2026-10-23), the gateway's ``NOT_FOUND`` 404 and the other ``API_KEY_*``
+codes. The gateway and its quota policy are core's (``xippios.core.data_gov.Gateway``,
+ADR-0009, ADR-0015) and are tested there; this module checks that the package installs
+them, that the policy reads a 429 and the recorded quota headers through the package's
+client, that ``classify`` keeps ESR's own answers after the gateway's, and that it
+shapes core's retries of a 429.
 """
 
 import dataclasses
@@ -48,6 +49,7 @@ from xippios.usda.esr.errors import NoDataForYear
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTRY = "get_country_data"
+ALL = "get_all_countries_data"
 EXPORTS = "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear"
 SLACK = CLOCK_SLACK.total_seconds()
 """A wait read through the client counts from the snapshot to now, a moment later."""
@@ -222,6 +224,23 @@ async def test_market_year_1900_answers_404_with_an_empty_body(
     route = replay_fixture(COUNTRY, "year_1900")
     with pytest.raises(NoDataForYear, match="empty body"):
         await api.get_country_data(104, 1220, 1900)
+    assert route.call_count == 1, "a 404 is never retried"
+
+
+@pytest.mark.anyio
+async def test_market_year_1900_answers_alike_on_the_every_country_path(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """Recorded 2026-10-28: ``allCountries`` answers 1900 as the one-country form does."""
+    response = response_from_fixture(load_fixture(FIXTURES / ALL / "year_1900.json"))
+    assert (response.status_code, response.content) == (404, b"")
+    assert response.headers["content-type"].startswith("text/plain")
+    error = classify(response)
+    assert isinstance(error, NoDataForYear)
+    assert error.path == "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
+    route = replay_fixture(ALL, "year_1900")
+    with pytest.raises(NoDataForYear, match="empty body"):
+        await api.get_all_countries_data(104, 1900)
     assert route.call_count == 1, "a 404 is never retried"
 
 

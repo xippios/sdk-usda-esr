@@ -3,8 +3,10 @@
 Each replays a recorded answer and checks that the slice selects and orders upstream's
 records without changing one (ADR-0003; Johannes, 2026-10-25). ``_recorded`` parses a
 fixture the way the wrapper does, without a request, so a test compares with what
-upstream sent while the task's own request is counted on its route. Nothing new is
-recorded: the slices make the requests ``get_exports`` makes, and its fixtures serve them.
+upstream sent while the task's own request is counted on its route. The slices make the
+requests ``get_exports`` makes, and its fixtures serve them: ``wheat_white_2027`` carries
+a ``9990`` (UNKNOWN) destination, and ``get_all_countries_data/year_1900`` is ESR's empty
+404 on the every-country path.
 """
 
 import json
@@ -50,6 +52,16 @@ LATEST = date(2024, 8, 1)
 
 LATEST_DESTINATIONS = [1220, 2010, 5170, 5180, 5230, 5520, 5700, 5800, 5830, 5880, 7140]
 """The 11 destinations of that week, in upstream's order: by code."""
+
+UNKNOWN = 9990
+"""``countryCode`` 9990, UNKNOWN in the packaged countries list (region 99, UNKNOWN)."""
+
+WHEAT_WHITE_2027_LATEST = [
+    1220, 2010, 2050, 2250, 3310, 3370, 4910, 5380, 5420, 5460, 5490,
+    5520, 5570, 5590, 5600, 5650, 5800, 5820, 5830, 5880, 7530, UNKNOWN,
+]  # fmt: skip
+"""The 22 destinations of the newest week of ``wheat_white_2027`` (2026-10-15), by code,
+``9990`` last, as upstream sends them; its 385 records span 20 weeks from 2026-06-04."""
 
 
 def _recorded(wrapper: str, case: str) -> list[CommodityData]:
@@ -285,13 +297,14 @@ def test_the_weekly_series_names_a_market_year_esr_lacks(
 def test_every_destination_slices_name_a_market_year_esr_lacks(
     replay_fixture: ReplayFixture, call: Callable[[], object]
 ) -> None:
-    """``year_1900`` was recorded on the one-country path (status 404, empty ``text/plain``
-    body); the every-country form was not recorded. The recorded answer is served at the
-    every-country path (``url=``), moved, not written by hand."""
-    absent = load_fixture(fixture_path(FIXTURES, COUNTRY, "year_1900"))
+    """Recorded on the every-country path as on the one-country one (2026-10-28): HTTP 404
+    with an empty ``text/plain`` body, so ``classify`` gives ``NoDataForYear`` for both."""
+    absent = load_fixture(fixture_path(FIXTURES, ALL, "year_1900"))
     assert (absent.response.status, absent.response.content) == (404, b"")
+    headers = dict(absent.response.headers)
+    assert headers["content-type"].startswith("text/plain")
     path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
-    route = replay_fixture(COUNTRY, "year_1900", url=f"{BASE_URL}{path}")
+    route = replay_fixture(ALL, "year_1900")
     with pytest.raises(NoDataForYear) as info:
         call()
     assert info.value.path == path
@@ -332,6 +345,66 @@ def test_the_gateways_not_found_propagates_unchanged(
         call()
     assert not isinstance(info.value, NoDataForYear)
     assert str(info.value).startswith("api.data.gov has no route for /api/esr/exports/")
+
+
+# 9990, UNKNOWN: a destination code like any other
+
+
+def test_the_latest_week_keeps_the_unknown_destination(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    route = replay_fixture(ALL, "wheat_white_2027")
+    result = tasks.get_latest_week(WHEAT_WHITE, 2027)
+    assert sent_urls(route) == [f"{EXPORTS}/104/allCountries/marketYear/2027"]
+    recorded = _recorded(ALL, "wheat_white_2027")
+    assert len(recorded) == 385
+    assert sum(r.country_code == UNKNOWN for r in recorded) == 20, "one row in every week"
+    newest = date(2026, 10, 15)
+    assert result.data == [r for r in recorded if r.week_ending_date == newest]
+    assert [r.country_code for r in result.data] == WHEAT_WHITE_2027_LATEST
+    assert result.meta.vintage == "2026-10-15"
+
+
+def test_top_destinations_rank_the_unknown_destination_like_a_country(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """No special casing: 9990 ranks by its value, second by outstanding sales in the week
+    ending 2026-10-15, first by current market year net sales."""
+    route = replay_fixture(ALL, "wheat_white_2027")
+    top = tasks.get_top_destinations(WHEAT_WHITE, 2027, ExportField.OUTSTANDING_SALES, 3)
+    assert [(r.country_code, r.outstanding_sales) for r in top.data] == [
+        (5650, Decimal(346900)),  # PHILIPPINES
+        (UNKNOWN, Decimal(156328)),
+        (5800, Decimal(152280)),  # KOREA, REPUBLIC OF
+    ]
+    net = tasks.get_top_destinations(WHEAT_WHITE, 2027, ExportField.CURRENT_MY_NET_SALES, 2)
+    assert [(r.country_code, r.current_my_net_sales) for r in net.data] == [
+        (UNKNOWN, Decimal(20000)),
+        (5590, Decimal(18000)),  # SINGAPORE
+    ]
+    recorded = _recorded(ALL, "wheat_white_2027")
+    assert all(r in recorded for r in [*top.data, *net.data]), "records as upstream sent them"
+    assert route.call_count == 2
+
+
+def test_list_countries_names_the_unknown_destination() -> None:
+    (country,) = package.list_countries(search=str(UNKNOWN)).data
+    assert (country.country_code, country.country_name, country.region_id) == (
+        UNKNOWN,
+        "UNKNOWN",
+        99,
+    )
+
+
+def test_every_country_of_wheat_white_2027(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    replay_fixture(ALL, "wheat_white_2027")
+    result = tasks.get_exports(WHEAT_WHITE, 2027)
+    assert len(result.data) == 385
+    assert len({r.country_code for r in result.data}) == 22
+    assert UNKNOWN in {r.country_code for r in result.data}
+    assert result.meta.vintage == "2026-10-15"
 
 
 # validation, before any request

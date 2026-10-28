@@ -319,6 +319,22 @@ def test_a_market_year_esr_lacks_is_not_found(
     assert route.call_count == 1
 
 
+def test_a_market_year_esr_lacks_is_not_found_for_every_country(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """Recorded 2026-10-28: the every-country form answers 1900 with the same empty 404."""
+    route = replay_fixture(ALL, "year_1900")
+    with pytest.raises(NoDataForYear) as info:
+        tasks.get_exports(WHEAT_WHITE, 1900)
+    path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
+    assert info.value.path == path
+    assert str(info.value) == (
+        f"ESR has no data for commodity 104, every country, market year 1900: GET {path} "
+        "answered HTTP 404 with an empty body."
+    )
+    assert route.call_count == 1
+
+
 def test_unknown_codes_and_future_years_are_refused_before_any_request(
     respx_mock: respx.MockRouter,
 ) -> None:
