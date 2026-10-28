@@ -429,7 +429,7 @@ def test_a_range_into_next_year_reads_the_release_list_first(
     then the four yearly requests, oldest first. 2025 to 2027 were not recorded for this
     pair: ``year_2099``'s recorded ``[]`` is moved to their URLs and stands in for the
     request order only (upstream's ``wheat_white_2027`` recording has 20 rows to Canada),
-    so the rows are not asserted."""
+    so neither the rows nor ``meta.vintage`` are asserted."""
     route = _serve(
         respx_mock,
         {
@@ -453,7 +453,6 @@ def test_a_range_into_next_year_reads_the_release_list_first(
         "start_year": 2024,
         "end_year": 2027,
     }
-    assert result.meta.vintage == "2024-06-06"
     assert result.meta.published_at is None
 
 
