@@ -51,8 +51,14 @@ def test_the_package_exports_the_tasks() -> None:
 
 
 def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
-    """The list tasks' caps are checked in ``test_lists.py``."""
-    assert set(tasks.MCP_CAPS) == {"get_exports", "list_commodities", "list_countries"}
+    """The list tasks' caps are checked in ``test_lists.py``, the weekly series' in
+    ``test_slices.py``."""
+    assert set(tasks.MCP_CAPS) == {
+        "get_exports",
+        "get_weekly_series",
+        "list_commodities",
+        "list_countries",
+    }
     cap = tasks.MCP_CAPS["get_exports"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
