@@ -68,6 +68,10 @@ len(series.data), series.meta.vintage  # 107 (53 + 54 weeks), "2024-06-06"
 A week that straddles two market years comes once for each, the older one's row first:
 the week ending 2023-06-01 closes wheat's 2023 and opens its 2024. A market year ESR holds
 no data for is skipped, so `get_weekly_series(104, 1220, 1900, 1900)` is an empty list.
+ESR answers a market year it has not released with an empty list, as it answers a year
+without exports, so a range past the commodity's current market year raises
+`NotFoundError` naming the latest released one (`get_market_year` names it; wheat: 2027
+in October 2026); a range into next year reads the release list first, one request more.
 
 `field` takes upstream's names of the eight quantities (`"outstandingSales"`,
 `"accumulatedExports"`, ...; `models.ExportField`), which the MCP and HTTP schemas list.
@@ -119,7 +123,7 @@ destination, and its note says to narrow `start_year` and `end_year`.
 | `ESRData_GetAllCountriesData` (`exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year)` | `usda_esr_get_exports` | alpha |
 | `ESRData_GetAllCountriesData` | `get_latest_week(commodity_code, market_year)` | `usda_esr_get_latest_week` | alpha; slice |
 | `ESRData_GetAllCountriesData` | `get_top_destinations(commodity_code, market_year, field, n=10)` | `usda_esr_get_top_destinations` | alpha; slice |
-| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, start_year, end_year)` | `usda_esr_get_weekly_series` | alpha; slice over a range of market years, one request per market year, at most 10 |
+| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, start_year, end_year)` | `usda_esr_get_weekly_series` | alpha; slice over a range of market years, one request per market year, at most 10; a range past the commodity's current market year is refused |
 | `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None)` | `usda_esr_get_release_dates` | alpha; `since` keeps the commodities released after an earlier call's `meta.vintage` |
 | `ESRData_GetDataReleaseInfo` | `get_market_year(commodity_code)` | `usda_esr_get_market_year` | alpha; one commodity's record |
 | `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |

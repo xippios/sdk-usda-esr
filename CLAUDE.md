@@ -66,12 +66,18 @@ from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/f
   future market year (2099) and valid codes without exports (rye `allCountries` 2024).
   Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
   the nearest codes) and market years after the current UTC year plus two before the call.
+  Market year 2028 of wheat white to Canada answers HTTP 200 with `[]` as well (probed
+  2026-10-28, one keyed call, not kept; wheat's current market year is 2027), so a market
+  year ESR has not released cannot be told from one without exports: `get_weekly_series`
+  reads the release list for a range that ends after the current UTC year and refuses
+  one past the commodity's current market year with `NotFoundError` naming the latest
+  released one (Johannes, 2026-10-28; conventions §4; ADR-0022, amendment points 6 and 7).
 - Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
   one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
   bytes, recorded 2026-10-28), mapped to `errors.NoDataForYear`, a `NotFoundError` (only
   that answer on an exports path). `get_weekly_series` skips such a year inside its range,
-  as sdk-usda-psd's `get_time_series` does, and a year answering `[]` adds no rows
-  (Johannes, 2026-10-28).
+  as sdk-usda-psd's `get_time_series` does, and a released year answering `[]` adds no
+  rows (Johannes, 2026-10-28).
   Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
   so where ESR's data begins is not established and no lower bound beyond four digits is
   set.

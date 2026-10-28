@@ -64,9 +64,15 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   `meta.vintage` is the last week of the whole series. A market year ESR holds no data
   for (its empty 404) is skipped instead of raised, so `get_weekly_series(104, 1220, 1900,
   1900)` answers `[]` where 0.1.0's `get_weekly_series(104, 1220, 1900)` raised
-  `NoDataForYear`; `get_exports` still raises it for a single year. Any other error stops
-  the series. Over MCP the default cap of 200 rows or 64 KB applies, about three market
-  years, with a note that names `start_year` and `end_year`.
+  `NoDataForYear`; `get_exports` still raises it for a single year. A released year that
+  answers `[]` had no exports and adds no rows. Any other error stops the series. ESR
+  answers a market year it has not released with `[]` too, so a range whose `end_year`
+  is after the current calendar year makes one request more, first, to the release list
+  (`ESRData_GetDataReleaseInfo`), and an `end_year` after the commodity's current market
+  year raises `NotFoundError` naming the latest released market year and the range asked,
+  before any yearly request: wheat's 2024 to 2028 is refused in October 2026, its current
+  market year being 2027. Over MCP the default cap of 200 rows or 64 KB applies, about
+  three market years, with a note that names `start_year` and `end_year`.
 - `get_release_dates`: `meta.published_at` is now set, the newest `releaseTimeStamp` as
   ESR gives it, naive, with `meta.published_at_naive` true; `meta.vintage` is that time
   stamp's text as upstream prints it (`"2026-10-22T08:30:42.67"`), no longer the
