@@ -18,6 +18,11 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   `isoformat()` of the parsed value (`"2026-10-22T08:30:42.670000"`); both `None` for an
   empty answer. `models.DataReleaseInfo` keeps the text as the read-only
   `release_time_stamp_text`, which no adapter serialises, so its rows are unchanged.
+- `models.DataReleaseInfo` equality: a record parsed from upstream's text no longer
+  equals one with the same values built by keyword from a `datetime`, nor one
+  round-tripped through its own `model_dump()` or `dump_upstream()`, because the release
+  text sits in a private attribute, which pydantic compares; compare two records'
+  `model_dump()` for their values alone.
 - The `list_*` tasks' `meta`, now built by core's `PackagedList`: `retrieved_at` is when
   the packaged list was fetched (2026-10-25, the files' bare date read as 00:00 UTC), no
   longer when the task answered, and `vintage` is `None`, no longer the fetch date.
@@ -29,10 +34,6 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
   quota with `source` `"api.data.gov"`, not `"usda-esr"`, and a message that starts
   "api.data.gov quota of the key in DATA_GOV_API_KEY spent"; a 429's message no longer
   says "Nothing was retried". `_client.policy` gives way to `_client.gateway`.
-- `xippios.usda.esr.errors.UnknownCode` is replaced by `xippios.core.UnknownCode`, an
-  `InvalidRequestError` as before: its message reads "999 is not a commodity_code in the
-  packaged commodities list (fetched 2026-10-25). Did you mean ...", its `fetched` is
-  a datetime and its `closest` a tuple.
 - An MCP tool argument the schema refuses is answered
   `error: InvalidRequestError: <argument>: <message>` (core 0.3.0).
 - `enums.py` is rendered by core's `render_enums`; `UnitId` and its members are
@@ -43,6 +44,10 @@ Adopted xippios-core 0.3.0, sdk-template v0.3.0 and conventions 1.22 (convention
 
 ### Removed
 
+- `xippios.usda.esr.errors.UnknownCode`, replaced by `xippios.core.UnknownCode`, an
+  `InvalidRequestError` as before: its message reads "999 is not a commodity_code in the
+  packaged commodities list (fetched 2026-10-25). Did you mean ...", its `fetched` is
+  a datetime and its `closest` a tuple.
 - `params.PackagedList` and `params.packaged_values`: core's
   `PackagedList.load(params.PACKAGE, name)` reads a packaged list.
 

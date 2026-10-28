@@ -139,8 +139,9 @@ class DataReleaseInfo(UpstreamModel):
     snapshot names no time zone, so none is invented. ``get_release_dates`` gives the
     newest one as ``meta.published_at``, flagged ``published_at_naive``, and its text as
     upstream prints it, ``release_time_stamp_text``, as ``meta.vintage`` (ADR-0022, rule
-    2). The text is kept beside the parsed value in a private attribute, which no adapter
-    serialises: a record's fields over MCP and HTTP are the five below.
+    2). The text is kept beside the parsed value in a private attribute, read through the
+    property ``release_time_stamp_text`` and serialised by no adapter: a record's fields
+    over MCP and HTTP are the first five below, the text not among them.
 
     Attributes:
         commodity_code: ``commodityCode``, e.g. ``104`` (Wheat - White).
@@ -180,7 +181,11 @@ class DataReleaseInfo(UpstreamModel):
 
     @property
     def release_time_stamp_text(self) -> str:
-        """``releaseTimeStamp`` as upstream prints it, e.g. ``"2026-10-22T08:30:42.67"``."""
+        """``releaseTimeStamp`` as upstream prints it, e.g. ``"2026-10-22T08:30:42.67"``.
+
+        Unset on a record ``model_construct`` built, which skips validation, so reading it
+        there raises ``AttributeError``.
+        """
         return self._release_time_stamp_text
 
 

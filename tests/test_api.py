@@ -238,6 +238,32 @@ def test_the_release_text_round_trips_and_is_not_serialised() -> None:
     assert by_name.release_time_stamp_text == "2026-10-22T08:30:42.67", "by name too"
 
 
+def test_the_release_text_through_a_copy_a_dump_and_a_revalidation() -> None:
+    """Pinned as pydantic treats the private text: ``model_copy`` keeps it, even with a new
+    time; a round trip through ``model_dump()`` or ``dump_upstream()`` has only the
+    datetime to go on, so it carries the ``isoformat()`` text and compares unequal;
+    ``model_validate`` of an existing instance returns it with its text unchanged."""
+    fixture = load_fixture(fixture_path(FIXTURES, "ESRData_GetDataReleaseInfo", "all"))
+    record = parse(
+        list[DataReleaseInfo],
+        json.loads(fixture.response.body),
+        source="usda-esr",
+        endpoint="ESRData_GetDataReleaseInfo",
+    )[0]
+    assert record.release_time_stamp_text == "2026-10-22T08:30:42.67"
+    copied = record.model_copy(update={"release_time_stamp": datetime(2026, 10, 29, 8, 30)})
+    assert copied.release_time_stamp == datetime(2026, 10, 29, 8, 30)
+    assert copied.release_time_stamp_text == "2026-10-22T08:30:42.67", "the old text kept"
+    for dumped in (record.model_dump(), record.dump_upstream()):
+        again = DataReleaseInfo.model_validate(dumped)
+        assert again.release_time_stamp_text == "2026-10-22T08:30:42.670000", "isoformat()"
+        assert again != record, "the private text differs, and pydantic compares it"
+        assert again.model_dump() == record.model_dump(), "the values alone are equal"
+    revalidated = DataReleaseInfo.model_validate(record)
+    assert revalidated.release_time_stamp_text == "2026-10-22T08:30:42.67"
+    assert revalidated == record
+
+
 def test_records_serialise_snake_case_with_numbers_and_iso_dates() -> None:
     record = parse(
         CommodityData,
