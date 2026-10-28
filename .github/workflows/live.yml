@@ -8,9 +8,12 @@ on:
   schedule:
     # 05:40 UTC, staggered from the slug (live_schedule in sdk-template's copier.yml)
     # so that sources sharing a key do not start together.
+    # The key is api.data.gov's, shared by every source behind the gateway (ADR-0009).
     - cron: "40 5 * * *"
   workflow_dispatch:
 
+# Hardened as every workflow of the family (conventions §13): the actions pinned to the
+# commits ci.yml pins, the checkout keeps no credentials, the token reads only.
 permissions:
   contents: read
 
@@ -19,12 +22,16 @@ jobs:
     name: live
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
       - run: uv sync --all-extras --frozen
-      - run: uv run pytest -m live
+      # --tb=short: a failing test's frame arguments, a raw upstream payload among them,
+      # stay out of a log that is public (conventions §10).
+      - run: uv run pytest -m live --tb=short
         # The key, from the org secret, for this step only: checkout, setup-uv and uv sync
         # never see it.
         env:
