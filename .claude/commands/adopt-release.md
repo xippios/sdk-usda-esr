@@ -5,12 +5,9 @@ Expected argument: the template tag to adopt, e.g. `v0.3.0`; without one, the la
 adoption PR of conventions §15 (ADR-0018): one PR, before the next release, that adopts
 the release and changes nothing else; no new endpoints, tasks or fixtures ride along. It
 may delete the fixtures, mounts and tests that the adoption itself makes dead, and
-nothing more (ADR-0018, amendment (d)). Every step below is the session's: when the PR's
-merge class is `auto`, the session enables auto-merge after the reviewer's `ready`; a
-`human` adoption (a source-owned workflow, a changed template answer, a protected path, a
-build or install route) waits for Johannes (ADR-0018, amendment (e); the merge classes
-are in the README of the gates repository, https://github.com/xippios/sdk-gates). A
-release tag is not part of an adoption. The PR meets the definition of done,
+nothing more (ADR-0018, amendment (d)). Every step below is the session's; the merge is
+not: the PR merges under the rulesets of `main` on the reviewer's approval. A release tag
+is not part of an adoption. The PR meets the definition of done,
 https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and the
 reviewer judges it against
 https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
@@ -111,13 +108,5 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
 
 12. **The PR.** `gh pr create` from `chore/template-update-<tag>`, its body as the
     definition of done says for an adoption PR, with the core change named for each
-    deleted workaround. After the reviewer's `ready`, if the `merge-class` check says
-    `auto`, the session enables auto-merge here, as `.claude/settings.json` allows;
-    every other `gh pr merge` meets the permission prompt:
-
-    ```bash
-    gh pr merge --auto --squash -R xippios/sdk-usda-esr <number>
-    ```
-
-    GitHub merges once `ci` is green and review threads are resolved. A `human`
-    adoption waits for Johannes (ADR-0018, amendment (e)).
+    deleted workaround. Then stop: the PR merges under the rulesets of `main` on the
+    reviewer's approval and a green `ci`.

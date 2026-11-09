@@ -161,8 +161,7 @@ compares, so a live test asserts on shapes and counts, never on a raw payload.
 - `ruff` leaves `docs/` alone; never reformat the upstream snapshot.
 - Template and core updates: a new sdk-template release, and the core minor it carries,
   arrive in one adoption PR, `chore/template-update-<tag>`, before the next release
-  (conventions §15); `/adopt-release <tag>` walks it, and when its merge class is `auto`
-  the session enables auto-merge after the reviewer's `ready` (ADR-0018, amendment (e)).
+  (conventions §15); `/adopt-release <tag>` walks it.
   `uvx copier update` re-renders the files the template owns (this file,
   `tests/conftest.py` and `tests/test_family.py` among them; answers are in
   `.copier-answers.yml`) and never overwrites the files this package fills:
@@ -191,10 +190,9 @@ compares, so a live test asserts on shapes and counts, never on a raw payload.
 - Never edit `docs/upstream/` by hand; `/refresh-upstream` fetches, a PR reviews.
 - Never add `src/xippios/__init__.py`, nor an `__init__.py` at a level between it and
   the package (the provider level of a nested import path).
-- Never tag, merge, release, force-push, or touch `gh secret`: a release PR's merge tags
-  through `publish.yml`, and Johannes approves the `pypi` run. The one exception is
-  enabling auto-merge on a `chore/template-update*` or `chore/release-*` PR whose merge
-  class is `auto`, after the reviewer's `ready` (ADR-0018, amendment (e)).
+- Never tag, merge, release, force-push, or touch `gh secret`: a pull request merges under
+  the rulesets of `main` on the reviewer's approval, a release PR's merge tags through
+  `publish.yml`, and Johannes approves the `pypi` run.
 
 ## When something is unclear
 

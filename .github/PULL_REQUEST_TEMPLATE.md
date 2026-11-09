@@ -40,12 +40,7 @@ with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
 adoption itself makes dead (ADR-0018, amendment 2026-10-26). An adoption PR is a
-`chore/template-update*` PR: when its merge class is `auto` the session enables
-auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is green and
-review threads are resolved; a `human` adoption (a source-owned workflow, a changed
-template answer, a protected path, a build or install route) waits for Johannes
-(ADR-0018, amendment (e); the merge classes are in the README of the organisation's
-`.github` repository).
+`chore/template-update*` PR.
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
@@ -58,7 +53,7 @@ template answer, a protected path, a build or install route) waits for Johannes
 
 ### Process
 - [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
-- [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR when its merge class is `auto`, after the reviewer's `ready`, ADR-0018, amendment (e)
+- [ ] no tag, release, merge, or secret operation performed by the session
 - [ ] assumptions and open questions listed in the PR description
 - [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
 - [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each backed by a convention, an ADR, a coordination rule, a decision of Johannes's with its date, or `gap, row N`; a line backed by none of these is a blocking finding

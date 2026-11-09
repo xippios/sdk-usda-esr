@@ -1,0 +1,10 @@
+# Written by sdk-template from its `human` answer, not by `coordinate sync` (C70 as amended by
+# coordinate-core#122 and #167): the human paths of a member, each owned by the human, whose review a
+# change to them needs. `copier update` renders the file again, so a change goes to the answer or to
+# the template, never to this copy.
+/.github/** @jdidaskalu
+/CLAUDE.md @jdidaskalu
+/.claude/** @jdidaskalu
+/rules/** @jdidaskalu
+/pyproject.toml @jdidaskalu
+/.copier-answers.yml @jdidaskalu

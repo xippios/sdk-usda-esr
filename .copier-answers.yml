@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.3.0
+_commit: v0.3.1
 _src_path: https://github.com/xippios/sdk-template.git
 api_base_url: https://api.fas.usda.gov
 api_key_env: DATA_GOV_API_KEY
@@ -9,6 +9,7 @@ core_git_ref: ''
 core_version: 0.3.0
 gateway: api.data.gov
 has_files: false
+human: jdidaskalu
 import_path: usda.esr
 rate_limit_burst: 1
 rate_limit_per_minute: 60

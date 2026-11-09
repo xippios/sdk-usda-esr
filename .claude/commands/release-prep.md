@@ -7,11 +7,11 @@ at the `pypi` environment until Johannes approves the run. No session and no hum
 the tag.
 
 A release PR changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`,
-`CLAUDE.md` and `docs/handover.md`, the subset of conventions §12; the `merge-class` check
-makes any other changed path `human`. The sibling check is the template's and installs
-the siblings from PyPI, so a release no longer touches it. What a release needs beyond
-the subset is a PR of its own, merged before this one: the removal of a core pin (step 1)
-and the refresh of packaged reference data (step 2). The PR meets the definition of done,
+`CLAUDE.md` and `docs/handover.md`, the subset of conventions §12. The sibling check is
+the template's and installs the siblings from PyPI, so a release no longer touches it.
+What a release needs beyond the subset is a PR of its own, merged before this one: the
+removal of a core pin (step 1) and the refresh of packaged reference data (step 2). The
+PR meets the definition of done,
 https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and the
 reviewer judges it against
 https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
@@ -49,13 +49,9 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
 8. Run the full suite: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest && uv run pre-commit run --all-files`.
    If live tests can run (`XIPPIOS_LIVE_TESTS=1`), run them too,
    `uv run pytest -m live --tb=short`, and report the result.
-9. Open the PR, its body as the definition of done says. After the reviewer's `ready`,
-   if the `merge-class` check says `auto`, the session enables auto-merge here, as
-   `.claude/settings.json` allows; every other `gh pr merge` meets the permission
-   prompt: `gh pr merge --auto --squash -R xippios/sdk-usda-esr <number>`. GitHub
-   merges once `ci` is green and review threads are resolved; a `human` release waits
-   for Johannes (ADR-0018, amendment (e)). Then stop and report: the merge tags
-   `v<version>` through `publish.yml`, and Johannes approves the `pypi` run in the
+9. Open the PR, its body as the definition of done says. It merges under the rulesets
+   of `main` on the reviewer's approval and a green `ci`. Then stop and report: the merge
+   tags `v<version>` through `publish.yml`, and Johannes approves the `pypi` run in the
    Actions tab. A first release needs the PyPI pending publisher (owner xippios,
    repository sdk-usda-esr, workflow `publish.yml`, environment `pypi`) before
    that approval; name it in the report if the release is `0.1.0`.

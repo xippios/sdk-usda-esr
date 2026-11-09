@@ -21,3 +21,7 @@ build/
 # editors
 .idea/
 .vscode/
+
+# copier's leftovers: the reject of a hunk an update could not apply, and an .orig
+*.rej
+*.orig
