@@ -24,8 +24,8 @@
 # one has no siblings to find, and the check proves the dependencies alone.
 #
 #   XIPPIOS_SIBLINGS  one requirement per line, replacing the discovered siblings: a
-#                     sibling not on PyPI yet, from its checkout in the workspace or from
-#                     git; set and empty, the wheel is installed alone
+#                     sibling not on PyPI yet, from its checkout beside this repository or
+#                     from git; set and empty, the wheel is installed alone
 #   GITHUB_TOKEN      where set, authenticates the listing of the organisation's
 #                     repositories (siblings.yml passes the job's read-only token); the
 #                     listing alone sees it

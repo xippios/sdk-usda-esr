@@ -1,0 +1,49 @@
+# The organization's checks of a pull request: reusable workflows of xippios/.github, called
+# here as jobs as the README of that repository lays them out. Both are called at @main, the
+# one reference to another repository that is not pinned, since the organization's checks
+# read their own main (conventions §13).
+#
+# `conventions`, check `conventions / conventions`, reviews a pull request against the
+# documents this repository's README links under `## Documents`, read from main. The
+# variable CONVENTIONS_REVIEW, the repository's over the organization's, sets its mode:
+# `release`, the default, reviews a release pull request, `all` reviews every pull request
+# and `off` none. The callee tells a release pull request by its own condition, whose
+# contract the README of xippios/.github states, and under `release` and `off` it skips
+# any other: no runner starts, no API call is made, no notice is left, and the check
+# reports as skipped and passing. The job grants what the review asks,
+# `pull-requests: write` for its one comment and `checks: read` for the head's checks, and
+# passes it one secret by name.
+#
+# `adr-index`, check `adr-index / adr-index`, runs this repository's own
+# `scripts/adr_index.py --check`, which fails while `docs/adr.md` or `docs/adr.json` is not
+# what the script writes from the records in `docs/adr/`, and fails itself while two records
+# take one number. It takes no input and no secret.
+#
+# The workflow runs on the opening, a push, a reopening and an edit of a pull request: the
+# review reads the title and the description, and a change of the base arrives as `edited`.
+# It does not run on `labeled`, and neither job has a condition of its own: GitHub reports a
+# head's checks from its newest run, and a label set at the opening started a run that
+# skipped both jobs here. A label set after the opening counts from the next push or edit.
+name: Organization
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    uses: xippios/.github/.github/workflows/conventions.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: read
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  adr-index:
+    uses: xippios/.github/.github/workflows/adr-index.yml@main
+    permissions:
+      contents: read
