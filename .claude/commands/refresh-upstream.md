@@ -1,21 +1,19 @@
 Refresh the upstream documentation snapshot for USDA FAS Export Sales Reporting: $ARGUMENTS
 
 The snapshot in `docs/upstream/` is the reference for every endpoint wrapper
-(ADR-0003). It is refreshed deliberately, by PR, so changes are visible as diffs, and
-captured by `scripts/refresh_upstream.py`, so that a refresh is reproducible. The PR
-meets the definition of done,
-https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and the
-reviewer judges it against
-https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
+(ADR-0003). It is refreshed deliberately, by pull request, so changes are visible as
+diffs (conventions §3), and captured by `scripts/refresh_upstream.py`, so that a refresh
+is reproducible. The change meets sdk-core's definition of done,
+https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and its review
+checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
 
-1. Work on a branch `docs/upstream-<yyyy-mm-dd>`.
-2. **Compare first.** Where the script is filled, `uv run scripts/refresh_upstream.py
+1. **Compare first.** Where the script is filled, `uv run scripts/refresh_upstream.py
    --check` fetches everything and compares it with the snapshot, writing nothing: exit
    0 means upstream serves what the snapshot records, `Fetched` aside, and there is
    nothing to refresh unless the arguments name new pages; exit 1 names the files that
    differ. A capture script of the source's own shape without `--check` is run as its
-   docstring says, and the diff in step 5 does the comparing.
-3. **Fill the script where it is still the template's skeleton** (it refuses to run
+   docstring says, and the diff in step 4 does the comparing.
+2. **Fill the script where it is still the template's skeleton** (it refuses to run
    until `PAGES` or `SPEC_URL` is set), once, then keep it in step with upstream:
    - `PAGES`: the documentation pages from https://apps.fas.usda.gov/opendatawebV2/ and any the arguments
      name, each with its file under `docs/upstream/`, the names stable across refreshes so
@@ -46,22 +44,24 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
      every run and stops, before writing, when one states something not recorded.
    - `CAPTURE`: how the snapshot is captured, a few sentences for `FETCHED.md`; and the
      module docstring, which says what the script captures.
-4. **Capture.** `uv run scripts/refresh_upstream.py` fetches every page before it writes
+3. **Capture.** `uv run scripts/refresh_upstream.py` fetches every page before it writes
    anything, then writes the files and regenerates `docs/upstream/FETCHED.md` (conventions
    §3, ADR-0003): `Fetched`, the UTC time of the run in ISO 8601 with an explicit `Z`;
    under Attribution the statements as recorded, or that the documentation states none;
    one row per file and per page recorded without a file, with its HTTP status, the size
    and sha256 of the body as fetched, and ETag and Last-Modified where sent. Read the
    result.
-5. Diff against the previous snapshot: `git diff --stat docs/upstream/` and read the
-   changes. Summarise in the PR description what changed upstream: new or removed
+4. Diff against the previous snapshot: `git diff --stat docs/upstream/` and read the
+   changes. Summarise in the pull request what changed upstream: new or removed
    operations, renamed or newly required parameters, changed semantics, and which
    wrappers in `src/xippios/usda/esr/api/` are affected.
-6. Do not change any code in this PR, with one exception: `scripts/refresh_upstream.py`,
+5. Change no code with the snapshot, with one exception: `scripts/refresh_upstream.py`,
    the capture script, may change with the snapshot it captures, and so may the
    converter's pin in the dev group (`pyproject.toml`, `uv.lock`). If wrappers must
    follow, list them as follow-up issues or `/add-endpoint` runs.
+6. A changelog fragment under `changelog/`, as `changelog/README.md` lays it out, says
+   what the refreshed snapshot records that changed upstream.
 7. Stage the snapshot (`git add docs/upstream scripts`) before
    `uv run pre-commit run --all-files`, which checks only the files in git's index: an
-   unstaged new file would escape the secret scan.
-8. Open the PR, its body as the definition of done says. Do not merge.
+   unstaged new file would escape the secret scan. Then run the other checks,
+   `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.

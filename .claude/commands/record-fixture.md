@@ -1,17 +1,21 @@
 Record a fixture for USDA FAS Export Sales Reporting: $ARGUMENTS
 
-Expected arguments: `<endpoint> <case> [key=value ...]`: the upstream operation the wrapper
-is named after, a short name for the case, and the request parameters, for example
+Expected arguments: `<wrapper> <case> [key=value ...]`: the endpoint wrapper the fixture
+serves, a short name for the case, and the request parameters, for example
 `get_example by_year year=2024`.
 
 Fixtures are recorded through the real client, never typed in by hand (conventions §10).
-The file lands at `tests/fixtures/<endpoint>/<case>.json` with credentials scrubbed. It
-rides in the PR of the task it tests: the definition of done,
-https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, lists its
-checks, and the reviewer judges them against
-https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
+The file lands at `tests/fixtures/<wrapper>/<case>.json` with credentials scrubbed: the
+directory is named after the wrapper function (conventions §2), and `<case>` is
+lowercase snake case for the words you choose, an upstream code inside it written as
+upstream writes it (`CH_2026_8.json`). A fixture recorded through a task rather than a
+wrapper, such as a download's metadata or a helper's answer, lives under the task's
+name. It rides in the change of the task it tests, which meets sdk-core's definition of
+done, https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and its
+review checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md:
+steps 4 to 6 are what they check in a fixture.
 
-1. Confirm `DATA_GOV_API_KEY` is set in the environment (`[ -n "${DATA_GOV_API_KEY}" ] && echo ok`); never print its value.
+1. The key comes from the environment, `DATA_GOV_API_KEY`: never read, test or print that variable, not even to see whether it is set. The client guards the key itself: where the variable is unset or empty, it refuses on its first request, before anything is sent, with a `ConfigError` that names the variable, never a value.
 
 2. Find the request path and parameters for the endpoint in `docs/upstream/` and in the
    wrapper under `src/xippios/usda/esr/api/`. Use the wrapper's parameter names.
@@ -27,11 +31,15 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
    fixture = record_sync(
        client,
        "<request path>",  # relative to the base URL, as in the wrapper
-       fixture_path(Path("tests/fixtures"), "<endpoint>", "<case>"),
+       fixture_path(Path("tests/fixtures"), "<wrapper>", "<case>"),
        params={...},  # the parameters from the arguments
    )
    print(fixture.response.status, fixture.request.url)
    ```
+
+   A wrapper that routes to a second base of the upstream passes that base's absolute URL
+   in place of the request path, as the wrapper does; the fixture's directory is still
+   the wrapper's.
 
    Error cases (a 404 for an unknown code, for instance) are worth recording too; the
    recorder keeps them instead of raising. A source whose upstream counts a quota records
@@ -49,7 +57,7 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
    upstream sends them, and, for a cut body, the whole file's `original_bytes` and
    `sha256` (step 5).
 
-4. Check the file: `grep -niE 'api[_-]?key|token|secret|authorization' tests/fixtures/<endpoint>/<case>.json`
+4. Check the file: `grep -niE 'api[_-]?key|token|secret|authorization' tests/fixtures/<wrapper>/<case>.json`
    must print nothing but `REDACTED` values. A match in upstream's own text (a word such
    as `SECRETARY` in a name or a description) is no credential: read every match by eye.
    If a credential slipped through, delete the file and stop: report which field leaked
@@ -79,7 +87,7 @@ https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
    `tests/fixtures/files/README.md` (ADR-0020). A test on a cut fixture or a sample
    asserts the shape, never a size.
 
-6. Reference it from a test with the `replay_fixture("<endpoint>", "<case>")` fixture.
+6. Reference it from a test with the `replay_fixture("<wrapper>", "<case>")` fixture.
    Stage it (`git add tests/fixtures`) before `uv run pre-commit run --all-files`, which
    scans only the files in git's index: an unstaged fixture escapes detect-secrets. When
    detect-secrets flags a recorded HTML error page (a site's "Page not found" carries

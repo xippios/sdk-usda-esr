@@ -1,10 +1,12 @@
-# Written by sdk-template from its `human` answer, not by `coordinate sync` (C70 as amended by
-# coordinate-core#122 and #167): the human paths of a member, each owned by the human, whose review a
-# change to them needs. `copier update` renders the file again, so a change goes to the answer or to
-# the template, never to this copy.
+# The code owners of this repository: GitHub asks the owner named on a path to review every
+# pull request that changes a file under it. The paths below steer how the repository is
+# built, checked and worked on: `.github/`, its workflows among them, `CLAUDE.md` and
+# `.claude/`, the instructions and commands for Claude Code, `pyproject.toml`, its manifest,
+# and `.copier-answers.yml`, the answers it was generated from. sdk-template renders the
+# file from its `human` answer, and `copier update` renders it again, so a change goes to
+# the answer or to the template, never to this copy.
 /.github/** @jdidaskalu
 /CLAUDE.md @jdidaskalu
 /.claude/** @jdidaskalu
-/rules/** @jdidaskalu
 /pyproject.toml @jdidaskalu
 /.copier-answers.yml @jdidaskalu

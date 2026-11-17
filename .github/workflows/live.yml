@@ -30,8 +30,10 @@ jobs:
           enable-cache: true
       - run: uv sync --all-extras --frozen
       # --tb=short: a failing test's frame arguments, a raw upstream payload among them,
-      # stay out of a log that is public (conventions §10).
-      - run: uv run pytest -m live --tb=short
+      # stay out of a log that is public (conventions §10). --assert=plain: a failed
+      # assertion prints the line and AssertionError alone, never the values it compared,
+      # a record of the upstream among them, here or in the summary of -ra.
+      - run: uv run pytest -m live --tb=short --assert=plain
         # The key, from the org secret, for this step only: checkout, setup-uv and uv sync
         # never see it.
         env:
