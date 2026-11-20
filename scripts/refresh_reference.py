@@ -33,8 +33,10 @@ every caller are packaged; a multi-tenant source packages no tenant data
 The package's client sends each request once, ``RetryPolicy(max_attempts=1)``, so a 5xx
 or a 429 spends no second call of the key's quota: a run that fails writes nothing and is
 run again. After the fetches it prints the requests it sent and the quota left that the
-gateway reported in ``QUOTA_HEADER``, a failed run's too, so a run is counted exactly
-against the release's budget of keyed calls. ``--only <list> [<list> ...]`` fetches the
+gateway reported in ``QUOTA_HEADER``, a failed run's too, so a run is counted against the
+release's budget of keyed calls: each request by its answer, and the one that ends a run in
+a transport error, which may have reached the gateway, as a read timeout's does, as sent
+too, so the count is never below what the run spent. ``--only <list> [<list> ...]`` fetches the
 named lists of ``PACKAGED_LISTS`` alone, writes their files and keeps every other list's
 file as it is, as a change that packages a new list does; ``enums.py`` is then regenerated
 from all of them, so every list it keeps must be packaged already, which is checked
@@ -56,7 +58,14 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from xippios.core import AsyncClient, PackagedList, RetryPolicy, UpstreamModel, sync
+from xippios.core import (
+    AsyncClient,
+    PackagedList,
+    RetryPolicy,
+    TransportError,
+    UpstreamModel,
+    sync,
+)
 from xippios.core.reference import id_name_pairs, render_enums
 
 from xippios.usda.esr import api
@@ -117,12 +126,13 @@ class Meter:
     The client's ``observe`` hook, which core calls with every response from the wire. It
     calls the hook the client had first, the gateway's quota policy (sdk-core ADR-0037), and
     keeps the last count that the gateway sent in ``QUOTA_HEADER``. A request is counted by
-    its response: with no retry each has one, but for one that fails in transport, whose
-    error ends the run.
+    its response: with no retry each has one, but for one that fails in transport, which
+    ``metered`` counts in ``sent`` and ``unanswered`` when its error ends the run.
     """
 
     def __init__(self, observe: Callable[[httpx.Response], None] | None) -> None:
         self.sent = 0
+        self.unanswered = 0
         self.left: int | None = None
         self._observe = observe
 
@@ -138,7 +148,12 @@ class Meter:
     def report(self) -> str:
         """The requests sent and the quota left, as the gateway last reported it, one line."""
         left = "not reported" if self.left is None else f"{self.left} ({QUOTA_HEADER})"
-        return f"requests sent: {self.sent}; quota left: {left}"
+        unanswered = (
+            f" ({self.unanswered} ended in a transport error, counted as sent)"
+            if self.unanswered
+            else ""
+        )
+        return f"requests sent: {self.sent}{unanswered}; quota left: {left}"
 
 
 @contextmanager
@@ -146,14 +161,20 @@ def metered(target: AsyncClient) -> Iterator[Meter]:
     """``target`` for the block: one attempt per request, each counted, then the report.
 
     ``RetryPolicy(max_attempts=1)`` keeps a 5xx or a 429 from spending a second call of the
-    key's quota. ``target``'s configuration is restored after the block, and the report is
-    printed, a failed run's too.
+    key's quota. A request that fails in transport has no response for ``Meter`` to count,
+    and with one attempt its ``TransportError`` ends the block: it is counted as sent, since
+    it may have reached the gateway. ``target``'s configuration is restored after the block,
+    and the report is printed, a failed run's too.
     """
     configured = target.config
     meter = Meter(configured.observe)
     target.config = replace(configured, retry=RetryPolicy(max_attempts=1), observe=meter)
     try:
         yield meter
+    except TransportError:
+        meter.sent += 1
+        meter.unanswered += 1
+        raise
     finally:
         target.config = configured
         print(meter.report())  # noqa: T201
