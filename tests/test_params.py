@@ -42,7 +42,7 @@ FETCHED = {
     "unitsOfMeasure": datetime(2026, 10, 28, 19, 19, 53, tzinfo=UTC),
 }
 """The packaged lists' ``fetched``, each list's UTC time of the refresh to the second, as
-``PackagedList.write`` writes it (ADR-0022, amendment 2026-10-27, point 1)."""
+``PackagedList.write`` writes it (sdk-core ADR-0041, decision 4)."""
 
 
 def _recorded(wrapper: str, case: str) -> list[dict[str, object]]:

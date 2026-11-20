@@ -78,7 +78,7 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
 
 def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
     """A filtered tool names its filter in its cap's note even when its answer fits, as
-    ``list_commodities`` names ``search`` (conventions §8, ADR-0016)."""
+    ``list_commodities`` names ``search`` (conventions §8, sdk-core ADR-0038)."""
     cap = tasks.MCP_CAPS["get_release_dates"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
@@ -123,7 +123,7 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     assert sent_urls(route) == [f"{EXPORTS}/1201/allCountries/marketYear/2024"]
     assert result.meta.endpoint == "ESRData_GetAllCountriesData"
     assert result.meta.request == {"commodity_code": 1201, "market_year": 2024}, (
-        "country_code left None is left out (ADR-0022, rule 3)"
+        "country_code left None is left out (sdk-core ADR-0041, decision 3)"
     )
     assert len(result.data) == 498
     assert len({r.country_code for r in result.data}) == 11
@@ -182,7 +182,7 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     earlier = tasks.get_release_dates(since=A_SECOND_EARLIER)
     assert sent_urls(route) == [RELEASE_DATES] * 3, "one request each, filtered or not"
     assert len(whole.data) == 44
-    assert whole.meta.request == {}, "since left None is left out (ADR-0022, rule 3)"
+    assert whole.meta.request == {}, "since left None is left out (sdk-core ADR-0041, decision 3)"
     assert same.data == [], "a release at exactly since is not newer"
     assert same.meta.request == {"since": RELEASED}
     assert (same.meta.vintage, same.meta.published_at, same.meta.published_at_naive) == (
@@ -469,7 +469,7 @@ async def test_every_country_over_mcp_is_cut_with_a_note_naming_country_code(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's bounds, and
-    the cap's note names the tool's filter, ``country_code`` (conventions §8, ADR-0016)."""
+    the cap's note names the tool's filter, ``country_code`` (conventions §8, sdk-core ADR-0038)."""
     replay_fixture(ALL, "cottonseed_2024")
     payload = await mcp_call(
         server, "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024}
@@ -618,8 +618,8 @@ def test_release_dates_since_over_http(
 def test_quantities_are_json_numbers_over_http(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    """ADR-0008: ``Decimal`` in Python, a JSON number on the wire, never a string; and the
-    package's refusal of an unknown code is a 422 problem."""
+    """``Decimal`` in Python, a JSON number on the wire, never a string (sdk-core ADR-0031,
+    decision 1); and the package's refusal of an unknown code is a 422 problem."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 

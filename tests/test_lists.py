@@ -1,13 +1,13 @@
 """The four list tasks answer from the packaged lists and never call upstream.
 
 The packaged files were written from the same answers as those recorded in
-``tests/fixtures/<wrapper>/all.json`` (``reference/README.md``), so a task returning
-exactly the records parsed from that recording proves the package answers what upstream
-answered. Every test here runs with ``respx`` active: a request no route matches fails
-loudly, and each test checks that the tasks sent none. Where the recording is mounted, a
-call would succeed silently; its route's call count shows that none is made. ``meta`` is
-core's ``PackagedList.meta`` (ADR-0022, rule 1): ``retrieved_at`` the list's fetch time,
-``vintage`` ``None``, and ``request`` without the filters left ``None``.
+``tests/fixtures/<wrapper>/all.json`` (``reference/README.md``), so a task returning exactly
+the records parsed from that recording proves the package answers what upstream answered.
+Every test here runs with ``respx`` active: a request no route matches fails loudly, and
+each test checks that the tasks sent none. Where the recording is mounted, a call would
+succeed silently; its route's call count shows that none is made. ``meta`` is core's
+``PackagedList.meta`` (sdk-core ADR-0041, decision 1): ``retrieved_at`` the list's fetch
+time, ``vintage`` ``None``, and ``request`` without the filters left ``None``.
 """
 
 import dataclasses
@@ -105,7 +105,7 @@ async def test_list_answers_the_recorded_records_without_a_call(
     )
     assert result.meta.vintage is None, "a fetch date is not a release identifier"
     assert result.meta.published_at is None
-    assert result.meta.total is None, "upstream reports no count (ADR-0012)"
+    assert result.meta.total is None, "upstream reports no count (sdk-core ADR-0034)"
     assert result.meta.request == {}, "a filter left None is left out"
 
 
@@ -136,7 +136,7 @@ async def test_list_tool_end_to_end(
 def test_the_list_caps() -> None:
     """``list_countries`` has rows of its own and a note naming both filters;
     ``list_commodities`` keeps the family's bounds with a note naming ``search``; the
-    filterless lists have no entry (conventions §8, ADR-0016; Johannes, 2026-10-25)."""
+    filterless lists have no entry (conventions §8, sdk-core ADR-0038; Johannes, 2026-10-25)."""
     countries = tasks.MCP_CAPS["list_countries"]
     assert (countries.max_rows, countries.max_bytes) == (250, DEFAULT_BYTES)
     assert countries.note is not None

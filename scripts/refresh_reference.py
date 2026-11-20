@@ -27,8 +27,8 @@ key, so ``DATA_GOV_API_KEY`` must be in the environment; run from the repository
 
 Four requests against api.data.gov's hourly quota, shared with every package using the
 key. Then update the times in ``reference/README.md``. Only lists that are the same for
-every caller are packaged; a multi-tenant source packages no tenant data (sdk-core
-ADR-0036), which ESR is not.
+every caller are packaged; a multi-tenant source packages no tenant data
+(sdk-core ADR-0036), which ESR is not.
 
 The package's client sends each request once, ``RetryPolicy(max_attempts=1)``, so a 5xx
 or a 429 spends no second call of the key's quota: a run that fails writes nothing and is

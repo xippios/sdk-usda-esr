@@ -78,8 +78,8 @@ def test_fetched_md_names_no_observed_md_while_there_is_none() -> None:
 
 def test_fetched_md_cites_core_s_standing_record() -> None:
     """The two sentences that cite the record of upstream fidelity cite it as it stands at
-    sdk-core 0.4.0, ADR-0028, which superseded ADR-0003; ``FETCHED.md`` takes them at the
-    next capture (conventions §15)."""
+    sdk-core 0.4.0, sdk-core ADR-0028, which superseded sdk-core ADR-0003; ``FETCHED.md``
+    takes them at the next capture (conventions §15)."""
     text = " ".join(render(observed=False).split())
     assert text.count("(sdk-core ADR-0028)") == 2
     assert "ADR-0003" not in text

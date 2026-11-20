@@ -6,11 +6,11 @@ named as upstream names them in snake_case. Where upstream spells a field differ
 adapters would serialise, handing agents the upstream spelling. Within-source hygiene only:
 dates become ``datetime.date``, numbers become numbers, upstream enumerations become
 ``StrEnum``, and an enumeration of integer ids ``IntEnum``. No cross-source normalisation
-(ADR-0003): an upstream concept stays an upstream concept.
+(sdk-core ADR-0028): an upstream concept stays an upstream concept.
 
 These read models stay faithful, documented personal identifiers included (``ssn``,
 ``iban`` and their like). The projections tasks return leave those out, a write task does
-not echo one in ``meta.request``, and fixtures never carry their values (ADR-0017).
+not echo one in ``meta.request``, and fixtures never carry their values (sdk-core ADR-0017).
 
 The snapshot types every ESR response as ``object`` and defines no schemas
 (``definitions`` is empty in ``docs/upstream/openapi/portal-document.json``). The record
@@ -136,9 +136,9 @@ class DataReleaseInfo(UpstreamModel):
     parsed to ``date`` (pydantic accepts a zero time for a date and refuses any other, so
     a time upstream starts sending would fail the answer rather than be dropped).
     ``releaseTimeStamp`` (``"2026-10-22T08:30:42.67"``) is a naive ``datetime``: the
-    snapshot names no time zone, so none is invented. ``get_release_dates`` gives the
-    newest one as ``meta.published_at``, flagged ``published_at_naive``, and its text as
-    upstream prints it, ``release_time_stamp_text``, as ``meta.vintage`` (ADR-0022, rule
+    snapshot names no time zone, so none is invented. ``get_release_dates`` gives the newest
+    one as ``meta.published_at``, flagged ``published_at_naive``, and its text as upstream
+    prints it, ``release_time_stamp_text``, as ``meta.vintage`` (sdk-core ADR-0041, decision
     2). The text is kept beside the parsed value in a private attribute, read through the
     property ``release_time_stamp_text`` and serialised by no adapter: a record's fields
     over MCP and HTTP are the first five below, the text not among them.
@@ -200,12 +200,12 @@ class CommodityData(UpstreamModel):
     ``get_country_data/wheat_white_canada_2024`` (54 records) and
     ``get_all_countries_data/cottonseed_2024`` (498 records, 11 destinations).
 
-    The eight quantities arrive as JSON integers in the unit ``unit_id`` names (metric
-    tons for wheat) and become ``Decimal`` (ADR-0008, the package's decision): every
-    recorded value is a whole number, and a ``Decimal`` keeps any fraction upstream may
-    send; the adapters serialise them as JSON numbers. The net sales can be negative
-    (``currentMYNetSales`` down to -1615 in the cottonseed recording). Their names and
-    meanings are ESR's and are not explained by the snapshot; nothing is computed,
+    The eight quantities arrive as JSON integers in the unit ``unit_id`` names (metric tons
+    for wheat) and become ``Decimal`` (the package's decision; sdk-core ADR-0031, decision
+    1): every recorded value is a whole number, and a ``Decimal`` keeps any fraction
+    upstream may send; the adapters serialise them as JSON numbers. The net sales can be
+    negative (``currentMYNetSales`` down to -1615 in the cottonseed recording). Their names
+    and meanings are ESR's and are not explained by the snapshot; nothing is computed,
     converted or re-based here.
 
     Attributes:
@@ -253,7 +253,7 @@ class ExportField(StrEnum):
     # record's order, and the member names its attribute names in upper case; a test keeps
     # them equal. get_top_destinations takes one as ``field``, so the MCP and HTTP schemas
     # list the eight and refuse any other before a call (Johannes, 2026-10-25; conventions
-    # §3, ADR-0003). It lives next to the record, not in enums.py, which
+    # §3, sdk-core ADR-0028). It lives next to the record, not in enums.py, which
     # scripts/refresh_reference.py renders whole from the packaged lists.
 
     WEEKLY_EXPORTS = "weeklyExports"

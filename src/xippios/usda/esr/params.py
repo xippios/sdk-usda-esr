@@ -1,17 +1,17 @@
 """Packaged ESR reference lists and the argument checks built on them (conventions §3).
 
 The four small, stable lists ESR publishes, commodities, countries, regions and units of
-measure, ship inside the package under ``reference/`` so argument checks and lookups need
-no network call. ``scripts/refresh_reference.py`` writes them through the ``api/``
-wrappers, never by hand, and regenerates the ``UnitId`` enum in ``enums.py``;
-``reference/README.md`` carries the provenance of every file. Each file keeps upstream's
-records verbatim, under upstream's field names, and ``PackagedList.load(PACKAGE, name)``
-from ``xippios.core`` reads one (ADR-0022). A code a list lacks is refused with core's
+measure, ship inside the package under ``reference/`` so argument checks and lookups need no
+network call. ``scripts/refresh_reference.py`` writes them through the ``api/`` wrappers,
+never by hand, and regenerates the ``UnitId`` enum in ``enums.py``; ``reference/README.md``
+carries the provenance of every file. Each file keeps upstream's records verbatim, under
+upstream's field names, and ``PackagedList.load(PACKAGE, name)`` from ``xippios.core`` reads
+one (sdk-core ADR-0041, decision 5). A code a list lacks is refused with core's
 ``UnknownCode``, naming the nearest codes, ``_closest``: by number through core's
 ``nearest``, then by ESR's own pass on the digits.
 
 Codes are integers, as the snapshot types the path parameters (``int32``) and as every
-recorded record carries them (Johannes, 2026-10-25; ADR-0003): a check takes an ``int``
+recorded record carries them (Johannes, 2026-10-25; sdk-core ADR-0028): a check takes an ``int``
 and refuses anything else, ``True`` included.
 
 Refresh policy: ``/refresh-reference-data`` runs inside ``/release-prep``, and whenever
