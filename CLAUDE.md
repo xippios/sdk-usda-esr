@@ -22,9 +22,11 @@ semantics; a wrapper is never written from memory of the API.
 
 `_client.py` builds on `xippios.core.data_gov.Gateway` (family review C14, sdk-core ADR-0023), which
 holds what every source behind api.data.gov shares: the `X-Api-Key` auth, the one
-`QuotaPolicy` per process on `x-ratelimit-*`, and the `API_KEY_*`, `OVER_RATE_LIMIT` and
-`NOT_FOUND` mappings with host-free messages. `classify` asks `gateway.classify` first and
-keeps ESR's own answers after it, the empty 404 and the 400 below.
+`QuotaPolicy` per process on `x-ratelimit-*`, the `API_KEY_*`, `OVER_RATE_LIMIT` and
+`NOT_FOUND` mappings with host-free messages, and, since `Gateway(SOURCE, data_path=DATA_PATH)`
+names the exports paths, ESR's empty 404 there as core's `NoDataForYear`
+(https://github.com/xippios/sdk-core/issues/106). `classify` asks `gateway.classify` first
+and keeps ESR's own answers after it, an empty 404 elsewhere and the 400 below.
 
 ## Upstream behaviour established by fixtures
 
@@ -78,8 +80,9 @@ from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/f
   start in June, August, September, October or January, per the recorded release list).
 - Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
   one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
-  bytes, recorded 2026-10-28), mapped to `errors.NoDataForYear`, a `NotFoundError` (only
-  that answer on an exports path). `get_weekly_series` skips such a year inside its range,
+  bytes, recorded 2026-10-28), mapped by the gateway to core's
+  `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` (only that answer on an exports
+  path, `_client.DATA_PATH`). `get_weekly_series` skips such a year inside its range,
   as sdk-usda-psd's `get_time_series` does, and a released year answering `[]` adds no
   rows (Johannes, 2026-10-28).
   Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
@@ -113,7 +116,8 @@ src/xippios/usda/esr/
   __init__.py      public surface: __version__ and re-exported task functions
   py.typed         PEP 561 marker; consumers' mypy --strict needs it
   _version.py      __version__ from distribution metadata
-  _client.py       the configured client (base URL, key, rate limit, classify, quota)
+  _client.py       the configured client (base URL, key, rate limit, classify, quota) and
+                   ENV_VARS, the variables the package reads, for a host
   models.py        pydantic models mirroring upstream payloads (UpstreamModel); by the
                    family's precedent also an enumeration written by hand, for a value set
                    upstream documents and no packaged list renders
@@ -121,17 +125,17 @@ src/xippios/usda/esr/
                    named after it in snake case without the ESRData_ prefix: get_country_data
   tasks.py         task functions; __all__ is what the adapters register, MCP_CAPS any
                    per-tool result caps
-  mcp.py           xippios-usda-esr-mcp entry point
+  mcp.py           xippios-usda-esr-mcp entry point: build() the tool set, server
   http.py          FastAPI router
-  errors.py        NoDataForYear, ESR's empty 404 for a market year (UnknownCode is core's)
   params.py        packaged lists (PACKAGED_LISTS, read with PackagedList.load) and the code
                    and year checks
   enums.py         IntEnum UnitId from the packaged unitsOfMeasure; never edited by hand
   reference/       packaged code lists (JSON) plus README with provenance
 scripts/
   refresh_upstream.py    regenerates the docs/upstream/ snapshot, stdlib only, no key
-  refresh_reference.py   fetches the packaged lists through api/ (four keyed calls) and
-                         regenerates enums.py; --render-only renders it without a call
+  refresh_reference.py   fetches the packaged lists through api/ (four keyed calls, each
+                         sent once and counted, with the quota left), --only some of them,
+                         and regenerates enums.py; --render-only renders it without a call
   adr_index.py           writes docs/adr.md and docs/adr.json from the records in docs/adr/;
                          --check fails while either is stale
 tests/
@@ -146,6 +150,9 @@ tests/
   test_api.py      replay tests for the endpoint wrappers
   test_client.py   wiring, classify on recorded error bodies, core's quota policy on a 429
   test_params.py   packaged lists, the enum and the code and year checks
+  test_refresh_reference.py  the reference script offline: one attempt per request, the
+                   count, --only, every fetch before the first write, the render
+  test_refresh_upstream.py   the capture script's FETCHED.md offline: the row of OBSERVED.md
   test_live.py     @pytest.mark.live smoke tests, one per task (13 keyed calls in all: the
                    weekly series spans two market years, and the list tasks' test compares
                    each packaged list with the live one), and the template's keyless
@@ -215,6 +222,15 @@ and counts, never on a raw payload.
 - Upstream's documented error shapes go into `classify` in `_client.py`, once, and an error
   class of the package's own into `errors.py`; a wrapper never inspects a status code
   (conventions §5, §6).
+- One limiter paces each host the package sends to (conventions §2, §6). A second base URL
+  on the host of the API base URL goes through the one `client` of `_client.py` by its
+  absolute URL, and `classify`'s path checks name both bases. An origin or mirror that the
+  publisher runs itself, where its canonical host refuses automated requests, takes that
+  host's pace through the same client, and `docs/upstream/` names both hosts; a mirror that
+  anyone else runs is never sent to. A host that a dependency sends to is reached through
+  the dependency's tasks alone. Any other host gets a client of its own in `_client.py`,
+  its base URL and its `RateLimit` beside the first's, and a row of its own in the table
+  under What this package wraps, with its pace and where the pace comes from.
 - A change brings its tests, written before the code, and passes the offline checks above;
   its changelog entry is a fragment under `changelog/`, one file holding its bullet, as
   `changelog/README.md` lays it out (conventions §12). Commit subjects follow Conventional
@@ -230,7 +246,7 @@ and counts, never on a raw payload.
 - Never hand-write a fixture, and never commit one without grepping it for key patterns
   (conventions §10).
 - Never read or print `.envrc`, `.env`, the credential variable of this package,
-  `DATA_GOV_API_KEY`, or any variable ending in `_API_KEY`, `_REFRESH_TOKEN` or
+  `DATA_GOV_API_KEY`, or any variable ending in `_API_KEY`, `_TOKEN` or
   `_SECRET`.
 - Never write a key, a token or another credential into a file or a commit.
 - Never put logic in `mcp.py` or `http.py`, and never add a route or a tool by hand: the
@@ -238,8 +254,9 @@ and counts, never on a raw payload.
 - Never rename or re-map an upstream concept to another source's (sdk-core ADR-0028).
 - Never return a documented personal identifier in a task's projection, echo one in
   `meta.request`, or commit one in a fixture (sdk-core ADR-0017).
-- Never edit `docs/upstream/` by hand: `/refresh-upstream` fetches it, and the pull request
-  shows its diff (conventions §3).
+- Never edit `docs/upstream/` by hand but `docs/upstream/OBSERVED.md`, the notes on what
+  upstream does but never documents: `/refresh-upstream` fetches the rest, and the pull
+  request shows its diff (conventions §3).
 - Never add `src/xippios/__init__.py`, nor an `__init__.py` at a level between it and the
   package (sdk-core ADR-0006).
 - Never push a tag by hand: a release's tag comes from `publish.yml` alone (conventions §12).
@@ -251,7 +268,7 @@ template release reaches it in a pull request of its own, with
 `uvx --from 'copier>=9.19' copier update --defaults --vcs-ref=<tag>` (conventions §15): the
 update renders the template's files again and never overwrites the files this package
 fills, `__init__.py`, `_client.py`, `errors.py`, `models.py`, `api/`, `parse/`, `tasks.py`,
-`params.py`, `enums.py`, `reference/`, `scripts/refresh_reference.py`,
+`tasks_write.py`, `params.py`, `enums.py`, `reference/`, `scripts/refresh_reference.py`,
 `scripts/refresh_upstream.py`, `tests/test_tasks.py`, `tests/test_live.py`,
 `tests/fixtures/`, `docs/upstream/`, `docs/adr.md`, `docs/adr.json`, `README.md`,
 `CHANGELOG.md` and `CLAUDE.md`. sdk-template's
