@@ -7,7 +7,8 @@ wrappers, never by hand, and regenerates the ``UnitId`` enum in ``enums.py``;
 ``reference/README.md`` carries the provenance of every file. Each file keeps upstream's
 records verbatim, under upstream's field names, and ``PackagedList.load(PACKAGE, name)``
 from ``xippios.core`` reads one (ADR-0022). A code a list lacks is refused with core's
-``UnknownCode``, naming the nearest codes by ESR's own integer strategy, ``_closest``.
+``UnknownCode``, naming the nearest codes, ``_closest``: by number through core's
+``nearest``, then by ESR's own pass on the digits.
 
 Codes are integers, as the snapshot types the path parameters (``int32``) and as every
 recorded record carries them (Johannes, 2026-10-25; ADR-0003): a check takes an ``int``
@@ -21,7 +22,7 @@ import difflib
 import functools
 from datetime import UTC, datetime
 
-from xippios.core import InvalidRequestError, PackagedList, UnknownCode
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode, nearest
 
 from xippios.usda.esr._client import SOURCE
 
@@ -47,7 +48,7 @@ EARLIEST_MARKET_YEAR = 1000
 
 The snapshot types ``marketYear`` as ``int32`` and names no range. ESR answers a market
 year it holds no data for with HTTP 404 and an empty body (recorded for 1900), which
-``classify`` maps to ``errors.NoDataForYear``, so an early year needs no refusal of its
+``classify`` maps to core's ``NoDataForYear``, so an early year needs no refusal of its
 own; market years 1998 and 1999 answered HTTP 200 with ``[]`` for wheat white to Canada
 (probed 2026-10-25, not kept), the same as a pair without exports, so where ESR's data
 begins is not established and no later bound is set.
@@ -76,20 +77,22 @@ def _codes(name: str, code_field: str, name_field: str) -> tuple[datetime, dict[
 def _closest(value: int, codes: dict[int, str]) -> list[tuple[int, str]]:
     """Up to three known codes close to ``value``: the nearest two by number, then by digits.
 
-    ESR's own strategy for integer codes, which core's ``closest`` (for string codes) does
-    not cover (ADR-0023, decision 4).
+    The pass by number is core's ``nearest``, the strategy this package carried until
+    sdk-core 0.4.0 took it in (https://github.com/xippios/sdk-core/issues/107); the pass by
+    digits stays ESR's own, which neither ``nearest`` nor ``closest`` (for string codes)
+    covers (sdk-core ADR-0023, decision 4).
 
     The commodity ``999`` leads to ``1001`` (Flaxseed) and ``902`` (Soybean Oil), the
     nearest by number; ``1040``, a stray digit, also to ``104`` (Wheat - White), found by
     ``difflib`` on the digit strings; the country ``1202``, two digits swapped, to
     ``1220`` (Canada).
     """
-    nearest = sorted(codes, key=lambda code: (abs(code - value), code))[:2]
+    by_number = [code for code, _ in nearest(value, codes, n=2)]
     by_digits = [
         int(text)
         for text in difflib.get_close_matches(str(value), [str(code) for code in codes], n=3)
     ]
-    matches = list(dict.fromkeys([*nearest, *by_digits]))[:3]
+    matches = list(dict.fromkeys([*by_number, *by_digits]))[:3]
     return [(code, codes[code]) for code in matches]
 
 

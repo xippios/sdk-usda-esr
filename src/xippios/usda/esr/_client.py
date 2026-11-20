@@ -3,16 +3,18 @@
 One ``AsyncClient`` for the whole package, shared by the tasks, the sync facades and the
 MCP server, on api.data.gov's gateway at ``BASE_URL`` with ``Accept: application/json``.
 It keeps a pace of its own, ``RATE_LIMIT``, since the snapshot documents none. The gateway
-is core's, ``xippios.core.data_gov``'s ``Gateway`` (ADR-0009; family review C14):
+is core's, ``xippios.core.data_gov``'s ``Gateway`` (sdk-core ADR-0032; family review C14):
 ``gateway.auth`` sends the key from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header;
 ``Gateway.policy``, the one ``QuotaPolicy`` per process for that key, keeps api.data.gov's
 hourly quota from every answer and never fires a request into a spent one, waiting within
 the policy's ``pause_cap`` or refusing without sending, a refusal that speaks for
-``api.data.gov`` (ADR-0010, ADR-0015); and ``gateway.classify`` maps the gateway's
-``API_KEY_*`` answers to ``AuthError``, its 429 to ``RateLimitError`` (its ``Retry-After``
-read by the gateway) and its ``NOT_FOUND`` to ``NotFoundError``. ``classify`` asks the
-gateway first and then maps ESR's own answers: its empty 404 on an exports path to
-``errors.NoDataForYear`` and its 400 for a path value that is not an integer to
+``api.data.gov`` (sdk-core ADR-0033, sdk-core ADR-0037); and ``gateway.classify`` maps the
+gateway's ``API_KEY_*`` answers to ``AuthError``, its 429 to ``RateLimitError`` (its
+``Retry-After`` read by the gateway), its ``NOT_FOUND`` to ``NotFoundError`` and, since
+``Gateway(SOURCE, data_path=DATA_PATH)`` names the exports paths, ESR's empty 404 there to
+core's ``NoDataForYear`` (https://github.com/xippios/sdk-core/issues/106). ``classify``
+asks the gateway first and then maps ESR's own answers: an empty 404 anywhere else to a
+plain ``NotFoundError`` and its 400 for a path value that is not an integer to
 ``InvalidRequestError``.
 """
 
@@ -22,6 +24,7 @@ import httpx
 from xippios.core import (
     AsyncClient,
     ClientConfig,
+    EnvVar,
     InvalidRequestError,
     NotFoundError,
     RateLimit,
@@ -35,7 +38,12 @@ SOURCE = "usda-esr"
 BASE_URL = "https://api.fas.usda.gov"
 """The gateway's host root; every ESR path keeps its ``/api/esr/`` prefix, as the snapshot's
 ``paths`` name it (the portal document's ``host`` is ``api.fas.usda.gov``, no ``basePath``)."""
-# A self-imposed pace: upstream documents no per-second or per-minute limit (ADR-0010 decision 1).
+ENV_VARS: tuple[EnvVar, ...] = (EnvVar(API_KEY_ENV, secret=True, required=True),)
+"""The variables the package reads, for a host (conventions §7; sdk-core ADR-0026, amendment
+2026-11-18, point c): the gateway's key alone. An ``EnvVar`` names a variable and reads none;
+a variable the source reads beside these joins the list."""
+# A self-imposed pace: upstream documents no per-second or per-minute limit (sdk-core ADR-0033
+# decision 1).
 RATE_LIMIT = RateLimit(per_minute=60, burst=1)
 """One request per second, no burst: a pace of our own, since the snapshot documents none.
 
@@ -49,8 +57,12 @@ DATA_PATH = re.compile(
 """The two exports forms: one destination country, and ``allCountries``, by market year."""
 
 # api.data.gov's key, its documented answers and its hourly quota, kept by one policy per
-# process that every source behind the gateway shares (ADR-0009).
-gateway = Gateway(SOURCE)
+# process that every source behind the gateway shares (sdk-core ADR-0032).
+gateway = Gateway(SOURCE, data_path=DATA_PATH)
+"""api.data.gov for this package: ``auth``, ``classify`` and ``install``.
+
+``classify`` maps ESR's empty ``text/plain`` 404 on ``DATA_PATH`` to core's
+``NoDataForYear``, in this package's name."""
 
 _URL = re.compile(r"https?://[^/\s]+")
 
@@ -66,18 +78,19 @@ def _esr_message(response: httpx.Response) -> str | None:
 
 
 def classify(response: httpx.Response) -> XippiosError | None:
-    """The gateway's documented and ESR's recorded error shapes, mapped once (ADR-0008).
+    """The gateway's and ESR's error shapes as taxonomy errors (sdk-core ADR-0031, decision 2).
 
     The gateway's answers come first, mapped by ``gateway.classify``: its ``API_KEY_*``
     refusals (recorded: ``API_KEY_INVALID``, ``get_commodities/invalid_key.json``),
     its 429 and its ``NOT_FOUND`` 404 (neither recorded for ESR; the tests build them in
-    the shapes api.data.gov documents and sdk-usda-psd recorded). ESR's own follow:
+    the shapes api.data.gov documents and sdk-usda-psd recorded), and, given ``DATA_PATH``,
+    ESR's own answer for a market year it holds no data for, a 404 with an empty
+    ``text/plain`` body on an exports path, recorded for 1900 on both forms
+    (``get_country_data/year_1900.json``, ``get_all_countries_data/year_1900.json``), as
+    core's ``NoDataForYear``, a ``NotFoundError``. ESR's own follow:
 
-    - 404 with an empty ``text/plain`` body on an exports path (``DATA_PATH``) is ESR's own
-      answer for a market year it holds no data for, recorded for 1900 on both forms
-      (``get_country_data/year_1900.json``, ``get_all_countries_data/year_1900.json``).
-      It is ``errors.NoDataForYear``, a ``NotFoundError``; an empty 404 anywhere else is a
-      plain ``NotFoundError``.
+    - An empty 404 anywhere else, off an exports path or not ``text/plain``, is a plain
+      ``NotFoundError``: it says the request is wrong, not that the year is empty.
     - 400 with ESR's ``{"message": "The request is invalid."}`` is ``InvalidRequestError``:
       a path value that is not an integer (``exports/commodityCode/abc/...``, recorded as
       ``get_country_data/not_an_integer.json``). The package never sends one, since
@@ -97,12 +110,6 @@ def classify(response: httpx.Response) -> XippiosError | None:
     status = response.status_code
     path = response.request.url.path
     if status == 404 and not response.content.strip():
-        content_type = response.headers.get("content-type", "").lower()
-        if content_type.startswith("text/plain") and DATA_PATH.fullmatch(path):
-            # errors imports SOURCE from this module, so it is imported here, not above
-            from xippios.usda.esr.errors import NoDataForYear
-
-            return NoDataForYear(path)
         return NotFoundError(
             f"ESR has no data for {path} (HTTP 404 with an empty body)", source=SOURCE
         )
@@ -136,6 +143,7 @@ __all__ = [
     "API_KEY_ENV",
     "BASE_URL",
     "DATA_PATH",
+    "ENV_VARS",
     "RATE_LIMIT",
     "SOURCE",
     "auth",

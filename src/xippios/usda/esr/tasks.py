@@ -91,10 +91,10 @@ from xippios.core import (
     matches,
     sync,
 )
+from xippios.core.data_gov import NoDataForYear
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
-from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.models import (
     Commodity,
     CommodityData,
@@ -229,15 +229,17 @@ def _newest_release(releases: list[DataReleaseInfo]) -> DataReleaseInfo | None:
 def _absent(
     exc: NoDataForYear, commodity_code: int, country: str, market_year: int
 ) -> NoDataForYear:
-    """ESR's empty 404 again, naming what was asked for.
+    """ESR's empty 404 again, naming what was asked for, in the source's name.
 
-    Only ``NoDataForYear`` means "no data for this market year"; any other
-    ``NotFoundError`` (the gateway's ``NOT_FOUND``) is not caught and propagates as is.
+    Only ``NoDataForYear``, core's class that the gateway returns on an exports path, means
+    "no data for this market year"; any other ``NotFoundError`` (the gateway's
+    ``NOT_FOUND``) is not caught and propagates as is.
     """
     return NoDataForYear(
         exc.path,
         f"ESR has no data for commodity {commodity_code}, {country}, market year "
         f"{market_year}: GET {exc.path} answered HTTP 404 with an empty body.",
+        source=exc.source,
     )
 
 
