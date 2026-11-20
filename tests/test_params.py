@@ -195,8 +195,8 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
         "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-28). "
         "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers unknown codes with an "
         "empty result, so the package refuses them. If upstream added it since, the packaged "
-        "list needs a refresh (/refresh-reference-data)."
-    )
+        "list is out of date."
+    ), "core 0.4.0's tail names no maintainer's command (sdk-core#111)"
 
 
 def test_a_stray_digit_leads_to_the_code_by_its_digits() -> None:

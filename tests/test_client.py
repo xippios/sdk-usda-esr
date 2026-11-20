@@ -24,12 +24,13 @@ import respx
 from xippios.core import (
     AsyncClient,
     AuthError,
+    EnvVar,
     InvalidRequestError,
     NotFoundError,
     RateLimitError,
     RetryPolicy,
 )
-from xippios.core.data_gov import Gateway
+from xippios.core.data_gov import Gateway, NoDataForYear
 from xippios.core.testing import CLOCK_SLACK, load_fixture, response_from_fixture
 
 from xippios.usda.esr import api
@@ -37,6 +38,7 @@ from xippios.usda.esr._client import (
     API_KEY_ENV,
     BASE_URL,
     DATA_PATH,
+    ENV_VARS,
     RATE_LIMIT,
     SOURCE,
     auth,
@@ -45,7 +47,6 @@ from xippios.usda.esr._client import (
     config,
     gateway,
 )
-from xippios.usda.esr.errors import NoDataForYear
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTRY = "get_country_data"
@@ -101,6 +102,7 @@ def test_the_client_is_wired_for_the_gateway() -> None:
     assert client.config is config
     assert config.base_url == BASE_URL == "https://api.fas.usda.gov"
     assert gateway.source == SOURCE == "usda-esr"
+    assert gateway.data_path is DATA_PATH, "core maps ESR's empty 404 there (sdk-core#106)"
     assert gateway.policy is Gateway.policy, "one policy per process for the shared key"
     assert config.observe == Gateway.policy.observe, "installed: every answer reaches it"
     assert config.before_request == Gateway.policy.before_request
@@ -112,6 +114,12 @@ def test_the_client_is_wired_for_the_gateway() -> None:
     assert auth is gateway.auth
     assert auth.header == "X-Api-Key"
     assert auth.env_var == API_KEY_ENV == "DATA_GOV_API_KEY"  # pragma: allowlist secret
+
+
+def test_env_vars_name_the_one_key_the_package_reads() -> None:
+    """``ENV_VARS`` tells a host what to set: the gateway's key, secret and required, and
+    nothing else, since the package reads no other variable (conventions §7)."""
+    assert (EnvVar(API_KEY_ENV, secret=True, required=True),) == ENV_VARS
 
 
 def test_the_client_asks_for_json() -> None:
@@ -217,9 +225,10 @@ async def test_market_year_1900_answers_404_with_an_empty_body(
     assert (response.status_code, response.content) == (404, b"")
     assert response.headers["content-type"].startswith("text/plain")
     error = classify(response)
-    assert isinstance(error, NoDataForYear)
+    assert isinstance(error, NoDataForYear), "core's class, through the gateway's data_path"
     assert isinstance(error, NotFoundError), "in the taxonomy, conventions §5"
     assert error.path == f"{EXPORTS}/1900"
+    assert error.source == SOURCE
     assert f"no data for {EXPORTS}/1900 (HTTP 404 with an empty body)" in error.message
     route = replay_fixture(COUNTRY, "year_1900")
     with pytest.raises(NoDataForYear, match="empty body"):

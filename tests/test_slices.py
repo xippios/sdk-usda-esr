@@ -28,6 +28,7 @@ import httpx
 import pytest
 import respx
 from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core.data_gov import NoDataForYear
 from xippios.core.mcp import cap_result
 from xippios.core.testing import (
     ReplayFixture,
@@ -41,7 +42,6 @@ from xippios.core.testing import (
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
-from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, DataReleaseInfo, ExportField
 from xippios.usda.esr.params import latest_market_year
@@ -709,6 +709,7 @@ def test_every_destination_slices_name_a_market_year_esr_lacks(
     with pytest.raises(NoDataForYear) as info:
         call()
     assert info.value.path == path
+    assert info.value.source == "usda-esr", "raised again in the package's name"
     assert str(info.value) == (
         f"ESR has no data for commodity 104, every country, market year 1900: GET {path} "
         "answered HTTP 404 with an empty body."
