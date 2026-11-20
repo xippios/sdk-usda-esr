@@ -174,8 +174,8 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     """All 44 recorded records carry one release time: ``since`` equal to it keeps none, a
-    second earlier keeps all; the vintage is the whole answer's either way (Johannes,
-    2026-10-28)."""
+    second earlier keeps all; the vintage is the whole answer's either way
+    (https://github.com/xippios/sdk-usda-esr/pull/9)."""
     route = replay_fixture(RELEASES, "all")
     whole = tasks.get_release_dates()
     same = tasks.get_release_dates(since=RELEASED)

@@ -1,18 +1,18 @@
-"""The wave 2 slices: the latest week, the top destinations, the weekly series.
+"""The slices: the latest week, the top destinations, the weekly series.
 
-Each replays a recorded answer and checks that the slice selects and orders upstream's
-records without changing one (sdk-core ADR-0028; Johannes, 2026-10-25). ``_recorded`` parses a
-fixture the way the wrapper does, without a request, so a test compares with what
-upstream sent while the task's own request is counted on its route. The slices make the
-requests ``get_exports`` makes, and its fixtures serve them: ``wheat_white_2027`` carries
-a ``9990`` (UNKNOWN) destination, and ``get_all_countries_data/year_1900`` is ESR's empty
-404 on the every-country path. ``get_weekly_series`` makes one request per market year, so
-its range replays two one-country recordings, ``wheat_white_canada_2023`` (recorded
-2026-10-28) and ``wheat_white_canada_2024``, and moves the recorded empty 404 and ``[]``
-to a year inside the range (``url=``) rather than writing an answer. A range ending in
-the current calendar year or later reads the release list first
-(``get_data_release_info/all``, recorded 2026-10-25), so those tests pin the calendar
-year to 2026 (``in_2026``), or to 2027 for the January case.
+Each replays a recorded answer and checks that the slice selects and orders upstream's records
+without changing one (sdk-core ADR-0028; https://github.com/xippios/sdk-usda-esr/pull/5).
+``_recorded`` parses a fixture the way the wrapper does, without a request, so a test compares
+with what upstream sent while the task's own request is counted on its route. The slices make
+the requests ``get_exports`` makes, and its fixtures serve them: ``wheat_white_2027`` carries
+a ``9990`` (UNKNOWN) destination, and ``get_all_countries_data/year_1900`` is ESR's empty 404
+on the every-country path. ``get_weekly_series`` makes one request per market year, so its
+range replays two one-country recordings, ``wheat_white_canada_2023`` (recorded 2026-10-28)
+and ``wheat_white_canada_2024``, and moves the recorded empty 404 and ``[]`` to a year inside
+the range (``url=``) rather than writing an answer. A range ending in the current calendar
+year or later reads the release list first (``get_data_release_info/all``, recorded
+2026-10-25), so those tests pin the calendar year to 2026 (``in_2026``), or to 2027 for the
+January case.
 """
 
 import dataclasses
@@ -460,9 +460,9 @@ def test_a_range_into_next_year_reads_the_release_list_first(
 def test_a_range_ending_this_year_reads_the_release_list_first(
     respx_mock: respx.MockRouter,
 ) -> None:
-    """2024 to 2026 in 2026: a market year named by the current year may not be released
-    yet, so the release list comes first, then the three yearly requests (Johannes,
-    2026-10-28). ``year_2099``'s ``[]`` at 2025 and 2026 stands in for the order only."""
+    """2024 to 2026 in 2026: a market year named by the current year may not be released yet
+    (https://github.com/xippios/sdk-usda-esr/pull/10), so the release list comes first, then the
+    three yearly requests. ``year_2099``'s ``[]`` at 2025 and 2026 stands in for the order only."""
     route = _serve(
         respx_mock,
         {
@@ -561,11 +561,11 @@ def test_a_calendar_year_commodity_in_january_is_refused(
     respx_mock: respx.MockRouter,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The January window: with the calendar at 2027 and the recorded list still naming
-    2026 as beef muscle cuts' current market year, as it would until ESR releases a week
-    of 2027, 2026 to 2027 is refused naming 2026 after the release-list request alone,
-    where a gate on years after the current one would have read 2027's ``[]`` as a year
-    without exports (Johannes, 2026-10-28)."""
+    """The January window: with the calendar at 2027 and the recorded list still naming 2026 as
+    beef muscle cuts' current market year, as it would until ESR releases a week of 2027, 2026
+    to 2027 is refused naming 2026 after the release-list request alone, where a gate on years
+    after the current one would have read 2027's ``[]`` as a year without exports
+    (https://github.com/xippios/sdk-usda-esr/pull/10)."""
     monkeypatch.setattr(tasks, "_calendar_year", lambda: 2027)
     releases = replay_fixture(RELEASES, "all")
     with pytest.raises(NotFoundError) as info:
@@ -1015,7 +1015,7 @@ async def test_an_unreleased_market_year_over_mcp(replay_fixture: ReplayFixture)
 
 def test_the_weekly_series_cap_note_names_the_range() -> None:
     """A note of the task's own, the family's bounds kept (conventions §8, sdk-core ADR-0038;
-    Johannes, 2026-10-28), as ``get_exports``' names ``country_code``."""
+    https://github.com/xippios/sdk-usda-esr/pull/10), as ``get_exports``' names ``country_code``."""
     cap = tasks.MCP_CAPS["get_weekly_series"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note == (

@@ -9,72 +9,72 @@ is named there minus ``BULK_TASKS``.
 Docstrings are read by agents: one sentence first, then ``Args:`` with examples of
 valid values for every parameter. ``/add-endpoint`` walks through the whole recipe.
 
-Codes and market years are integers, as the snapshot types the path parameters
-(``int32``) and as the wire carries them (Johannes, 2026-10-25; sdk-core ADR-0028); they are
-checked against the packaged lists before any call, since ESR answers an unknown code
-with an empty list. A market year is ESR's, named by the year it ends in and different
-per commodity; nothing is re-based.
+Codes and market years are integers, as the snapshot types the path parameters (``int32``) and
+as the wire carries them (https://github.com/xippios/sdk-usda-esr/pull/3; sdk-core ADR-0028);
+they are checked against the packaged lists before any call, since ESR answers an unknown code
+with an empty list. A market year is ESR's, named by the year it ends in and different per
+commodity; nothing is re-based.
 
-Release metadata (Johannes, 2026-10-25): ``get_exports`` makes one call and no second
-one for the release time, so its ``meta.published_at`` stays ``None`` and its
-``meta.vintage`` is the latest ``weekEndingDate`` among the records as an ISO date
-(``"2024-06-06"``), a data-as-of label, ``None`` for an empty list.
-``get_release_dates`` is the way to learn when ESR released the data (Johannes,
-2026-10-28, superseding the ruling of 2026-10-26; sdk-core ADR-0041, decision 2). Its
+Release metadata (https://github.com/xippios/sdk-usda-esr/pull/3): ``get_exports`` makes
+one call and no second one for the release time, so its ``meta.published_at`` stays
+``None`` and its ``meta.vintage`` is the latest ``weekEndingDate`` among the records as
+an ISO date (``"2024-06-06"``), a data-as-of label, ``None`` for an empty list.
+``get_release_dates`` is the way to learn when ESR released the data
+(https://github.com/xippios/sdk-usda-esr/pull/7; sdk-core ADR-0041, decision 2). Its
 ``meta.published_at`` is the newest ``releaseTimeStamp`` as upstream gives it, naive,
 with ``meta.published_at_naive`` set: the snapshot states no time zone for it (the
 program page that might say Eastern answers 403 to headless clients,
 ``docs/upstream/FETCHED.md``), and none is invented, since an invented zone could shift
 the time by hours in an as-of store. Its ``meta.vintage`` is that record's
-``releaseTimeStamp`` text as upstream prints it (``"2026-10-22T08:30:42.67"``), upstream's
-release identifier: where the identifier is the timestamp text, ``vintage`` holds the
-text and ``published_at`` its parsed value with the flag (conventions §4). Both are
-``None`` for an empty answer.
+``releaseTimeStamp`` text as upstream prints it (``"2026-10-22T08:30:42.67"``),
+upstream's release identifier: where the identifier is the timestamp text, ``vintage``
+holds the text and ``published_at`` its parsed value with the flag (conventions §4). Both
+are ``None`` for an empty answer.
 
-Change detection is ``get_release_dates``' parameter ``since`` (Johannes, 2026-10-28):
-the ``meta.vintage`` text of an earlier call, parsed with ``datetime.fromisoformat`` to a
-naive time, since upstream's text carries no zone; a text that does not parse, or parses
-to an aware time, is refused before the call (``InvalidRequestError``, conventions §5,
-sdk-core ADR-0007). The filter keeps the commodities released strictly after it, an equal time
-being no newer, and only selects (sdk-core ADR-0028). ``meta.vintage`` and ``meta.published_at``
-stay the newest release of upstream's whole answer, filtered or not, so an empty
-filtered answer still hands the caller the marker to store for the next call. It is one
-request either way, and no answer is cached: ``retrieved_at`` is the wire time.
-``get_market_year`` (Johannes, 2026-10-28) makes the same one request and selects one
-commodity's record, unchanged, with that record's release as its ``meta.vintage`` and
-``meta.published_at``; a commodity the packaged list names and the release list lacks is
-``NotFoundError``, upstream having dropped it.
+Change detection is ``get_release_dates``' parameter ``since``
+(https://github.com/xippios/sdk-usda-esr/pull/9): the ``meta.vintage`` text of an earlier call,
+parsed with ``datetime.fromisoformat`` to a naive time, since upstream's text carries no zone; a
+text that does not parse, or parses to an aware time, is refused before the call
+(``InvalidRequestError``, conventions §5, sdk-core ADR-0007). The filter keeps the commodities
+released strictly after it, an equal time being no newer, and only selects (sdk-core ADR-0028).
+``meta.vintage`` and ``meta.published_at`` stay the newest release of upstream's whole answer,
+filtered or not, so an empty filtered answer still hands the caller the marker to store for the
+next call. It is one request either way, and no answer is cached: ``retrieved_at`` is the wire
+time. ``get_market_year`` (https://github.com/xippios/sdk-usda-esr/pull/9) makes the same one
+request and selects one commodity's record, unchanged, with that record's release as its
+``meta.vintage`` and ``meta.published_at``; a commodity the packaged list names and the release
+list lacks is ``NotFoundError``, upstream having dropped it.
 
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
-Johannes, 2026-10-25) only select and order the records of the requests ``get_exports``
-makes (sdk-core ADR-0028): no record is changed, nothing is derived, converted, filled or
-excluded, and nothing is compared with another source. ``get_latest_week`` and
-``get_top_destinations`` make its one request; ``get_weekly_series`` makes its
-one-country request once per market year from ``start_year`` to ``end_year``, at most
-``SERIES_MAX_YEARS`` of them (Johannes, 2026-10-28; conventions §4's period series, as
-sdk-usda-psd's ``get_time_series``), and, for a range ending in the current calendar year
-or later, reads the release list first and refuses a range past the commodity's current
-market year with ``NotFoundError``, since ESR answers an unreleased market year with
-``[]`` as it answers a year without exports (Johannes, 2026-10-28; sdk-core ADR-0041,
-decisions 6 and 7). Their ``meta.endpoint`` is the operation the records come from,
-``meta.request`` carries every parameter (``field`` as its upstream name),
-``meta.vintage`` is the latest ``weekEndingDate`` among the records considered as an ISO
-date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``, as for
-``get_exports``.
+https://github.com/xippios/sdk-usda-esr/pull/5) only select and order the records of the
+requests ``get_exports`` makes (sdk-core ADR-0028): no record is changed, nothing is derived,
+converted, filled or excluded, and nothing is compared with another source.
+``get_latest_week`` and ``get_top_destinations`` make its one request; ``get_weekly_series``
+makes its one-country request once per market year from ``start_year`` to ``end_year``, at
+most ``SERIES_MAX_YEARS`` of them (https://github.com/xippios/sdk-usda-esr/pull/10;
+conventions §4's period series, as sdk-usda-psd's ``get_time_series``), and, for a range
+ending in the current calendar year or later, reads the release list first and refuses a range
+past the commodity's current market year with ``NotFoundError``, since ESR answers an
+unreleased market year with ``[]`` as it answers a year without exports
+(https://github.com/xippios/sdk-usda-esr/pull/10; sdk-core ADR-0041, decisions 6 and 7). Their
+``meta.endpoint`` is the operation the records come from, ``meta.request`` carries every
+parameter (``field`` as its upstream name), ``meta.vintage`` is the latest ``weekEndingDate``
+among the records considered as an ISO date, ``None`` for an empty answer, and
+``meta.published_at`` stays ``None``, as for ``get_exports``.
 
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
-upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
-``meta`` (sdk-core ADR-0041, decision 1): ``meta.endpoint`` is the operation the list was
-fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the package fetched
-the list, the file's ``fetched``, a UTC time to the second (``2026-10-28T19:19:52Z`` for the
-countries), and ``meta.vintage`` is ``None``: upstream gives these lists no release
-identifier, and a fetch date is not one. ``meta.published_at`` stays ``None``, and so does
-``meta.total``, since upstream reports no count (sdk-core ADR-0034). The records keep
-upstream's order, field names (snake_cased) and values, padding included. Their filters only
-select records of the packaged list (sdk-core ADR-0028), and ``meta.request`` carries those
-given: ``region_id`` is named after upstream's ``regionId`` and matches it exactly,
-``search`` is the package's own (the four operations take no parameters), a case-insensitive
-substring match on codes, as digits, on names and, for countries, on GENC codes
+upstream call (https://github.com/xippios/sdk-usda-esr/pull/4). Core's ``PackagedList`` reads
+the file and builds ``meta`` (sdk-core ADR-0041, decision 1): ``meta.endpoint`` is the operation
+the list was fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the
+package fetched the list, the file's ``fetched``, a UTC time to the second
+(``2026-10-28T19:19:52Z`` for the countries), and ``meta.vintage`` is ``None``: upstream gives
+these lists no release identifier, and a fetch date is not one. ``meta.published_at`` stays
+``None``, and so does ``meta.total``, since upstream reports no count (sdk-core ADR-0034). The
+records keep upstream's order, field names (snake_cased) and values, padding included. Their
+filters only select records of the packaged list (sdk-core ADR-0028), and ``meta.request``
+carries those given: ``region_id`` is named after upstream's ``regionId`` and matches it
+exactly, ``search`` is the package's own (the four operations take no parameters), a
+case-insensitive substring match on codes, as digits, on names and, for countries, on GENC codes
 (``xippios.core.matches``).
 """
 
@@ -157,21 +157,21 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 }
 """MCP result caps of their own, by task function name (conventions §8, sdk-core ADR-0038).
 
-``get_exports`` keeps the family's bounds, 200 rows or 64 KB, with a note of its own: a
-tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
-at once is one row per destination and week (cottonseed 2024: 498 rows for 11
-destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows
-(wheat white to Canada 2024). ``get_release_dates``, 44 rows, fits the default and keeps
-the family's bounds, but it has a filter, so its entry carries a note naming ``since`` and
-nothing else, as ``list_commodities``' does. ``get_market_year``, one record, has no
-filter and no entry: its one parameter chooses the record.
+``get_exports`` keeps the family's bounds, 200 rows or 64 KB, with a note of its own: a tool
+with filters names them in its cap's note (§8; https://github.com/xippios/sdk-usda-esr/pull/3).
+Every country at once is one row per destination and week (cottonseed 2024: 498 rows for 11
+destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows (wheat
+white to Canada 2024). ``get_release_dates``, 44 rows, fits the default and keeps the family's
+bounds, but it has a filter, so its entry carries a note naming ``since`` and nothing else, as
+``list_commodities``' does. ``get_market_year``, one record, has no filter and no entry: its one
+parameter chooses the record.
 
 ``get_weekly_series`` keeps the family's bounds too, with a note of its own that names
-``start_year`` and ``end_year`` (Johannes, 2026-10-28; §8, sdk-core ADR-0038), as ``get_exports``'
-names ``country_code``: one destination's market year is up to 54 rows (wheat white to
-Canada: 53 in 2023, 54 in 2024), so three market years fit 200 rows and the ceiling of
-``SERIES_MAX_YEARS``, ten, can reach some 540; the cut keeps the first rows, the oldest
-weeks, and narrowing the range shows the rest. No ceiling of the process's own and no
+``start_year`` and ``end_year`` (https://github.com/xippios/sdk-usda-esr/pull/10; §8, sdk-core
+ADR-0038), as ``get_exports``' names ``country_code``: one destination's market year is up to 54
+rows (wheat white to Canada: 53 in 2023, 54 in 2024), so three market years fit 200 rows and the
+ceiling of ``SERIES_MAX_YEARS``, ten, can reach some 540; the cut keeps the first rows, the
+oldest weeks, and narrowing the range shows the rest. No ceiling of the process's own and no
 option: the ceiling is the task's, the same in Python, over HTTP and over MCP.
 
 ``get_latest_week`` and ``get_top_destinations`` have no entry and keep the family's
@@ -183,34 +183,34 @@ and the order, and none is an optional filter that narrows a cut answer, so a no
 have nothing to name (§8); ``n`` bounds the rows already.
 
 ``list_countries`` is a reference list an agent needs whole to find codes (sdk-core ADR-0038;
-Johannes, 2026-10-25): 211 countries when packaged, past the default of 200 rows, so its
-cap is 250 rows; the whole list is 28,936 bytes of compact JSON over MCP as packaged,
-within the default 64 KB, which it keeps. Its note names its filters, ``region_id`` and
-``search`` (§8). ``list_commodities``, 44 rows, fits the default and keeps the family's bounds, but
-it has a filter, so its entry carries a note naming ``search`` and nothing else.
+https://github.com/xippios/sdk-usda-esr/pull/4): 211 countries when packaged, past the default
+of 200 rows, so its cap is 250 rows; the whole list is 28,936 bytes of compact JSON over MCP as
+packaged, within the default 64 KB, which it keeps. Its note names its filters, ``region_id``
+and ``search`` (§8). ``list_commodities``, 44 rows, fits the default and keeps the family's
+bounds, but it has a filter, so its entry carries a note naming ``search`` and nothing else.
 ``list_regions`` (12 rows) and ``list_units_of_measure`` (5) have no filter and no entry.
 """
 
 
 SERIES_MAX_YEARS = 10
-"""Most market years one ``get_weekly_series`` call spans, ends included (Johannes,
-2026-10-28; conventions §4): one request per market year, so ten years are ten requests,
-about ten seconds at ``RATE_LIMIT``'s pace of one a second, of the 1,000 an hour the
-api.data.gov key shares with every package that uses it, and one more for the release
-list when the range ends in the current calendar year or later. The same in Python, over
-HTTP and over MCP; a longer range is refused before the first request."""
+"""Most market years one ``get_weekly_series`` call spans, ends included
+(https://github.com/xippios/sdk-usda-esr/pull/10; conventions §4): one request per market year,
+so ten years are ten requests, about ten seconds at ``RATE_LIMIT``'s pace of one a second, of
+the 1,000 an hour the api.data.gov key shares with every package that uses it, and one more for
+the release list when the range ends in the current calendar year or later. The same in Python,
+over HTTP and over MCP; a longer range is refused before the first request."""
 
 
 def _calendar_year() -> int:
     """The current UTC calendar year.
 
-    Market years start between the June before the year they are named for and that
-    year's January: in the recorded release list 13 commodities start in June (wheat), 13
-    in August (cotton), 3 in September (corn, soybeans), 5 in October and 10 in January
-    (beef, pork, hides, the calendar year). A market year named by the current year may
-    have begun without ESR having released a week of it, and one named by a later year
-    may not have begun, so ``get_weekly_series`` reads the release list for a range that
-    ends in the current year or later (Johannes, 2026-10-28).
+    Market years start between the June before the year they are named for and that year's
+    January: in the recorded release list 13 commodities start in June (wheat), 13 in August
+    (cotton), 3 in September (corn, soybeans), 5 in October and 10 in January (beef, pork,
+    hides, the calendar year). A market year named by the current year may have begun without
+    ESR having released a week of it, and one named by a later year may not have begun, so
+    ``get_weekly_series`` reads the release list for a range that ends in the current year or
+    later (https://github.com/xippios/sdk-usda-esr/pull/10).
     """
     return datetime.now(UTC).year
 

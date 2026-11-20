@@ -20,13 +20,13 @@ follows, sdk-core's conventions among them, are listed under
 The snapshot listed in `docs/upstream/FETCHED.md` is the reference for names, parameters and
 semantics; a wrapper is never written from memory of the API.
 
-`_client.py` builds on `xippios.core.data_gov.Gateway` (family review C14, sdk-core ADR-0023), which
-holds what every source behind api.data.gov shares: the `X-Api-Key` auth, the one
-`QuotaPolicy` per process on `x-ratelimit-*`, the `API_KEY_*`, `OVER_RATE_LIMIT` and
+`_client.py` builds on `xippios.core.data_gov.Gateway` (sdk-core ADR-0032, decision 5; sdk-core
+ADR-0023), which holds what every source behind api.data.gov shares: the `X-Api-Key` auth, the
+one `QuotaPolicy` per process on `x-ratelimit-*`, the `API_KEY_*`, `OVER_RATE_LIMIT` and
 `NOT_FOUND` mappings with host-free messages, and, since `Gateway(SOURCE, data_path=DATA_PATH)`
 names the exports paths, ESR's empty 404 there as core's `NoDataForYear`
-(https://github.com/xippios/sdk-core/issues/106). `classify` asks `gateway.classify` first
-and keeps ESR's own answers after it, an empty 404 elsewhere and the 400 below.
+(https://github.com/xippios/sdk-core/issues/106). `classify` asks `gateway.classify` first and
+keeps ESR's own answers after it, an empty 404 elsewhere and the 400 below.
 
 ## Upstream behaviour established by fixtures
 
@@ -34,8 +34,8 @@ The snapshot types every response as `object` and defines no schema, so these fa
 from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/fixtures/`;
 `_client.classify` maps them once.
 
-- Codes are integers on the wire and in the snapshot (`int32` path parameters), and the
-  package takes them as `int` (Johannes, 2026-10-25): `get_exports(104, 2024, 1220)`.
+- Codes are `int32` path parameters in the snapshot and integers on the wire, and the package takes
+  them as `int` (https://github.com/xippios/sdk-usda-esr/pull/3): `get_exports(104, 2024, 1220)`.
 - Record shapes of the four lists and the release list are in `models.py`, each naming
   its fixture: 44 commodities (101 to 1702, each with its `unitId`), 211 countries (1 to
   9990, `countryName` and `countryDescription` padded with spaces upstream and kept so),
@@ -50,41 +50,41 @@ from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/f
   week ending 2023-06-01 is in both, with other values: a week that straddles two market
   years comes in each, and the records carry no market year, so `get_weekly_series` keeps
   both, the older year's row first.
-- `allCountries` has no paging: cottonseed 2024 is 498 records for 11 destinations,
-  139,119 bytes (`cottonseed_2024`); wheat HRW 2024, measured and not kept, 1,136 records
-  for 28 destinations, 319,532 bytes. Over MCP `get_exports` keeps the family's cap, 200
-  rows or 64 KB, with a note of its own that names `country_code` (`tasks.MCP_CAPS`;
-  conventions §8, sdk-core ADR-0038; Johannes, 2026-10-25), and the cap's note tells agents to pass
-  it: one destination is up to 54 rows. `get_weekly_series` makes one request per market
-  year, at most 10 per call (`tasks.SERIES_MAX_YEARS`) in Python, over HTTP and over MCP
-  alike, and over MCP keeps the same cap, about three market years, with a note of its
-  own that names `start_year` and `end_year` (Johannes, 2026-10-28).
+- `allCountries` has no paging: cottonseed 2024 is 498 records for 11 destinations, 139,119
+  bytes (`cottonseed_2024`); wheat HRW 2024, measured and not kept, 1,136 records for 28
+  destinations, 319,532 bytes. Over MCP `get_exports` keeps the family's cap, 200 rows or 64
+  KB, with a note of its own that names `country_code` (`tasks.MCP_CAPS`; conventions §8,
+  sdk-core ADR-0038; https://github.com/xippios/sdk-usda-esr/pull/3), and the cap's note tells
+  agents to pass it: one destination is up to 54 rows. `get_weekly_series` makes one request
+  per market year, at most 10 per call (`tasks.SERIES_MAX_YEARS`) in Python, over HTTP and over
+  MCP alike, and over MCP keeps the same cap, about three market years, with a note of its own
+  that names `start_year` and `end_year` (https://github.com/xippios/sdk-usda-esr/pull/10).
 - Destination `9990` (UNKNOWN) arrives in `allCountries` as a row like any country:
   wheat white 2027, recorded 2026-10-28 (`wheat_white_2027`, 119,811 bytes), is 385
   records for 22 destinations over 20 weeks, a `9990` row in each of them; wheat white
   2024, measured the same day and not kept, 1,012 records for 22 destinations, 312,360
   bytes as a fixture, over the 256 KiB cap, `9990` in all 54 weeks. The slices keep and
   rank it like any other code.
-- Unknown commodity (999) and unknown country (9999): HTTP 200 with `[]`; so are a
-  future market year (2099) and valid codes without exports (rye `allCountries` 2024).
-  Empty means empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming
-  the nearest codes) and market years after the current UTC year plus two before the call.
-  Market year 2028 of wheat white to Canada answers HTTP 200 with `[]` as well (probed
-  2026-10-28, one keyed call, not kept; wheat's current market year is 2027), so a market
-  year ESR has not released cannot be told from one without exports: `get_weekly_series`
-  reads the release list for a range that ends in the current UTC year or later and
-  refuses one past the commodity's current market year with `NotFoundError` naming the
-  latest released one (Johannes, 2026-10-28; conventions §4; sdk-core ADR-0041,
+- Unknown commodity (999) and unknown country (9999): HTTP 200 with `[]`; so are a future
+  market year (2099) and valid codes without exports (rye `allCountries` 2024). Empty means
+  empty, not an error; `params` refuses unknown codes (`UnknownCode`, naming the nearest
+  codes) and market years after the current UTC year plus two before the call. Market year
+  2028 of wheat white to Canada answers HTTP 200 with `[]` as well (probed 2026-10-28, one
+  keyed call, not kept; wheat's current market year is 2027), so a market year ESR has not
+  released cannot be told from one without exports: `get_weekly_series` reads the release
+  list for a range that ends in the current UTC year or later and refuses one past the
+  commodity's current market year with `NotFoundError` naming the latest released one
+  (https://github.com/xippios/sdk-usda-esr/pull/10; conventions §4; sdk-core ADR-0041,
   decisions 6 and 7). The current year counts too: a market year named by it may have begun
   without a week released, as a calendar-year commodity's does in January (market years
   start in June, August, September, October or January, per the recorded release list).
-- Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms (the
-  one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`, 1,393
-  bytes, recorded 2026-10-28), mapped by the gateway to core's
-  `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` (only that answer on an exports
-  path, `_client.DATA_PATH`). `get_weekly_series` skips such a year inside its range,
-  as sdk-usda-psd's `get_time_series` does, and a released year answering `[]` adds no
-  rows (Johannes, 2026-10-28).
+- Market year 1900: HTTP 404 with an empty `text/plain` body on both exports forms
+  (the one-country `get_country_data/year_1900`; `get_all_countries_data/year_1900`,
+  1,393 bytes, recorded 2026-10-28), mapped by the gateway to core's
+  `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` (only that answer on an
+  exports path, `_client.DATA_PATH`). `get_weekly_series` skips such a year inside its
+  range, as sdk-usda-psd's `get_time_series` does, and a released year answering `[]`
+  adds no rows (https://github.com/xippios/sdk-usda-esr/pull/10).
   Market years 1998 and 1999 answered `[]` for wheat white to Canada (probed, not kept),
   so where ESR's data begins is not established and no lower bound beyond four digits is
   set.
@@ -97,17 +97,17 @@ from the answers recorded on 2026-10-25, and three on 2026-10-28, under `tests/f
   and `marketYearEnd`, and `releaseTimeStamp` without a zone (all 44 at
   `2026-10-22T08:30:42.67`). Market years differ per commodity: wheat June to May, corn
   and soybeans September to August, cotton August to July, beef and pork the calendar year.
-- `meta.vintage` of `get_exports` is the latest `weekEndingDate` among the records as an
-  ISO date (`"2024-06-06"` for wheat white to Canada 2024), `None` for an empty answer,
-  and its `meta.published_at` stays `None`: it makes no second call (Johannes,
-  2026-10-25). `get_release_dates`' `meta.published_at` is the newest `releaseTimeStamp`
-  as upstream gives it, naive, with `meta.published_at_naive` set, since the snapshot
-  states no zone and none is invented; its `meta.vintage` is that record's
-  `releaseTimeStamp` text as upstream prints it (`"2026-10-22T08:30:42.67"`, two
-  fractional digits), kept beside the parsed value as
-  `DataReleaseInfo.release_time_stamp_text`, which no adapter serialises; both `None`
-  for an empty answer (Johannes, 2026-10-28, superseding the ruling of 2026-10-26;
-  sdk-core ADR-0041, decision 2).
+- `meta.vintage` of `get_exports` is the latest `weekEndingDate` among the records as
+  an ISO date (`"2024-06-06"` for wheat white to Canada 2024), `None` for an empty
+  answer, and its `meta.published_at` stays `None`: it makes no second call
+  (https://github.com/xippios/sdk-usda-esr/pull/3). `get_release_dates`'
+  `meta.published_at` is the newest `releaseTimeStamp` as upstream gives it, naive,
+  with `meta.published_at_naive` set, since the snapshot states no zone and none is
+  invented; its `meta.vintage` is that record's `releaseTimeStamp` text as upstream
+  prints it (`"2026-10-22T08:30:42.67"`, two fractional digits), kept beside the
+  parsed value as `DataReleaseInfo.release_time_stamp_text`, which no adapter
+  serialises; both `None` for an empty answer
+  (https://github.com/xippios/sdk-usda-esr/pull/7; sdk-core ADR-0041, decision 2).
 
 ## Layout
 

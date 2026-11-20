@@ -3,7 +3,7 @@
 One ``AsyncClient`` for the whole package, shared by the tasks, the sync facades and the
 MCP server, on api.data.gov's gateway at ``BASE_URL`` with ``Accept: application/json``.
 It keeps a pace of its own, ``RATE_LIMIT``, since the snapshot documents none. The gateway
-is core's, ``xippios.core.data_gov``'s ``Gateway`` (sdk-core ADR-0032; family review C14):
+is core's, ``xippios.core.data_gov``'s ``Gateway`` (sdk-core ADR-0032, decision 5):
 ``gateway.auth`` sends the key from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header;
 ``Gateway.policy``, the one ``QuotaPolicy`` per process for that key, keeps api.data.gov's
 hourly quota from every answer and never fires a request into a spent one, waiting within
