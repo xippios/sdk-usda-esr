@@ -174,8 +174,8 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     """All 44 recorded records carry one release time: ``since`` equal to it keeps none, a
-    second earlier keeps all; the vintage is the whole answer's either way (Johannes,
-    2026-10-28)."""
+    second earlier keeps all; the vintage is the whole answer's either way
+    (https://github.com/xippios/sdk-usda-esr/pull/9)."""
     route = replay_fixture(RELEASES, "all")
     whole = tasks.get_release_dates()
     same = tasks.get_release_dates(since=RELEASED)
@@ -734,3 +734,17 @@ def test_the_entry_point_names_itself(
     assert "--allow-remote changes nothing: this read server is not held to loopback" in " ".join(
         text.split()
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("name", ["get_exports", "get_latest_week", "get_top_destinations"])
+async def test_a_one_year_tool_says_an_empty_list_may_be_a_year_not_released(name: str) -> None:
+    """The three tools that fetch one market year read no release list, and ESR answers a
+    market year it has not released with ``[]``, as it answers one without exports: the
+    description an agent reads, the task's docstring, names both readings of an empty list
+    (conventions §4; sdk-core ADR-0041, decision 6;
+    https://github.com/xippios/sdk-usda-esr/issues/18)."""
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    description = " ".join((tools[f"usda_esr_{name}"].description or "").split())
+    assert "a market year ESR has not released yet, which it answers alike" in description
+    assert "no exports" in description or "without exports" in description

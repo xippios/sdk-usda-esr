@@ -134,9 +134,9 @@ async def test_list_tool_end_to_end(
 
 
 def test_the_list_caps() -> None:
-    """``list_countries`` has rows of its own and a note naming both filters;
-    ``list_commodities`` keeps the family's bounds with a note naming ``search``; the
-    filterless lists have no entry (conventions §8, sdk-core ADR-0038; Johannes, 2026-10-25)."""
+    """``list_countries`` has rows of its own and a note naming both filters; ``list_commodities``
+    keeps the family's bounds with a note naming ``search``; the filterless lists have no entry
+    (conventions §8, sdk-core ADR-0038; https://github.com/xippios/sdk-usda-esr/pull/4)."""
     countries = tasks.MCP_CAPS["list_countries"]
     assert (countries.max_rows, countries.max_bytes) == (250, DEFAULT_BYTES)
     assert countries.note is not None
@@ -224,7 +224,7 @@ def test_list_countries_by_region(respx_mock: respx.MockRouter) -> None:
     assert european_union[0] == 1, "the aggregate itself, as upstream sends it"
     assert {4120, 4230} <= set(european_union), "UK; Belgium-Luxembourg as one code"
     croatia = tasks.list_countries(search="4791").data
-    assert [c.region_id for c in croatia] == [2], "Croatia in OTHER EUROPE (Johannes, 2026-10-25)"
+    assert [c.region_id for c in croatia] == [2], "Croatia in OTHER EUROPE, as ESR sends it"
     region_ids = {r.region_id for r in tasks.list_regions().data}
     by_region = {rid: tasks.list_countries(region_id=rid).data for rid in region_ids}
     assert all(by_region.values()), "every region holds a country"

@@ -209,9 +209,9 @@ async def test_quantities_are_whole_numbers_as_recorded(
 
 
 def test_the_release_text_round_trips_and_is_not_serialised() -> None:
-    """``releaseTimeStamp`` as upstream prints it, two fractional digits, kept beside the
-    parsed value for ``get_release_dates``' ``meta.vintage``; no dump carries it, so the
-    adapters' rows keep their five fields (Johannes, 2026-10-28)."""
+    """``releaseTimeStamp`` as upstream prints it, two fractional digits, kept beside the parsed
+    value for ``get_release_dates``' ``meta.vintage``; no dump carries it, so the adapters' rows
+    keep their five fields (https://github.com/xippios/sdk-usda-esr/pull/7)."""
     fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
     body = json.loads(fixture.response.body)
     releases = parse(

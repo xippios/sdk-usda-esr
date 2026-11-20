@@ -93,3 +93,22 @@ def test_a_snapshot_leaves_observed_md_as_written(tmp_path: Path) -> None:
     script.write_snapshot(tmp_path, [a_row()], render(observed=True))
     assert notes.read_text(encoding="utf-8") == "# What ESR does but never documents\n"
     assert (tmp_path / script.PORTAL_FILE).read_bytes() == b'{"swagger": "2.0"}\n'
+
+
+def test_fetched_md_says_when_and_where_the_portal_document_was_found() -> None:
+    """How this is captured dates the find of the portal's Swagger document.
+
+    It states what was fetched, when and where the URL stood, which a reader of the snapshot
+    can check against the portal, and names nobody who fetched it or where they kept the copies;
+    nor does the script's own text (https://github.com/xippios/sdk-usda-esr/issues/17).
+    """
+    text = " ".join(render(observed=False).split())
+    found = (
+        f"On {script.PORTAL_SWAGGER_FOUND_ON}, when sdk-usda-psd's snapshot was set up, the"
+        " portal page and its JavaScript bundle were fetched into a temporary directory and"
+        " that URL was found in the bundle's Swagger UI configuration; those copies have"
+        " since been deleted, and this script reuses the URL."
+    )
+    assert found in text
+    assert "scratch" not in text
+    assert "scratch" not in SCRIPT.read_text(encoding="utf-8")

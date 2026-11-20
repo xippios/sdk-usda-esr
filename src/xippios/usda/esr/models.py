@@ -252,9 +252,9 @@ class ExportField(StrEnum):
     # The values are the validation_alias of each Decimal field of CommodityData, in the
     # record's order, and the member names its attribute names in upper case; a test keeps
     # them equal. get_top_destinations takes one as ``field``, so the MCP and HTTP schemas
-    # list the eight and refuse any other before a call (Johannes, 2026-10-25; conventions
-    # §3, sdk-core ADR-0028). It lives next to the record, not in enums.py, which
-    # scripts/refresh_reference.py renders whole from the packaged lists.
+    # list the eight and refuse any other before a call (conventions §3, sdk-core ADR-0028;
+    # https://github.com/xippios/sdk-usda-esr/pull/5). It lives next to the record, not in
+    # enums.py, which scripts/refresh_reference.py renders whole from the packaged lists.
 
     WEEKLY_EXPORTS = "weeklyExports"
     ACCUMULATED_EXPORTS = "accumulatedExports"

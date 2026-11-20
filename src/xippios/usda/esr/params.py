@@ -11,8 +11,8 @@ one (sdk-core ADR-0041, decision 5). A code a list lacks is refused with core's
 ``nearest``, then by ESR's own pass on the digits.
 
 Codes are integers, as the snapshot types the path parameters (``int32``) and as every
-recorded record carries them (Johannes, 2026-10-25; sdk-core ADR-0028): a check takes an ``int``
-and refuses anything else, ``True`` included.
+recorded record carries them (https://github.com/xippios/sdk-usda-esr/pull/3; sdk-core
+ADR-0028): a check takes an ``int`` and refuses anything else, ``True`` included.
 
 Refresh policy: ``/refresh-reference-data`` runs inside ``/release-prep``, and whenever
 a validation failure names a code the package lacks.
