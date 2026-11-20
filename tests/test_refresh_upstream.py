@@ -1,9 +1,10 @@
 """``scripts/refresh_upstream.py``'s ``FETCHED.md`` and its writing, offline.
 
 Nothing here sends a request: ``render_fetched`` and ``write_snapshot`` take what a capture
-run fetched, here one row and two ESR parts made up for the test alone, written under
-``tmp_path``, never to ``docs/upstream/``. ``OBSERVED.md`` is the one file under
-``docs/upstream/`` written by hand (conventions §3, sdk-core ADR-0028).
+run fetched, here one row of the portal's document whose body the snapshot gives, and its
+ESR part as ``document_row`` cuts it, written under ``tmp_path``, never to
+``docs/upstream/``. ``OBSERVED.md`` is the one file under ``docs/upstream/`` written by hand
+(conventions §3, sdk-core ADR-0028).
 """
 
 import importlib.util
@@ -33,30 +34,35 @@ def load_script() -> ModuleType:
 script = load_script()
 
 
-def a_row() -> object:
-    """A row of a document kept as a file, as a capture run makes one."""
+PORTAL = UPSTREAM / script.PORTAL_FILE
+
+
+def a_row() -> tuple[object, object]:
+    """A row of the portal's document kept as a file, and its ESR part, as a run makes them.
+
+    NOT RECORDED as served: the body is composed from what the snapshot documents, the ESR
+    part of the portal's document that the capture of 2026-11-20 kept in ``PORTAL``, read at
+    test time without its final newline, in the shape upstream answered the whole document,
+    the text ``json.dumps(indent=2, ensure_ascii=False)`` reproduces (conventions §10). The
+    tests assert what the script makes of it, never that upstream sends it.
+    """
     response = script.Response(
-        url="https://apps.fas.usda.gov/opendatawebV2/assets/swagger/swagger.json",
+        url=script.PORTAL_SWAGGER_URL,
         status=200,
-        body=b'{"swagger": "2.0"}',
+        body=PORTAL.read_bytes().removesuffix(b"\n"),
         content_type="application/json",
         etag=None,
         last_modified=None,
         redirects=(),
     )
-    return script.Row(response, "a note", script.PORTAL_FILE, b'{"swagger": "2.0"}\n')
+    row, part = script.document_row(script.PORTAL_FILE, response)
+    return row, part
 
 
 def render(*, observed: bool) -> str:
-    part = script.EsrPart(
-        part={"swagger": "2.0", "info": {"title": "ESR"}},
-        kept=1,
-        dropped={},
-        definitions_kept=0,
-        definitions_total=0,
-    )
+    row, part = a_row()
     text: str = script.render_fetched(
-        [a_row()],
+        [row],
         part,
         part,
         "main.0123abcd.js",
@@ -95,9 +101,10 @@ def test_a_snapshot_leaves_observed_md_as_written(tmp_path: Path) -> None:
     notes = tmp_path / script.OBSERVED
     notes.write_text("# What ESR does but never documents\n", encoding="utf-8")
     (tmp_path / "FETCHED.md").write_text("old\n", encoding="utf-8")
-    script.write_snapshot(tmp_path, [a_row()], render(observed=True))
+    row, _ = a_row()
+    script.write_snapshot(tmp_path, [row], render(observed=True))
     assert notes.read_text(encoding="utf-8") == "# What ESR does but never documents\n"
-    assert (tmp_path / script.PORTAL_FILE).read_bytes() == b'{"swagger": "2.0"}\n'
+    assert (tmp_path / script.PORTAL_FILE).read_bytes() == PORTAL.read_bytes()
 
 
 def test_the_committed_fetched_md_is_the_scripts_text() -> None:
