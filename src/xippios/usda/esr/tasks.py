@@ -258,13 +258,13 @@ async def get_exports_async(
     names a commodity's current one). Codes and the year are checked before any call:
     an unknown code raises ``InvalidRequestError`` naming the closest known codes, and a
     market year that is not four digits or is after the current calendar year plus two
-    raises ``InvalidRequestError`` with the reason. An empty list means ESR has no
-    records for that combination; a market year ESR holds no data for (1900) raises
-    ``NotFoundError``. ``meta.vintage`` is the latest week ending date among the records
-    (``"2024-06-06"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells
-    when ESR released the data. Every country at once is one row per destination and week
-    (cottonseed 2024: 498 rows for 11 destinations; wheat HRW 2024: 1,136 rows for 28);
-    one country is up to 54 rows.
+    raises ``InvalidRequestError`` with the reason. An empty list means ESR has no records for
+    that combination: no exports, or a market year ESR has not released yet, which it answers
+    alike; a market year ESR holds no data for (1900) raises ``NotFoundError``. ``meta.vintage``
+    is the latest week ending date among the records (``"2024-06-06"``); ``meta.published_at``
+    stays empty, ``get_release_dates`` tells when ESR released the data. Every country at once
+    is one row per destination and week (cottonseed 2024: 498 rows for 11 destinations; wheat
+    HRW 2024: 1,136 rows for 28); one country is up to 54 rows.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
@@ -488,18 +488,18 @@ async def get_latest_week_async(
 
     One request to ``ESRData_GetAllCountriesData``, the call ``get_exports`` makes without
     a country; of its records, one per destination and week, those whose
-    ``week_ending_date`` is the newest in the answer are kept, unchanged and in upstream's
-    order (by destination code in the recorded answer). Cottonseed 2024 as recorded: 11
-    destinations in the week ending 2024-08-01, of 498 records over 53 weeks; wheat HRW
-    2024 at most 28, the destinations of its whole answer as measured (1,136 records for
-    28). A destination ESR sends no record for in that week is not in the list. Nothing is
-    excluded: ``9990`` (UNKNOWN in ``list_countries``) is a row like any country when ESR
-    sends one; ``list_countries`` names every code. Quantities are in the unit ``unit_id``
-    names (``enums.UnitId``). ``meta.vintage`` is that week's ending date
-    (``"2024-08-01"``); ``meta.published_at`` stays empty, ``get_release_dates`` tells when
-    ESR released the data. Codes and the year are checked before the call, as for
-    ``get_exports``. Valid codes without exports (rye 2024) give an empty list and an empty
-    ``meta.vintage``; a market year ESR holds no data for (1900) raises ``NotFoundError``.
+    ``week_ending_date`` is the newest in the answer are kept, unchanged and in upstream's order
+    (by destination code in the recorded answer). Cottonseed 2024 as recorded: 11 destinations
+    in the week ending 2024-08-01, of 498 records over 53 weeks; wheat HRW 2024 at most 28, the
+    destinations of its whole answer as measured (1,136 records for 28). A destination ESR sends
+    no record for in that week is not in the list. Nothing is excluded: ``9990`` (UNKNOWN in
+    ``list_countries``) is a row like any country when ESR sends one; ``list_countries`` names
+    every code. Quantities are in the unit ``unit_id`` names (``enums.UnitId``).
+    ``meta.vintage`` is that week's ending date (``"2024-08-01"``); ``meta.published_at`` stays
+    empty, ``get_release_dates`` tells when ESR released the data. Codes and the year are
+    checked before the call, as for ``get_exports``. Valid codes without exports (rye 2024) give
+    an empty list and an empty ``meta.vintage``, as does a market year ESR has not released yet,
+    which it answers alike; a market year ESR holds no data for (1900) raises ``NotFoundError``.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``801`` (Soybeans), ``101``
@@ -531,15 +531,15 @@ async def get_top_destinations_async(
     answer (what ``get_latest_week`` returns) are sorted by ``field``, largest first, and
     the first ``n`` kept, each exactly as upstream sent it. Equal values keep upstream's
     order (by destination code in the recorded answer); net sales can be negative and then
-    rank last. Values are compared as sent, in the commodity's unit (``unit_id``).
-    Cottonseed 2024 by ``"outstandingSales"`` as recorded: 5800 KOREA, REPUBLIC OF
-    (17,092), 5880 JAPAN (4,223), 5230 OMAN (939), 1220 CANADA (31), then seven
-    destinations at 0 in upstream's order. Nothing is excluded: ``9990`` (UNKNOWN in
-    ``list_countries``) ranks alongside countries when ESR sends it; check codes with
-    ``list_countries`` if only countries should count. ``meta.vintage`` is the week ranked
-    (``"2024-08-01"``); ``meta.published_at`` stays empty. Codes, the year, ``field`` and
-    ``n`` are checked before the call. Valid codes without exports (rye 2024) give an empty
-    list; a market year ESR holds no data for (1900) raises ``NotFoundError``.
+    rank last. Values are compared as sent, in the commodity's unit (``unit_id``). Cottonseed
+    2024 by ``"outstandingSales"`` as recorded: 5800 KOREA, REPUBLIC OF (17,092), 5880 JAPAN
+    (4,223), 5230 OMAN (939), 1220 CANADA (31), then seven destinations at 0 in upstream's
+    order. Nothing is excluded: ``9990`` (UNKNOWN in ``list_countries``) ranks alongside
+    countries when ESR sends it; check codes with ``list_countries`` if only countries should
+    count. ``meta.vintage`` is the week ranked (``"2024-08-01"``); ``meta.published_at`` stays
+    empty. Codes, the year, ``field`` and ``n`` are checked before the call. Valid codes without
+    exports (rye 2024) give an empty list, as does a market year ESR has not released yet, which
+    it answers alike; a market year ESR holds no data for (1900) raises ``NotFoundError``.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``801`` (Soybeans), ``101``
