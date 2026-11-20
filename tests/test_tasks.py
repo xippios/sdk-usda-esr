@@ -11,7 +11,10 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+from mcp.types import TextContent
 from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core.data_gov import NoDataForYear
+from xippios.core.mcp import ToolSet
 from xippios.core.testing import (
     fixture_path,
     load_fixture,
@@ -20,10 +23,17 @@ from xippios.core.testing import (
     sent_urls,
 )
 
-from xippios.usda.esr import api, get_exports, get_market_year, get_release_dates, tasks
+from xippios.usda.esr import (
+    __version__,
+    api,
+    get_exports,
+    get_market_year,
+    get_release_dates,
+    tasks,
+)
+from xippios.usda.esr import mcp as esr_mcp
 from xippios.usda.esr._client import BASE_URL
 from xippios.usda.esr.enums import UnitId
-from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import DataReleaseInfo
 from xippios.usda.esr.params import latest_market_year
@@ -68,7 +78,7 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
 
 def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
     """A filtered tool names its filter in its cap's note even when its answer fits, as
-    ``list_commodities`` names ``search`` (conventions §8, ADR-0016)."""
+    ``list_commodities`` names ``search`` (conventions §8, sdk-core ADR-0038)."""
     cap = tasks.MCP_CAPS["get_release_dates"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
@@ -113,7 +123,7 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     assert sent_urls(route) == [f"{EXPORTS}/1201/allCountries/marketYear/2024"]
     assert result.meta.endpoint == "ESRData_GetAllCountriesData"
     assert result.meta.request == {"commodity_code": 1201, "market_year": 2024}, (
-        "country_code left None is left out (ADR-0022, rule 3)"
+        "country_code left None is left out (sdk-core ADR-0041, decision 3)"
     )
     assert len(result.data) == 498
     assert len({r.country_code for r in result.data}) == 11
@@ -172,7 +182,7 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     earlier = tasks.get_release_dates(since=A_SECOND_EARLIER)
     assert sent_urls(route) == [RELEASE_DATES] * 3, "one request each, filtered or not"
     assert len(whole.data) == 44
-    assert whole.meta.request == {}, "since left None is left out (ADR-0022, rule 3)"
+    assert whole.meta.request == {}, "since left None is left out (sdk-core ADR-0041, decision 3)"
     assert same.data == [], "a release at exactly since is not newer"
     assert same.meta.request == {"since": RELEASED}
     assert (same.meta.vintage, same.meta.published_at, same.meta.published_at_naive) == (
@@ -340,6 +350,7 @@ def test_a_market_year_esr_lacks_is_not_found(
     with pytest.raises(NoDataForYear) as info:
         tasks.get_exports(WHEAT_WHITE, 1900, CANADA)
     assert info.value.path == "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900"
+    assert info.value.source == "usda-esr", "raised again in the package's name"
     assert str(info.value) == (
         "ESR has no data for commodity 104, country 1220, market year 1900: GET "
         "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900 answered HTTP 404 "
@@ -357,6 +368,7 @@ def test_a_market_year_esr_lacks_is_not_found_for_every_country(
         tasks.get_exports(WHEAT_WHITE, 1900)
     path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
     assert info.value.path == path
+    assert info.value.source == "usda-esr", "raised again in the package's name"
     assert str(info.value) == (
         f"ESR has no data for commodity 104, every country, market year 1900: GET {path} "
         "answered HTTP 404 with an empty body."
@@ -457,7 +469,7 @@ async def test_every_country_over_mcp_is_cut_with_a_note_naming_country_code(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's bounds, and
-    the cap's note names the tool's filter, ``country_code`` (conventions §8, ADR-0016)."""
+    the cap's note names the tool's filter, ``country_code`` (conventions §8, sdk-core ADR-0038)."""
     replay_fixture(ALL, "cottonseed_2024")
     payload = await mcp_call(
         server, "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024}
@@ -606,8 +618,8 @@ def test_release_dates_since_over_http(
 def test_quantities_are_json_numbers_over_http(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    """ADR-0008: ``Decimal`` in Python, a JSON number on the wire, never a string; and the
-    package's refusal of an unknown code is a 422 problem."""
+    """``Decimal`` in Python, a JSON number on the wire, never a string (sdk-core ADR-0031,
+    decision 1); and the package's refusal of an unknown code is a 422 problem."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -632,3 +644,93 @@ def test_quantities_are_json_numbers_over_http(
     )
     assert rejected.status_code == 422
     assert rejected.json()["title"] == "UnknownCode"
+
+
+def test_build_returns_the_tool_set_the_entry_point_serves() -> None:
+    """``mcp.build()``, the package contract (conventions §8; sdk-core ADR-0026, amendment
+    2026-11-18, points c and d): a host that serves it beside other sources' tool sets
+    serves the tools, caps, text and version that ``xippios-usda-esr-mcp`` serves."""
+    tools = esr_mcp.build()
+    assert isinstance(tools, ToolSet)
+    assert tools.source == "usda-esr"
+    assert [task.__name__ for task in tools.tasks] == tasks.__all__
+    assert dict(tools.caps or {}) == dict(tasks.MCP_CAPS)
+    assert (tools.instructions, tools.version) == (esr_mcp.INSTRUCTIONS, __version__)
+    assert tools.read_only
+    assert (tools.add_options, tools.apply_options) == (None, None), "no options of its own"
+
+
+@pytest.mark.anyio
+async def test_the_adapters_refuse_a_bad_argument_before_the_task_runs(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """Core 0.4.0's adapters on this package's tools and routes. A tool refuses an argument
+    it does not declare (sdk-core#84), so ``country`` for ``country_code`` no longer runs
+    ``get_exports`` for every destination; a tool's error answer is flagged ``is_error``
+    (sdk-core#168); and a route answers a value its schema refuses as problem details,
+    the value not echoed (sdk-core#66). respx has no route mounted: nothing is sent."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from mcp.client import Client
+
+    from xippios.usda.esr.http import router
+
+    async with Client(server) as client:
+        undeclared = await client.call_tool(
+            "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024, "country": 5880}
+        )
+        unknown = await client.call_tool(
+            "usda_esr_get_exports", {"commodity_code": 999, "market_year": 2024}
+        )
+    assert undeclared.is_error
+    assert isinstance(undeclared.content[0], TextContent)
+    assert undeclared.content[0].text == (
+        "error: InvalidRequestError: country: Not an argument of this tool; it takes "
+        "commodity_code, market_year, country_code"
+    )
+    assert unknown.is_error
+    assert isinstance(unknown.content[0], TextContent)
+    assert unknown.content[0].text.startswith("error: UnknownCode: 999 is not a commodity_code")
+    app = FastAPI()
+    app.include_router(router)
+    http = TestClient(app)
+    refused = http.get(
+        "/usda-esr/get_exports", params={"commodity_code": 104, "market_year": "2024/25"}
+    )
+    assert refused.status_code == 422
+    assert refused.headers["content-type"].startswith("application/problem+json")
+    assert refused.json()["title"] == "InvalidRequestError"
+    assert refused.json()["detail"].startswith("market_year: ")
+    assert "2024/25" not in refused.text, "the input is not echoed"
+    missing = http.get("/usda-esr/get_exports", params={"market_year": 2024})
+    assert missing.status_code == 422
+    assert missing.json()["title"] == "InvalidRequestError"
+    assert missing.json()["detail"].startswith("commodity_code: ")
+    assert not respx_mock.calls
+
+
+def test_the_entry_point_names_itself(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``xippios-usda-esr-mcp`` names itself in its usage line and its errors, where core 0.3
+    named the server, ``xippios-usda-esr``, and its help says that ``--allow-remote``
+    changes nothing on this read server (sdk-core#167). The output is plain text at a width
+    of its own: Python 3.14's argparse colors it under ``FORCE_COLOR``."""
+    monkeypatch.setenv("PYTHON_COLORS", "0")
+    monkeypatch.setenv("COLUMNS", "100")
+    monkeypatch.setattr("sys.argv", ["xippios-usda-esr-mcp", "--bogus"])
+    with pytest.raises(SystemExit) as refused:
+        esr_mcp.run()
+    assert refused.value.code == 2
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "xippios-usda-esr-mcp: error: unrecognized arguments: --bogus"
+    )
+    monkeypatch.setattr("sys.argv", ["xippios-usda-esr-mcp", "--help"])
+    with pytest.raises(SystemExit) as helped:
+        esr_mcp.run()
+    assert helped.value.code == 0
+    text = capsys.readouterr().out
+    assert text.startswith("usage: xippios-usda-esr-mcp ")
+    assert "--allow-remote changes nothing: this read server is not held to loopback" in " ".join(
+        text.split()
+    )

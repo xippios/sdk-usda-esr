@@ -15,7 +15,7 @@ destinations over 20 weeks, 108,343 bytes, with a ``9990`` (UNKNOWN) row in ever
 (``wheat_white_2027``); measured the same day and not kept, wheat white 2024, 1,012
 records for 22 destinations, 284,590 bytes, ``9990`` in all 54 weeks. Market year 1900
 answers HTTP 404 with an empty ``text/plain`` body, as the one-country form does
-(``year_1900``), which ``_client.classify`` maps to ``errors.NoDataForYear``.
+(``year_1900``), which ``_client.classify`` maps to core's ``NoDataForYear``.
 """
 
 from xippios.core import parse

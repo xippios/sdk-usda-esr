@@ -1,16 +1,15 @@
 """The client's wiring and error mapping, and core's api.data.gov gateway wired to it.
 
-Recorded answers come from ``tests/fixtures`` (2026-10-25; the every-country form's
-1900, 2026-10-28). Cases the recordings do not cover are built in api.data.gov's
-documented shapes and say "NOT RECORDED": the gateway's 429 (``OVER_RATE_LIMIT``;
-spending the key's hourly quota, shared with sdk-usda-psd and sdk-usda-gats, to record
-it was not worth it; its shape is the one api.data.gov documents and sdk-usda-psd
-recorded on 2026-10-23), the gateway's ``NOT_FOUND`` 404 and the other ``API_KEY_*``
-codes. The gateway and its quota policy are core's (``xippios.core.data_gov.Gateway``,
-ADR-0009, ADR-0015) and are tested there; this module checks that the package installs
-them, that the policy reads a 429 and the recorded quota headers through the package's
-client, that ``classify`` keeps ESR's own answers after the gateway's, and that it
-shapes core's retries of a 429.
+Recorded answers come from ``tests/fixtures`` (2026-10-25; the every-country form's 1900,
+2026-10-28). Cases the recordings do not cover are built in api.data.gov's documented shapes
+and say "NOT RECORDED": the gateway's 429 (``OVER_RATE_LIMIT``; spending the key's hourly
+quota, shared with sdk-usda-psd and sdk-usda-gats, to record it was not worth it; its shape
+is the one api.data.gov documents and sdk-usda-psd recorded on 2026-10-23), the gateway's
+``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes. The gateway and its quota policy are
+core's (``xippios.core.data_gov.Gateway``, sdk-core ADR-0032, sdk-core ADR-0037) and are
+tested there; this module checks that the package installs them, that the policy reads a 429
+and the recorded quota headers through the package's client, that ``classify`` keeps ESR's
+own answers after the gateway's, and that it shapes core's retries of a 429.
 """
 
 import dataclasses
@@ -24,12 +23,13 @@ import respx
 from xippios.core import (
     AsyncClient,
     AuthError,
+    EnvVar,
     InvalidRequestError,
     NotFoundError,
     RateLimitError,
     RetryPolicy,
 )
-from xippios.core.data_gov import Gateway
+from xippios.core.data_gov import Gateway, NoDataForYear
 from xippios.core.testing import CLOCK_SLACK, load_fixture, response_from_fixture
 
 from xippios.usda.esr import api
@@ -37,6 +37,7 @@ from xippios.usda.esr._client import (
     API_KEY_ENV,
     BASE_URL,
     DATA_PATH,
+    ENV_VARS,
     RATE_LIMIT,
     SOURCE,
     auth,
@@ -45,7 +46,6 @@ from xippios.usda.esr._client import (
     config,
     gateway,
 )
-from xippios.usda.esr.errors import NoDataForYear
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTRY = "get_country_data"
@@ -94,13 +94,15 @@ GATEWAY_NOT_FOUND = {
 def test_the_client_is_wired_for_the_gateway() -> None:
     """One request per second, esr's classify, and core's gateway: its key auth and its
     one quota policy per process on api.data.gov's ``x-ratelimit-*`` headers, which count
-    the rolling hour, not a pace; one hour is the fallback wait (ADR-0009, ADR-0015)."""
+    the rolling hour, not a pace; one hour is the fallback wait (sdk-core ADR-0032,
+    sdk-core ADR-0037)."""
     assert (RATE_LIMIT.per_minute, RATE_LIMIT.capacity) == (60, 1)
     assert config.rate_limit is RATE_LIMIT
     assert config.classify is classify
     assert client.config is config
     assert config.base_url == BASE_URL == "https://api.fas.usda.gov"
     assert gateway.source == SOURCE == "usda-esr"
+    assert gateway.data_path is DATA_PATH, "core maps ESR's empty 404 there (sdk-core#106)"
     assert gateway.policy is Gateway.policy, "one policy per process for the shared key"
     assert config.observe == Gateway.policy.observe, "installed: every answer reaches it"
     assert config.before_request == Gateway.policy.before_request
@@ -112,6 +114,12 @@ def test_the_client_is_wired_for_the_gateway() -> None:
     assert auth is gateway.auth
     assert auth.header == "X-Api-Key"
     assert auth.env_var == API_KEY_ENV == "DATA_GOV_API_KEY"  # pragma: allowlist secret
+
+
+def test_env_vars_name_the_one_key_the_package_reads() -> None:
+    """``ENV_VARS`` tells a host what to set: the gateway's key, secret and required, and
+    nothing else, since the package reads no other variable (conventions §7)."""
+    assert (EnvVar(API_KEY_ENV, secret=True, required=True),) == ENV_VARS
 
 
 def test_the_client_asks_for_json() -> None:
@@ -217,9 +225,10 @@ async def test_market_year_1900_answers_404_with_an_empty_body(
     assert (response.status_code, response.content) == (404, b"")
     assert response.headers["content-type"].startswith("text/plain")
     error = classify(response)
-    assert isinstance(error, NoDataForYear)
+    assert isinstance(error, NoDataForYear), "core's class, through the gateway's data_path"
     assert isinstance(error, NotFoundError), "in the taxonomy, conventions §5"
     assert error.path == f"{EXPORTS}/1900"
+    assert error.source == SOURCE
     assert f"no data for {EXPORTS}/1900 (HTTP 404 with an empty body)" in error.message
     route = replay_fixture(COUNTRY, "year_1900")
     with pytest.raises(NoDataForYear, match="empty body"):
@@ -382,12 +391,12 @@ async def test_the_policy_reads_a_429_through_core(respx_mock: respx.MockRouter)
 async def test_core_retries_a_429_only_within_its_backoff(
     respx_mock: respx.MockRouter, retry_after: str | None, shaped: bool, attempts: int
 ) -> None:
-    """NOT RECORDED: the 429 above. esr's ``classify`` shapes core's retries (ADR-0015): its
-    ``RateLimitError`` carries the wait, ``Retry-After`` or else the one-hour window, beyond
-    ``backoff_max`` (30 s), so a 429 is sent once, with or without the header. The control
-    drops ``classify``: core then retries the 429 without ``Retry-After`` on its status
-    alone, three more times at its short backoff, so this test fails if ``classify`` stops
-    shaping the retries."""
+    """NOT RECORDED: the 429 above. esr's ``classify`` shapes core's retries
+    (sdk-core ADR-0037, decision 3): its ``RateLimitError`` carries the wait, ``Retry-After``
+    or else the one-hour window, beyond ``backoff_max`` (30 s), so a 429 is sent once, with
+    or without the header. The control drops ``classify``: core then retries the 429 without
+    ``Retry-After`` on its status alone, three more times at its short backoff, so this test
+    fails if ``classify`` stops shaping the retries."""
     sleeps: list[float] = []
 
     async def fake_sleep(seconds: float) -> None:

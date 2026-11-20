@@ -8,7 +8,8 @@ on:
   schedule:
     # 05:40 UTC, staggered from the slug (live_schedule in sdk-template's copier.yml)
     # so that sources sharing a key do not start together.
-    # The key is api.data.gov's, shared by every source behind the gateway (ADR-0009).
+    # The key is api.data.gov's, shared by every source behind the gateway
+    # (sdk-core ADR-0032).
     - cron: "40 5 * * *"
   workflow_dispatch:
 

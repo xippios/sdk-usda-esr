@@ -1,16 +1,16 @@
 # The release train (conventions §12, ADR-0018 amendment b): the release PR merges on
 # main → this workflow tags vX.Y.Z from pyproject.toml on the merge commit → environment
-# `pypi` → Johannes approves the run → trusted publishing uploads. No session and no human
-# pushes the tag, and no token is stored anywhere.
+# `pypi` → a maintainer approves the run → trusted publishing uploads. Nobody pushes the tag
+# by hand, and no token is stored anywhere.
 #
 # Every push to main runs it. `release-check` looks only at a push that changed
 # pyproject.toml or CHANGELOG.md (every dispatch): a new source's first release PR changes
 # no version, since the scaffold already says 0.1.0, only the CHANGELOG. It lets the push
 # through when pyproject.toml's version has no tag yet and CHANGELOG.md has that version's
-# `## [X.Y.Z] - ` heading. Anything else ends there quietly (an Unreleased entry on an
-# ordinary PR among it), except a changed pyproject.toml whose version has no CHANGELOG
-# section, which leaves a notice. CI runs here, once, for a release: ci.yml has no push
-# trigger of its own (the strict up-to-date policy tests every tree before it merges).
+# `## [X.Y.Z] - ` heading. Anything else ends there quietly, except a changed pyproject.toml
+# whose version has no CHANGELOG section, which leaves a notice. CI runs here, once, for a
+# release: ci.yml has no push trigger of its own (the strict up-to-date policy tests every
+# tree before it merges).
 # One workflow, because a tag pushed with GITHUB_TOKEN starts no other workflow. The file
 # name stays publish.yml: PyPI's trusted publisher names it.
 #
@@ -18,7 +18,7 @@
 # without a release; the fix is a patch release. Once the tag exists, only "Re-run failed
 # jobs" finishes the release: a dispatch or "Re-run all jobs" stops at release-check,
 # which finds the tag. If the `pypi` environment's deployment-branch policy rejects main
-# on the first run, Johannes sets the policy to `main` and re-runs the failed jobs. If
+# on the first run, a maintainer sets the policy to `main` and re-runs the failed jobs. If
 # `ci` fails before the tag, re-run the failed jobs rather than pushing a fix.
 #
 # Race. Runs are not serialised: GitHub's run groups keep one pending run and cancel it
@@ -26,7 +26,7 @@
 # Two pushes to main close together can therefore both see an untagged version: the
 # second run's tag push then fails red, or, if the first run's `ci` failed, the second
 # tags a later commit. The fix: re-run the failed jobs of the run whose commit is the
-# release; if the other run already tagged a later commit, Johannes rejects its `pypi`
+# release; if the other run already tagged a later commit, the maintainer rejects its `pypi`
 # deployment and the release is re-done as a patch. A release is not merged while
 # another release run is waiting.
 name: Publish to PyPI

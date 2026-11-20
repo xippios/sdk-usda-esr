@@ -43,11 +43,11 @@ jobs:
             echo "::error::no changelog entry: add changelog/<group>-<slug>.md as changelog/README.md says, or a line under Unreleased in CHANGELOG.md (conventions §12)"
             exit 1
           fi
-      # ADR-0019: the fixture files a PR adds or changes stay under 256 KiB. A pure move adds
-      # and changes no content: --find-renames=100% lists it as a rename, which --diff-filter=AM
-      # leaves out. A fixture moved and changed is listed as added, so one moved and grown is
-      # judged. LEVEL is error from template v0.3.0, when the cap binds a source; v0.2.1 and
-      # v0.2.2 warned.
+      # sdk-core ADR-0040: the fixture files a PR adds or changes stay under 256 KiB. A pure
+      # move adds and changes no content: --find-renames=100% lists it as a rename, which
+      # --diff-filter=AM leaves out. A fixture moved and changed is listed as added, so one moved
+      # and grown is judged. LEVEL is error from template v0.3.0, when the cap binds a source;
+      # v0.2.1 and v0.2.2 warned.
       - name: Fixture files under 256 KiB
         if: github.event_name == 'pull_request'
         env:
@@ -58,7 +58,7 @@ jobs:
           while IFS= read -r -d '' path; do
             size="$(stat -c %s "$path")"
             if [ "$size" -ge 262144 ]; then
-              echo "::${LEVEL} file=${path}::${size} bytes, over the 256 KiB cap (ADR-0019)"
+              echo "::${LEVEL} file=${path}::${size} bytes, over the 256 KiB cap (sdk-core ADR-0040)"
               over=1
             fi
           done < <(git diff -z --name-only --find-renames=100% --diff-filter=AM "origin/${BASE}...HEAD" -- tests/fixtures/)

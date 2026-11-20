@@ -22,6 +22,9 @@ build/
 .idea/
 .vscode/
 
+# what the source keeps for its operator alone: a curated list, a probe cache, reports
+.local/
+
 # copier's leftovers: the reject of a hunk an update could not apply, and an .orig
 *.rej
 *.orig

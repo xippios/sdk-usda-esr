@@ -1,7 +1,7 @@
 """The wave 2 slices: the latest week, the top destinations, the weekly series.
 
 Each replays a recorded answer and checks that the slice selects and orders upstream's
-records without changing one (ADR-0003; Johannes, 2026-10-25). ``_recorded`` parses a
+records without changing one (sdk-core ADR-0028; Johannes, 2026-10-25). ``_recorded`` parses a
 fixture the way the wrapper does, without a request, so a test compares with what
 upstream sent while the task's own request is counted on its route. The slices make the
 requests ``get_exports`` makes, and its fixtures serve them: ``wheat_white_2027`` carries
@@ -28,6 +28,7 @@ import httpx
 import pytest
 import respx
 from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core.data_gov import NoDataForYear
 from xippios.core.mcp import cap_result
 from xippios.core.testing import (
     ReplayFixture,
@@ -41,7 +42,6 @@ from xippios.core.testing import (
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
-from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, DataReleaseInfo, ExportField
 from xippios.usda.esr.params import latest_market_year
@@ -525,7 +525,7 @@ def test_a_range_past_the_current_market_year_is_refused(
     replay_fixture: ReplayFixture, respx_mock: respx.MockRouter
 ) -> None:
     """2024 to 2028 in 2026: 2028 is after wheat white's current market year, 2027, so the
-    whole range is refused naming 2027 (conventions §4; ADR-0022, amendment points 6 and
+    whole range is refused naming 2027 (conventions §4; sdk-core ADR-0041, decisions 6 and
     7), after the one release-list request and before any yearly one, nothing partial."""
     releases = replay_fixture(RELEASES, "all")
     with pytest.raises(NotFoundError) as info:
@@ -709,6 +709,7 @@ def test_every_destination_slices_name_a_market_year_esr_lacks(
     with pytest.raises(NoDataForYear) as info:
         call()
     assert info.value.path == path
+    assert info.value.source == "usda-esr", "raised again in the package's name"
     assert str(info.value) == (
         f"ESR has no data for commodity 104, every country, market year 1900: GET {path} "
         "answered HTTP 404 with an empty body."
@@ -1013,7 +1014,7 @@ async def test_an_unreleased_market_year_over_mcp(replay_fixture: ReplayFixture)
 
 
 def test_the_weekly_series_cap_note_names_the_range() -> None:
-    """A note of the task's own, the family's bounds kept (conventions §8, ADR-0016;
+    """A note of the task's own, the family's bounds kept (conventions §8, sdk-core ADR-0038;
     Johannes, 2026-10-28), as ``get_exports``' names ``country_code``."""
     cap = tasks.MCP_CAPS["get_weekly_series"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"

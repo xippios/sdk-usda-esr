@@ -1,6 +1,6 @@
 """Task-shaped functions for USDA FAS Export Sales Reporting.
 
-The public API (ADR-0001, layer 2). A task composes endpoint wrappers from ``api/``,
+The public API (sdk-core ADR-0001, layer 2). A task composes endpoint wrappers from ``api/``,
 resolves pagination and reference lookups, and returns ``Result[T]`` with full
 ``ResultMeta``. Write the async version, derive the sync one with ``xippios.core.sync``,
 and list the sync name in ``__all__``: the MCP server and the HTTP router register what
@@ -10,7 +10,7 @@ Docstrings are read by agents: one sentence first, then ``Args:`` with examples 
 valid values for every parameter. ``/add-endpoint`` walks through the whole recipe.
 
 Codes and market years are integers, as the snapshot types the path parameters
-(``int32``) and as the wire carries them (Johannes, 2026-10-25; ADR-0003); they are
+(``int32``) and as the wire carries them (Johannes, 2026-10-25; sdk-core ADR-0028); they are
 checked against the packaged lists before any call, since ESR answers an unknown code
 with an empty list. A market year is ESR's, named by the year it ends in and different
 per commodity; nothing is re-based.
@@ -20,7 +20,7 @@ one for the release time, so its ``meta.published_at`` stays ``None`` and its
 ``meta.vintage`` is the latest ``weekEndingDate`` among the records as an ISO date
 (``"2024-06-06"``), a data-as-of label, ``None`` for an empty list.
 ``get_release_dates`` is the way to learn when ESR released the data (Johannes,
-2026-10-28, superseding the ruling of 2026-10-26; ADR-0022, rule 2). Its
+2026-10-28, superseding the ruling of 2026-10-26; sdk-core ADR-0041, decision 2). Its
 ``meta.published_at`` is the newest ``releaseTimeStamp`` as upstream gives it, naive,
 with ``meta.published_at_naive`` set: the snapshot states no time zone for it (the
 program page that might say Eastern answers 403 to headless clients,
@@ -35,8 +35,8 @@ Change detection is ``get_release_dates``' parameter ``since`` (Johannes, 2026-1
 the ``meta.vintage`` text of an earlier call, parsed with ``datetime.fromisoformat`` to a
 naive time, since upstream's text carries no zone; a text that does not parse, or parses
 to an aware time, is refused before the call (``InvalidRequestError``, conventions §5,
-ADR-0007). The filter keeps the commodities released strictly after it, an equal time
-being no newer, and only selects (ADR-0003). ``meta.vintage`` and ``meta.published_at``
+sdk-core ADR-0007). The filter keeps the commodities released strictly after it, an equal time
+being no newer, and only selects (sdk-core ADR-0028). ``meta.vintage`` and ``meta.published_at``
 stay the newest release of upstream's whole answer, filtered or not, so an empty
 filtered answer still hands the caller the marker to store for the next call. It is one
 request either way, and no answer is cached: ``retrieved_at`` is the wire time.
@@ -47,7 +47,7 @@ commodity's record, unchanged, with that record's release as its ``meta.vintage`
 
 The slices (``get_latest_week``, ``get_top_destinations``, ``get_weekly_series``;
 Johannes, 2026-10-25) only select and order the records of the requests ``get_exports``
-makes (ADR-0003): no record is changed, nothing is derived, converted, filled or
+makes (sdk-core ADR-0028): no record is changed, nothing is derived, converted, filled or
 excluded, and nothing is compared with another source. ``get_latest_week`` and
 ``get_top_destinations`` make its one request; ``get_weekly_series`` makes its
 one-country request once per market year from ``start_year`` to ``end_year``, at most
@@ -55,8 +55,8 @@ one-country request once per market year from ``start_year`` to ``end_year``, at
 sdk-usda-psd's ``get_time_series``), and, for a range ending in the current calendar year
 or later, reads the release list first and refuses a range past the commodity's current
 market year with ``NotFoundError``, since ESR answers an unreleased market year with
-``[]`` as it answers a year without exports (Johannes, 2026-10-28; ADR-0022, amendment
-points 6 and 7). Their ``meta.endpoint`` is the operation the records come from,
+``[]`` as it answers a year without exports (Johannes, 2026-10-28; sdk-core ADR-0041,
+decisions 6 and 7). Their ``meta.endpoint`` is the operation the records come from,
 ``meta.request`` carries every parameter (``field`` as its upstream name),
 ``meta.vintage`` is the latest ``weekEndingDate`` among the records considered as an ISO
 date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``, as for
@@ -64,18 +64,18 @@ date, ``None`` for an empty answer, and ``meta.published_at`` stays ``None``, as
 
 The ``list_*`` tasks answer from the four lists packaged under ``reference/`` and make no
 upstream call (Johannes, 2026-10-25). Core's ``PackagedList`` reads the file and builds
-``meta`` (ADR-0022, rule 1): ``meta.endpoint`` is the operation the list was fetched from
-(``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the package fetched the list,
-the file's ``fetched``, a UTC time to the second (``2026-10-28T19:19:52Z`` for the
-countries), and
-``meta.vintage`` is ``None``: upstream gives these lists no release identifier, and a
-fetch date is not one. ``meta.published_at`` stays ``None``, and so does ``meta.total``,
-since upstream reports no count (ADR-0012). The records keep upstream's order, field
-names (snake_cased) and values, padding included. Their filters only select records of
-the packaged list (ADR-0003), and ``meta.request`` carries those given: ``region_id`` is
-named after upstream's ``regionId`` and matches it exactly, ``search`` is the package's
-own (the four operations take no parameters), a case-insensitive substring match on
-codes, as digits, on names and, for countries, on GENC codes (``xippios.core.matches``).
+``meta`` (sdk-core ADR-0041, decision 1): ``meta.endpoint`` is the operation the list was
+fetched from (``"ESRData_GetCountries"``), ``meta.retrieved_at`` is when the package fetched
+the list, the file's ``fetched``, a UTC time to the second (``2026-10-28T19:19:52Z`` for the
+countries), and ``meta.vintage`` is ``None``: upstream gives these lists no release
+identifier, and a fetch date is not one. ``meta.published_at`` stays ``None``, and so does
+``meta.total``, since upstream reports no count (sdk-core ADR-0034). The records keep
+upstream's order, field names (snake_cased) and values, padding included. Their filters only
+select records of the packaged list (sdk-core ADR-0028), and ``meta.request`` carries those
+given: ``region_id`` is named after upstream's ``regionId`` and matches it exactly,
+``search`` is the package's own (the four operations take no parameters), a case-insensitive
+substring match on codes, as digits, on names and, for countries, on GENC codes
+(``xippios.core.matches``).
 """
 
 from collections.abc import Mapping
@@ -91,10 +91,10 @@ from xippios.core import (
     matches,
     sync,
 )
+from xippios.core.data_gov import NoDataForYear
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
-from xippios.usda.esr.errors import NoDataForYear
 from xippios.usda.esr.models import (
     Commodity,
     CommodityData,
@@ -124,7 +124,8 @@ __all__ = [
     "list_units_of_measure",
 ]
 
-# A task named here is Python-only: no tool, no route; the adapters skip it (ADR-0019 decision 4).
+# A task named here is Python-only: no tool, no route; the adapters skip it
+# (sdk-core ADR-0040, decision 4).
 BULK_TASKS: frozenset[str] = frozenset()
 
 MCP_CAPS: Mapping[str, ResultCap] = {
@@ -154,7 +155,7 @@ MCP_CAPS: Mapping[str, ResultCap] = {
         ),
     ),
 }
-"""MCP result caps of their own, by task function name (conventions §8, ADR-0016).
+"""MCP result caps of their own, by task function name (conventions §8, sdk-core ADR-0038).
 
 ``get_exports`` keeps the family's bounds, 200 rows or 64 KB, with a note of its own: a
 tool with filters names them in its cap's note (§8; Johannes, 2026-10-25). Every country
@@ -166,7 +167,7 @@ nothing else, as ``list_commodities``' does. ``get_market_year``, one record, ha
 filter and no entry: its one parameter chooses the record.
 
 ``get_weekly_series`` keeps the family's bounds too, with a note of its own that names
-``start_year`` and ``end_year`` (Johannes, 2026-10-28; §8, ADR-0016), as ``get_exports``'
+``start_year`` and ``end_year`` (Johannes, 2026-10-28; §8, sdk-core ADR-0038), as ``get_exports``'
 names ``country_code``: one destination's market year is up to 54 rows (wheat white to
 Canada: 53 in 2023, 54 in 2024), so three market years fit 200 rows and the ceiling of
 ``SERIES_MAX_YEARS``, ten, can reach some 540; the cut keeps the first rows, the oldest
@@ -174,14 +175,14 @@ weeks, and narrowing the range shows the rest. No ceiling of the process's own a
 option: the ceiling is the task's, the same in Python, over HTTP and over MCP.
 
 ``get_latest_week`` and ``get_top_destinations`` have no entry and keep the family's
-bounds (§8; ADR-0016): neither returns more than one week of every destination.
+bounds (§8; sdk-core ADR-0038): neither returns more than one week of every destination.
 ``get_latest_week`` is one row per destination, 11 for cottonseed 2024 and for wheat HRW
 2024 at most 28, the destinations of its whole answer as measured (1,136 rows for 28);
 ``get_top_destinations`` at most ``n`` of those. Their parameters choose the one request
 and the order, and none is an optional filter that narrows a cut answer, so a note would
 have nothing to name (§8); ``n`` bounds the rows already.
 
-``list_countries`` is a reference list an agent needs whole to find codes (ADR-0016;
+``list_countries`` is a reference list an agent needs whole to find codes (sdk-core ADR-0038;
 Johannes, 2026-10-25): 211 countries when packaged, past the default of 200 rows, so its
 cap is 250 rows; the whole list is 28,936 bytes of compact JSON over MCP as packaged,
 within the default 64 KB, which it keeps. Its note names its filters, ``region_id`` and
@@ -229,15 +230,17 @@ def _newest_release(releases: list[DataReleaseInfo]) -> DataReleaseInfo | None:
 def _absent(
     exc: NoDataForYear, commodity_code: int, country: str, market_year: int
 ) -> NoDataForYear:
-    """ESR's empty 404 again, naming what was asked for.
+    """ESR's empty 404 again, naming what was asked for, in the source's name.
 
-    Only ``NoDataForYear`` means "no data for this market year"; any other
-    ``NotFoundError`` (the gateway's ``NOT_FOUND``) is not caught and propagates as is.
+    Only ``NoDataForYear``, core's class that the gateway returns on an exports path, means
+    "no data for this market year"; any other ``NotFoundError`` (the gateway's
+    ``NOT_FOUND``) is not caught and propagates as is.
     """
     return NoDataForYear(
         exc.path,
         f"ESR has no data for commodity {commodity_code}, {country}, market year "
         f"{market_year}: GET {exc.path} answered HTTP 404 with an empty body.",
+        source=exc.source,
     )
 
 
@@ -305,7 +308,7 @@ def _since(since: object) -> datetime:
 
     Parsed with ``datetime.fromisoformat``, so a date alone (``"2026-10-01"``) is its
     midnight; a time with a zone is refused, since ESR's release times carry none and the
-    two cannot be compared without inventing one (ADR-0022, rule 2).
+    two cannot be compared without inventing one (sdk-core ADR-0041, decision 2).
     """
     parsed = None
     if isinstance(since, str):
@@ -586,7 +589,7 @@ def _series_range(start_year: int, end_year: int) -> None:
     """Refuse a range that runs backwards or spans more than ``SERIES_MAX_YEARS`` market years.
 
     Both years have passed ``validate_market_year``; the range is checked before the first
-    request, as conventions §4 and §5 ask, with ``InvalidRequestError`` (ADR-0007).
+    request, as conventions §4 and §5 ask, with ``InvalidRequestError`` (sdk-core ADR-0007).
     """
     if start_year > end_year:
         raise InvalidRequestError(
@@ -674,7 +677,8 @@ async def get_weekly_series_async(
     }
     if end_year >= _calendar_year():
         # An unreleased market year answers [] as a year without exports does, so it is
-        # refused, naming the latest released one (conventions §4; ADR-0022 points 6, 7).
+        # refused, naming the latest released one (conventions §4; sdk-core ADR-0041,
+        # decisions 6 and 7).
         latest = _release_of(commodity_code, await api.get_data_release_info()).market_year
         if end_year > latest:
             raise NotFoundError(

@@ -47,10 +47,13 @@ checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.m
    (`XIPPIOS_LIVE_TESTS=1`), run them first,
    `uv run pytest -m live --tb=short --assert=plain`, so that a failure shows before the
    dispatch spends a run.
-4. SemVer check: pre-1.0, a breaking change bumps the minor. An upstream API change that
-   changed our public surface is a breaking change. Read the fragments under `changelog/`
-   and what `## [Unreleased]` holds, and confirm that the version matches them; say so in
-   the pull request if it does not.
+4. SemVer check (conventions §12): pre-1.0, only a breaking change bumps the minor, and
+   added tasks or parameters make a patch. An upstream API change that changed our public
+   surface is a breaking change, and so is an adoption of a core minor, whatever else the
+   release brings: it moves the core bound to the new minor, so the release no longer
+   installs beside a package still bound to the old one, and the adoption's fragment names
+   that minor. Read the fragments under `changelog/` and what `## [Unreleased]` holds, and
+   confirm that the version matches them; say so in the pull request if it does not.
 5. `pyproject.toml`: set `version`, the version `publish.yml` tags, then `uv lock`. A
    first release keeps the scaffold's `0.1.0`: its CHANGELOG section alone makes it a
    release.
