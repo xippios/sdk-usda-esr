@@ -9,11 +9,11 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - Adopted sdk-template v0.3.1 (conventions §15), with no new core minor: the floor stays
-  `xippios-core~=0.3.0`. `.github/CODEOWNERS` is rendered from the template's new
-  `human` answer and names `@jdidaskalu` as the owner of each human path; `.gitignore`
-  leaves copier's `*.rej` and `*.orig` out; `.claude/family.md`, `/adopt-release`,
-  `/release-prep` and the PR template name no merge class and no auto-merge, as a pull
-  request merges under the rulesets of `main` on the reviewer's approval.
+  `xippios-core~=0.3.0`. `.github/CODEOWNERS` is rendered from the template's answers and
+  names the code owner whom GitHub asks to review a change to `.github/`, `CLAUDE.md`,
+  `.claude/`, `pyproject.toml` or `.copier-answers.yml`; `.gitignore` leaves copier's
+  `*.rej` and `*.orig` out; `.claude/family.md`, `/adopt-release`, `/release-prep` and the
+  PR template no longer say how a pull request reaches `main`.
 
 ## [0.2.0] - 2026-10-28
 
