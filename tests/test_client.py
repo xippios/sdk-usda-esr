@@ -30,6 +30,7 @@ from xippios.core import (
     RetryPolicy,
 )
 from xippios.core.data_gov import Gateway, NoDataForYear
+from xippios.core.errors import request_description
 from xippios.core.testing import CLOCK_SLACK, load_fixture, response_from_fixture
 
 from xippios.usda.esr import api
@@ -295,12 +296,39 @@ async def test_a_path_value_that_is_not_an_integer_is_an_invalid_request(
     error = classify(response)
     assert isinstance(error, InvalidRequestError)
     path = "/api/esr/exports/commodityCode/abc/countryCode/1220/marketYear/2024"
-    assert f"ESR refused {path} (HTTP 400: The request is invalid.)" in error.message
+    assert request_description(response) == f"GET {path}"
+    assert f"ESR refused GET {path} (HTTP 400: The request is invalid.)" in error.message
     assert "api.fas.usda.gov" not in error.message
     route = replay_fixture(COUNTRY, "not_an_integer")
     with pytest.raises(InvalidRequestError, match="The request is invalid"):
         await client.get_json(path)
     assert route.call_count == 1
+
+
+def test_each_error_classify_maps_names_the_request_by_cores_description() -> None:
+    """ESR's own answers, after the gateway's, name the request as core's
+    ``request_description`` gives it, its method and its path, never the host (conventions
+    §5, sdk-core ADR-0030): the recorded 400, and the recorded empty 404 of 1900, NOT
+    RECORDED as such, moved off an exports path or without its ``text/plain``."""
+    empty = load_fixture(FIXTURES / COUNTRY / "year_1900.json")
+    responses = [
+        response_from_fixture(load_fixture(FIXTURES / COUNTRY / "not_an_integer.json")),
+        *(
+            httpx.Response(404, headers=headers, content=b"", request=httpx.Request("GET", url))
+            for url, headers in [
+                (f"{BASE_URL}/api/esr/datareleasedates", empty.response.headers),
+                (empty.request.url, [("content-type", "application/json")]),
+            ]
+        ),
+    ]
+    for response in responses:
+        error = classify(response)
+        assert isinstance(error, InvalidRequestError | NotFoundError)
+        assert not isinstance(error, NoDataForYear)
+        described = request_description(response)
+        assert described.startswith("GET /api/esr/")
+        assert f" {described} (HTTP {response.status_code}" in error.message, error.message
+        assert "api.fas.usda.gov" not in error.message, "never the host"
 
 
 def test_a_400_without_esrs_message_falls_through_to_core() -> None:
