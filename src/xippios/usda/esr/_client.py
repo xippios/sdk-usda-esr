@@ -31,6 +31,7 @@ from xippios.core import (
     XippiosError,
 )
 from xippios.core.data_gov import API_KEY_ENV, Gateway
+from xippios.core.errors import request_description
 
 from xippios.usda.esr._version import __version__
 
@@ -101,23 +102,23 @@ def classify(response: httpx.Response) -> XippiosError | None:
     (``year_2099``) and valid codes without exports (rye, market year 2024,
     ``get_all_countries_data/rye_2024.json``): empty means empty, not an error; the
     package refuses unknown codes and future years before the call (``params``).
-    Everything else falls through to core's status mapping. Messages name the path, never
-    the host.
+    Everything else falls through to core's status mapping. Messages name the request as
+    core's ``request_description`` gives it, its method and its path, never the host.
     """
     error = gateway.classify(response)
     if error is not None:
         return error
     status = response.status_code
-    path = response.request.url.path
+    request = request_description(response)
     if status == 404 and not response.content.strip():
         return NotFoundError(
-            f"ESR has no data for {path} (HTTP 404 with an empty body)", source=SOURCE
+            f"ESR has no data for {request} (HTTP 404 with an empty body)", source=SOURCE
         )
     if status == 400:
         refusal = _esr_message(response)
         if refusal is not None:
             return InvalidRequestError(
-                f"ESR refused {path} (HTTP 400: {refusal}). Every path value of an ESR "
+                f"ESR refused {request} (HTTP 400: {refusal}). Every path value of an ESR "
                 "export query is an integer: commodity code, country code and market year.",
                 source=SOURCE,
             )
