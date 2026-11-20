@@ -19,7 +19,7 @@ from types import ModuleType
 import httpx
 import pytest
 import respx
-from xippios.core import PackagedList, UpstreamError
+from xippios.core import PackagedList, TransportError, UpstreamError
 from xippios.core.testing import load_fixture
 
 from xippios.usda.esr._client import BASE_URL, client
@@ -127,6 +127,36 @@ def test_a_failed_fetch_is_sent_once_and_writes_nothing(
     assert renders == []
     assert capsys.readouterr().out == (
         "requests sent: 4; quota left: 991 (x-ratelimit-remaining)\n"
+    )
+
+
+def test_a_request_that_fails_in_transport_is_counted_as_sent(
+    renders: list[Path],
+    replay_fixture: Callable[[str, str], respx.Route],
+    respx_mock: respx.MockRouter,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """NOT RECORDED: a read timeout on the third list, a failure of the transport and no
+    body at all. The request left and may have reached the gateway, but no response comes
+    back to count it by, so the run counts it when its error ends the run and says so: the
+    count is never below what the run spent of the key's quota. The fourth list is never
+    asked for, no file is written and nothing is rendered (finding 1 of the review of
+    https://github.com/xippios/sdk-usda-esr/pull/44)."""
+    for name in ("unitsOfMeasure", "commodities"):
+        replay_fixture(WRAPPERS[name], "all")
+    timed_out = respx_mock.get(f"{BASE_URL}/api/esr/countries").mock(
+        side_effect=httpx.ReadTimeout("timed out")
+    )
+    never = respx_mock.get(f"{BASE_URL}/api/esr/regions").mock(return_value=httpx.Response(200))
+    before = files(script.REFERENCE)
+    with pytest.raises(TransportError):
+        script.refresh()
+    assert (timed_out.call_count, never.call_count) == (1, 0)
+    assert files(script.REFERENCE) == before
+    assert renders == []
+    assert capsys.readouterr().out == (
+        "requests sent: 3 (1 ended in a transport error, counted as sent); "
+        "quota left: 992 (x-ratelimit-remaining)\n"
     )
 
 
