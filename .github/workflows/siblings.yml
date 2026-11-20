@@ -1,7 +1,7 @@
-# Sibling proof for ADR-0006: this wheel installs beside every sibling under the same
-# provider namespace that is on PyPI, as portions of the namespaces between xippios and the
-# package (.github/scripts/check-siblings.sh says how it finds them), and beside the source
-# packages it depends on, as pyproject.toml declares them (ADR-0021).
+# Sibling proof for sdk-core ADR-0006: this wheel installs beside every sibling under the
+# same provider namespace that is on PyPI, as portions of the namespaces between xippios and
+# the package (.github/scripts/check-siblings.sh says how it finds them), and beside the
+# source packages it depends on, as pyproject.toml declares them (sdk-core ADR-0021).
 # sdk-template renders this workflow and the script where the import path nests or the
 # source declares a source package it depends on, and copier update keeps both as the
 # template's. It runs next to ci.yml, which is core's file and which publish.yml calls for

@@ -4,9 +4,9 @@ Reference data the upstream publishes for every caller alike (code lists, attrib
 lists, report calendars) may ship inside the package under
 `src/xippios/usda/esr/reference/` and is loaded with `xippios.core.reference`. It
 comes from the upstream, never from memory. Not every source packages lists: one that
-changes often stays a lookup task that calls upstream. A multi-tenant source (ADR-0014)
-packages no tenant data, only reference lists that are the same for every tenant, if any.
-The change meets sdk-core's definition of done,
+changes often stays a lookup task that calls upstream. A multi-tenant source
+(sdk-core ADR-0036) packages no tenant data, only reference lists that are the same for
+every tenant, if any. The change meets sdk-core's definition of done,
 https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and its review
 checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
 
@@ -20,7 +20,13 @@ checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.m
    where they take one). It fetches every list, writes each `reference/<name>.json` with
    `PackagedList.write` (the operation, the UTC time of the fetch, upstream's records),
    regenerates `enums.py` with one `render_enums` call and formats it with `ruff format`
-   and `ruff check --fix` (ADR-0008); commit both as the script leaves them.
+   and `ruff check --fix` (sdk-core ADR-0031); commit both as the script leaves them. It
+   sends each request once, with no retry, so a run that fails writes nothing and is run
+   again, and after the fetches it prints the requests it sent and the quota left that
+   upstream reported, a failed run's too: say both in the pull request.
+   `--only <list> ...` fetches the named lists
+   alone and keeps every other list's file, so a change that packages a new list
+   refreshes that list and no other.
    `uv run python scripts/refresh_reference.py --render-only` regenerates `enums.py`
    from the packaged files alone, without a request or a key, as an adoption does after
    a core release changes the renderer (conventions §15, item 6). A source whose script
@@ -35,13 +41,13 @@ checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.m
    own lookup operation when it serves every list through one. A lookup over a packaged
    list returns the packaged data, it does not call upstream. A list an agent needs whole
    that is longer than the default result cap (200 rows or 64 KB) gets a cap of its own,
-   `MCP_CAPS` in `tasks.py`, keyed by the task's name (ADR-0016).
+   `MCP_CAPS` in `tasks.py`, keyed by the task's name (sdk-core ADR-0038).
 5. Update what pins the old lists: counts and dates in list-task docstrings and in
    tests. A test that reads the counts and the fetch date, `fetched`, from the packaged
    file needs no change (`/add-endpoint`, step 6), where a pinned `fetched` changes with
    every refresh. A test that compares a packaged list with the recorded answer of its
    list endpoint fails once a record changes: record those fixtures again in the same
-   change with `/record-fixture`, and count their calls with the refresh's.
+   change with `/record-fixture`, and add their calls to the requests the refresh sent.
 6. A changelog fragment under `changelog/`, as `changelog/README.md` lays it out, says
    which lists changed.
 7. Run the checks,
