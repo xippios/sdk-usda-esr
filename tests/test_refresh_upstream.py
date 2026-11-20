@@ -7,13 +7,18 @@ run fetched, here one row and two ESR parts made up for the test alone, written 
 """
 
 import importlib.util
+import itertools
+import json
+import re
 from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "refresh_upstream.py"
+UPSTREAM = ROOT / "docs" / "upstream"
 FETCHED = "2026-11-20T09:00:00Z"
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
+TABLE = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
 
 def load_script() -> ModuleType:
@@ -93,6 +98,40 @@ def test_a_snapshot_leaves_observed_md_as_written(tmp_path: Path) -> None:
     script.write_snapshot(tmp_path, [a_row()], render(observed=True))
     assert notes.read_text(encoding="utf-8") == "# What ESR does but never documents\n"
     assert (tmp_path / script.PORTAL_FILE).read_bytes() == b'{"swagger": "2.0"}\n'
+
+
+def test_the_committed_fetched_md_is_the_scripts_text() -> None:
+    """Beside the rows of what the capture fetched, ``FETCHED.md`` is ``render_fetched``'s
+    text for the committed snapshot, the row of ``OBSERVED.md`` where the file exists, as a
+    run's ``main`` renders it. The prose quotes the two ESR parts under ``openapi/``, the
+    backend document's URL and the bundle's name, which the fetched rows hold."""
+    committed = (UPSTREAM / "FETCHED.md").read_text(encoding="utf-8").splitlines()
+    head = committed.index(TABLE) + 1
+    table = itertools.takewhile(lambda line: line.startswith("| "), committed[head:])
+    rows = [line for line in table if not line.startswith(f"| {script.OBSERVED} |")]
+    by_file = {line.split(" | ")[0].removeprefix("| "): line.split(" | ") for line in rows}
+    bundle = re.search(r"loads the bundle `(main\.[0-9a-f]+\.js)`", "\n".join(rows))
+    assert bundle is not None
+    parts = [
+        script.EsrPart(
+            part=json.loads((UPSTREAM / path).read_text(encoding="utf-8")),
+            kept=0,
+            dropped={},
+            definitions_kept=0,
+            definitions_total=0,
+        )
+        for path in (script.PORTAL_FILE, script.BACKEND_FILE)
+    ]
+    rendered = script.render_fetched(
+        [],
+        *parts,
+        bundle.group(1),
+        by_file[script.BACKEND_FILE][1],
+        FETCHED,
+        (UPSTREAM / script.OBSERVED).is_file(),
+    ).splitlines()
+    assert len(rows) == 7
+    assert committed[:head] + committed[head + len(rows) :] == rendered
 
 
 def test_fetched_md_says_when_and_where_the_portal_document_was_found() -> None:
