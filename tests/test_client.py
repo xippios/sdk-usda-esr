@@ -328,6 +328,21 @@ def test_each_error_classify_maps_names_the_request_by_cores_description() -> No
         assert "api.fas.usda.gov" not in error.message, "never the host"
 
 
+def test_classify_itself_keeps_an_empty_404_a_plain_not_found_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each recorded empty 404 of 1900, unchanged at its own URL, with the gateway's mapping
+    stubbed out: ``classify``'s own branch, which runs after the gateway's, keeps it a plain
+    ``NotFoundError``. Only the gateway, given ``DATA_PATH``, says the year holds no data."""
+    monkeypatch.setattr(gateway, "classify", lambda response: None)
+    for wrapper in (COUNTRY, ALL):
+        response = response_from_fixture(load_fixture(FIXTURES / wrapper / "year_1900.json"))
+        error = classify(response)
+        assert isinstance(error, NotFoundError)
+        assert not isinstance(error, NoDataForYear), wrapper
+        assert error.source == SOURCE
+
+
 def test_a_400_without_esrs_message_falls_through_to_core() -> None:
     """NOT RECORDED: a 400 in another shape is core's ``UpstreamError``, not a guess."""
     assert classify(synthesised(400, ["not", "an", "object"])) is None
