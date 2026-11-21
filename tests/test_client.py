@@ -267,20 +267,20 @@ def test_the_content_type_is_compared_without_case() -> None:
 
 
 def test_an_empty_404_is_no_data_for_year_only_on_an_exports_path_as_text() -> None:
-    """NOT RECORDED: the recorded empty 404 moved off an exports path, or without its
-    ``text/plain``. Neither is ESR's answer for an empty year: both stay a plain
-    ``NotFoundError``."""
-    fixture = load_fixture(FIXTURES / COUNTRY / "year_1900.json")
-    for url, headers in [
-        (f"{BASE_URL}/api/esr/datareleasedates", fixture.response.headers),
-        (fixture.request.url, [("content-type", "application/json")]),
-    ]:
-        response = httpx.Response(
-            404, headers=headers, content=b"", request=httpx.Request("GET", url)
-        )
+    """NOT RECORDED as such: each recorded empty 404 of 1900 at its own URL, its ``text/plain``
+    replaced (conventions §10, a header replaced), is a plain ``NotFoundError``. Off an
+    exports path nothing is served: no other operation was seen answering an empty 404 and
+    the snapshot documents none, so that half rests on the gateway's ``data_path``, which
+    matches the path of no other operation."""
+    for wrapper in (COUNTRY, ALL):
+        response = response_from_fixture(load_fixture(FIXTURES / wrapper / "year_1900.json"))
+        response.headers["content-type"] = "application/json"
         error = classify(response)
         assert isinstance(error, NotFoundError)
-        assert not isinstance(error, NoDataForYear), url
+        assert not isinstance(error, NoDataForYear), wrapper
+    assert gateway.data_path is DATA_PATH
+    for other in ("datareleasedates", "commodities", "countries", "regions", "unitsOfMeasure"):
+        assert not DATA_PATH.fullmatch(f"/api/esr/{other}"), other
 
 
 @pytest.mark.anyio
@@ -308,18 +308,15 @@ async def test_a_path_value_that_is_not_an_integer_is_an_invalid_request(
 def test_each_error_classify_maps_names_the_request_by_cores_description() -> None:
     """ESR's own answers, after the gateway's, name the request as core's
     ``request_description`` gives it, its method and its path, never the host (conventions
-    §5, sdk-core ADR-0030): the recorded 400, and the recorded empty 404 of 1900, NOT
-    RECORDED as such, moved off an exports path or without its ``text/plain``."""
-    empty = load_fixture(FIXTURES / COUNTRY / "year_1900.json")
+    §5, sdk-core ADR-0030): the 400 recorded at its own path, and, since no empty 404 off an
+    exports path or without ``text/plain`` was recorded, the recorded empty 404 of 1900 at its
+    own URL, NOT RECORDED as such: its ``text/plain`` replaced (conventions §10, a header
+    replaced)."""
+    empty = response_from_fixture(load_fixture(FIXTURES / COUNTRY / "year_1900.json"))
+    empty.headers["content-type"] = "application/json"
     responses = [
         response_from_fixture(load_fixture(FIXTURES / COUNTRY / "not_an_integer.json")),
-        *(
-            httpx.Response(404, headers=headers, content=b"", request=httpx.Request("GET", url))
-            for url, headers in [
-                (f"{BASE_URL}/api/esr/datareleasedates", empty.response.headers),
-                (empty.request.url, [("content-type", "application/json")]),
-            ]
-        ),
+        empty,
     ]
     for response in responses:
         error = classify(response)
