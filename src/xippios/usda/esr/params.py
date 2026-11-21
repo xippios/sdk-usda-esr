@@ -46,12 +46,12 @@ checks it before a refresh.
 EARLIEST_MARKET_YEAR = 1000
 """The lowest market year the package sends: a four-digit year, a shape check only.
 
-The snapshot types ``marketYear`` as ``int32`` and names no range. ESR answers a market
-year it holds no data for with HTTP 404 and an empty body (recorded for 1900), which
-``classify`` maps to core's ``NoDataForYear``, so an early year needs no refusal of its
-own; market years 1998 and 1999 answered HTTP 200 with ``[]`` for wheat white to Canada
-(probed 2026-10-25, not kept), the same as a pair without exports, so where ESR's data
-begins is not established and no later bound is set.
+The snapshot types ``marketYear`` as ``int32`` and names no range. ``classify`` maps
+ESR's answer for a market year it holds no data for to core's ``NoDataForYear`` through
+the gateway, so an early year needs no refusal of its own. Where ESR's data begins is not
+established, so no later bound is set. What ESR answered for market years 1900, 1998 and
+1999 is noted in ``docs/upstream/OBSERVED.md``, each answer with the probe that showed
+it, a recording or a request.
 """
 
 
