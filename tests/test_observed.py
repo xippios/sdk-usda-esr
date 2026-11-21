@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PACKAGE = ROOT / "src" / "xippios" / "usda" / "esr"
 UPSTREAM = ROOT / "docs" / "upstream"
 OBSERVED = UPSTREAM / "OBSERVED.md"
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
@@ -21,6 +22,11 @@ CITED = re.compile(r"`((?:tests|docs|src)/[^`\s]+\.[a-z]+)`")
 REQUEST = re.compile(r"`GET (/api/esr/[^`\s]+)`")
 OPERATION = re.compile(r"`(ESRData_\w+)`")
 NOT_KEPT = "kept no answer"
+PROBE = re.compile(r"\bprobed\b|\bnot kept\b")
+"""How a text tells a probe: probed, or its answer not kept. A size that a task's docstring
+gives agents, such as ``tasks.py``'s counts "as measured", tells no probe."""
+REFERENCE = re.compile(r"^\[[^\]\n]+\]: \S+\n?", re.MULTILINE)
+"""A link reference definition, which renders as nothing and is no note's paragraph."""
 
 
 def text() -> str:
@@ -32,7 +38,7 @@ def notes() -> dict[str, list[str]]:
 
     A ``##`` heading groups notes and is none itself.
     """
-    parts = re.split(r"^(##|###) (.+)$", text(), flags=re.MULTILINE)
+    parts = re.split(r"^(##|###) (.+)$", REFERENCE.sub("", text()), flags=re.MULTILINE)
     return {
         heading: [" ".join(block.split()) for block in body.split("\n\n") if block.strip()]
         for level, heading, body in zip(parts[1::3], parts[2::3], parts[3::3], strict=True)
@@ -106,10 +112,19 @@ def test_every_file_the_notes_cite_exists() -> None:
     assert [path for path in cited if not (ROOT / path).is_file()] == []
 
 
-def test_the_rules_point_to_the_notes_and_keep_no_probe() -> None:
-    """``CLAUDE.md`` and ``params.py`` say what the package does with what ESR does; the
-    probes themselves, kept or not, stand in ``OBSERVED.md`` alone."""
-    for path in (ROOT / "CLAUDE.md", ROOT / "src" / "xippios" / "usda" / "esr" / "params.py"):
+def test_the_rules_point_to_the_notes() -> None:
+    """``CLAUDE.md`` and ``params.py`` say what the package does with what ESR does."""
+    for path in (ROOT / "CLAUDE.md", PACKAGE / "params.py"):
         rules = " ".join(path.read_text(encoding="utf-8").split())
         assert "docs/upstream/OBSERVED.md" in rules, path.name
-        assert not re.search(r"\bprobed\b|\bnot kept\b|\bmeasured\b", rules), path.name
+
+
+def test_no_probe_stands_outside_the_notes() -> None:
+    """The probes themselves, kept or not, stand in ``OBSERVED.md`` alone: neither
+    ``CLAUDE.md`` nor any module of the package tells one."""
+    found = [
+        f"{path.relative_to(ROOT)}: {match.group(0)}"
+        for path in [ROOT / "CLAUDE.md", *sorted(PACKAGE.rglob("*.py"))]
+        for match in PROBE.finditer(" ".join(path.read_text(encoding="utf-8").split()))
+    ]
+    assert found == []
