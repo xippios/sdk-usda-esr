@@ -72,6 +72,20 @@ def test_every_note_ends_with_its_probe() -> None:
         assert CITED.search(probe) or REQUEST.search(probe), heading
 
 
+def test_every_probe_a_note_names_has_its_own_date() -> None:
+    """A recording's day, from its ``recorded_at``, is a date of its ``Probe:`` paragraph,
+    and a request that kept no answer has a date in its own sentence."""
+    for heading, paragraphs in notes().items():
+        probe = paragraphs[-1]
+        for path in CITED.findall(probe):
+            if path.startswith("tests/fixtures/"):
+                recorded = json.loads((ROOT / path).read_text("utf-8"))["recorded_at"]
+                assert recorded[:10] in DATE.findall(probe), f"{heading}: {path}"
+        for sentence in re.split(r"(?<=\.) (?=[A-Z])", probe):
+            if REQUEST.search(sentence):
+                assert DATE.search(sentence), f"{heading}: {sentence}"
+
+
 def test_a_probe_that_kept_no_answer_names_its_request() -> None:
     """Where no recording holds the answer, the request stands in its place."""
     for heading, paragraphs in notes().items():
