@@ -102,8 +102,8 @@ def classify(response: httpx.Response) -> XippiosError | None:
     (``year_2099``) and valid codes without exports (rye, market year 2024,
     ``get_all_countries_data/rye_2024.json``): empty means empty, not an error; the
     package refuses unknown codes and future years before the call (``params``).
-    Everything else falls through to core's status mapping. Messages name the request as
-    core's ``request_description`` gives it, its method and its path, never the host.
+    Everything else falls through to core's status mapping. ESR's own two errors name the
+    request as ``request_description`` gives it, method and path; the gateway's keep core's text.
     """
     error = gateway.classify(response)
     if error is not None:
