@@ -86,9 +86,9 @@ kept no answer: [1310a86] first held the note and has it measured the same day a
 
 Destination 9990, `UNKNOWN`, comes in an every-country answer as a row like any country's.
 Wheat white in market year 2027 is 385 records for 22 destinations over 20 weeks, a 9990
-row in each week, in a fixture of 119,811 bytes. Wheat white in 2024 was 1,012 records for
-22 destinations, a 9990 row in all 54 weeks, 312,360 bytes as a fixture, over the fixtures'
-cap of 256 KiB.
+row in each week, a body of 108,343 bytes, 119,811 as a fixture. Wheat white in 2024 was
+1,012 records for 22 destinations, a 9990 row in all 54 weeks, a body of 284,590 bytes,
+312,360 as a fixture, over the fixtures' cap of 256 KiB.
 
 Probe: 2026-10-28, `ESRData_GetAllCountriesData`; sample
 `tests/fixtures/get_all_countries_data/wheat_white_2027.json`. The request for wheat white
