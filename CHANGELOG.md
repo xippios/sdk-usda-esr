@@ -4,16 +4,105 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-21
+
+### Added
+
+- `xippios.usda.esr.mcp.build()` returns the read-only tool set that `xippios-usda-esr-mcp`
+  serves, xippios-core's `ToolSet` with the caps of `tasks.MCP_CAPS`, so a host serves the
+  same tools beside other sources' in one server. `ENV_VARS`, beside `SOURCE` in
+  `xippios.usda.esr.mcp`, names the one variable the package reads, `DATA_GOV_API_KEY`,
+  secret and required. (https://github.com/xippios/sdk-core/issues/245,
+  https://github.com/xippios/sdk-template/issues/81)
 
 ### Changed
 
+- The tests of the client's error mapping serve each answer as sdk-core's conventions §10
+  allow: a recorded answer at its own operation's path, or the recorded empty 404 of a market
+  year at its own path with its content type replaced, never one operation's answer at
+  another operation's path. A caller sees no change.
+  (https://github.com/xippios/sdk-usda-esr/issues/53)
+- The `NotFoundError` and the `InvalidRequestError` that the client maps from ESR's own
+  answers name the request by its method and its path, as xippios-core's
+  `request_description` gives it, where they named the path alone. An empty 404 other
+  than an exports path's empty market year reads
+  `ESR has no data for GET <path> (HTTP 404 with an empty body)`, where it read
+  `ESR has no data for <path> (HTTP 404 with an empty body)`, and the 400 for a path value
+  that is not an integer starts `ESR refused GET <path> (HTTP 400: <message>)`, where it
+  started `ESR refused <path> (HTTP 400: <message>)`. Neither error's class, source or any
+  other attribute changes. (https://github.com/xippios/sdk-usda-esr/issues/49)
+- What ESR was observed doing beyond its documentation, the answers' shapes, its empty
+  answers and its refusals, moves from `CLAUDE.md` and the docstring of
+  `params.EARLIEST_MARKET_YEAR` into `docs/upstream/OBSERVED.md`. Each note there ends
+  with the date, the operation and the recording or the request it was observed from, and
+  `docs/upstream/FETCHED.md` lists the file in a row of its own.
+  (https://github.com/xippios/sdk-usda-esr/issues/48)
+- `CLAUDE.md`, the docstrings of `tasks.py` and `params.py`, a comment in `models.py` and
+  the tests cite each decision on the package's behaviour by the pull request that took it,
+  where they gave a first name and a date, and `_client.py` and `CLAUDE.md` cite the shared
+  gateway by sdk-core's ADR-0032, decision 5, where they named an internal review. The
+  capture script, and with it `docs/upstream/FETCHED.md`, says when and where the portal's
+  Swagger document was found without naming who fetched it.
+  (https://github.com/xippios/sdk-usda-esr/issues/17)
+- The docstrings of `get_exports`, `get_latest_week` and `get_top_destinations`, their MCP
+  tools' descriptions, say that an empty list may be a market year ESR has not released
+  yet as well as one without exports, since ESR answers both with an empty list and these
+  tasks read no release list. `get_market_year` names a commodity's current market year.
+  (https://github.com/xippios/sdk-usda-esr/issues/18)
+- `xippios-usda-esr-mcp` names itself in its usage line and its errors, an unknown option
+  ending `xippios-usda-esr-mcp: error: unrecognized arguments: --<option>`, where they
+  named the server, `xippios-usda-esr`. Its help says that `--allow-remote` changes
+  nothing, since this read server is not held to loopback, where it spoke of a write
+  server. (https://github.com/xippios/sdk-core/issues/167)
+- A tool's error answer sets `isError` on its result beside the text
+  `error: <ErrorClass>: <message>`, an unknown commodity or country code's `UnknownCode`
+  as well as a refused argument, so a client tells a refusal from data without reading the
+  text. (https://github.com/xippios/sdk-core/issues/168)
+- A route answers an argument that its schema refuses, a `market_year` of `2024/25`, a
+  `field` outside the eight quantities or a missing `commodity_code` say, as problem
+  details before the task runs: HTTP 422, the title `InvalidRequestError` and the detail
+  `<argument>: <message>`, where FastAPI's own 422 listed its error details with the
+  input. (https://github.com/xippios/sdk-core/issues/66)
+- A refusal of a commodity or country code that the packaged lists lack ends with
+  `If upstream added it since, the packaged list is out of date.`, where it named the
+  maintainers' `/refresh-reference-data`, which an agent cannot run.
+  (https://github.com/xippios/sdk-core/issues/111)
+- Adopts sdk-template v0.3.4, from v0.3.1, with conventions 1.27 and no new core minor: the
+  floor stays `xippios-core~=0.3.0`. The README lists the package's documents under
+  `## Documents`, and `CLAUDE.md` holds the rules that `.claude/family.md` carried, which
+  leaves with `/adopt-release`, citing sdk-core's decision records as `sdk-core ADR-NNNN`.
+  Changelog entries are fragments under `changelog/`, the package's own decisions go into
+  `docs/adr/` with the index that `scripts/adr_index.py` writes, and a pull request runs the
+  organization's checks from `organization.yml`, where `gates.yml` was.
+  (https://github.com/xippios/sdk-template/releases/tag/v0.3.4,
+  https://github.com/xippios/sdk-usda-esr/issues/15)
 - Adopted sdk-template v0.3.1 (conventions §15), with no new core minor: the floor stays
   `xippios-core~=0.3.0`. `.github/CODEOWNERS` is rendered from the template's answers and
   names the code owner whom GitHub asks to review a change to `.github/`, `CLAUDE.md`,
   `.claude/`, `pyproject.toml` or `.copier-answers.yml`; `.gitignore` leaves copier's
   `*.rej` and `*.orig` out; `.claude/family.md`, `/adopt-release`, `/release-prep` and the
   PR template no longer say how a pull request reaches `main`.
+
+### Breaking
+
+- A tool refuses an argument that it does not declare before it runs, whatever its value:
+  `usda_esr_get_exports` called with `country` for `country_code` answers
+  `error: InvalidRequestError: country: Not an argument of this tool` and names the
+  arguments it takes, where the argument was dropped and the tool fetched every
+  destination. (https://github.com/xippios/sdk-core/issues/84)
+- `NoDataForYear`, raised for a market year ESR holds no data for, such as 1900, is
+  xippios-core's `xippios.core.data_gov.NoDataForYear`, and `xippios.usda.esr.errors` is
+  gone. The class is still a `NotFoundError` with `path`, the tasks' messages still name
+  commodity, country and market year, and an `except NotFoundError` catches it as before.
+  An endpoint wrapper of `api/` raises it with core's text, `no data for <path> (HTTP 404
+  with an empty body): the year it names holds no data upstream`, where it read
+  `ESR has no data for <path> (HTTP 404 with an empty body)`, and one that a caller builds
+  takes the source as `source=`, `None` by default, where the package's class set
+  `usda-esr`. (https://github.com/xippios/sdk-core/issues/106)
+- Adopts sdk-template v0.4.0, from v0.3.4, with `core_version=0.4.0`: the package depends
+  on `xippios-core~=0.4.0`, its extras likewise, and follows conventions 1.28.
+  (https://github.com/xippios/sdk-template/releases/tag/v0.4.0,
+  https://github.com/xippios/sdk-usda-esr/issues/43)
 
 ## [0.2.0] - 2026-10-28
 
