@@ -79,8 +79,8 @@ bytes, and wheat HRW (101) in 2024 was 1,136 records for 28 destinations, 319,53
 
 Probe: 2026-10-25, `ESRData_GetAllCountriesData`; sample
 `tests/fixtures/get_all_countries_data/cottonseed_2024.json`. The request for wheat HRW,
-`GET /api/esr/exports/commodityCode/101/allCountries/marketYear/2024`, kept no answer and
-was sent on 2026-10-25 or before, the day of [6e61797](https://github.com/xippios/sdk-usda-esr/commit/6e61797d32bb38044260c215fd0c7730241c5c40), the commit that first held this note.
+`GET /api/esr/exports/commodityCode/101/allCountries/marketYear/2024`, sent on 2026-10-25,
+kept no answer: [1310a86] first held the note and has it measured the same day as that sample.
 
 ### The destination UNKNOWN
 
@@ -171,3 +171,5 @@ api.data.gov answers a key it does not know with HTTP 403 and
 
 Probe: 2026-10-25, `ESRData_GetCommodities` with a bogus key; sample
 `tests/fixtures/get_commodities/invalid_key.json`.
+
+[1310a86]: https://github.com/xippios/sdk-usda-esr/commit/1310a864cf213359607c403a8605761e776f4874
