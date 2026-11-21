@@ -1,15 +1,15 @@
 """The client's wiring and error mapping, and core's api.data.gov gateway wired to it.
 
 Recorded answers come from ``tests/fixtures`` (2026-10-25; the every-country form's 1900,
-2026-10-28). Cases the recordings do not cover are built in api.data.gov's documented shapes
-and say "NOT RECORDED": the gateway's 429 (``OVER_RATE_LIMIT``; spending the key's hourly
-quota, shared with sdk-usda-psd and sdk-usda-gats, to record it was not worth it; its shape
-is the one api.data.gov documents and sdk-usda-psd recorded on 2026-10-23), the gateway's
-``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes. The gateway and its quota policy are
-core's (``xippios.core.data_gov.Gateway``, sdk-core ADR-0032, sdk-core ADR-0037) and are
-tested there; this module checks that the package installs them, that the policy reads a 429
-and the recorded quota headers through the package's client, that ``classify`` keeps ESR's
-own answers after the gateway's, and that it shapes core's retries of a 429.
+2026-10-28). Cases they do not cover say "NOT RECORDED", of three kinds conventions §10 name:
+api.data.gov's documented bodies, its 429 (``OVER_RATE_LIMIT``, in the shape sdk-usda-psd
+recorded on 2026-10-23, since recording it would spend the key's shared hourly quota), its
+``NOT_FOUND`` 404 and the other ``API_KEY_*`` codes; ESR's recorded empty 404 at its own URL
+with its content type changed; and a 400 in no shape upstream sends. The gateway and its quota
+policy are core's (``xippios.core.data_gov.Gateway``, sdk-core ADR-0032, sdk-core ADR-0037) and
+are tested there; this module checks that the package installs them, that the policy reads a 429
+and the recorded quota headers through the package's client, that ``classify`` keeps ESR's own
+answers after the gateway's, and that it shapes core's retries of a 429.
 """
 
 import dataclasses
