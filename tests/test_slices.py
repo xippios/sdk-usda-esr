@@ -27,7 +27,7 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core import AuthError, InvalidRequestError, NotFoundError, UnknownCode, parse
 from xippios.core.data_gov import NoDataForYear
 from xippios.core.mcp import cap_result
 from xippios.core.testing import (
@@ -678,11 +678,11 @@ def test_the_gateways_not_found_inside_the_range_stops_the_series(
 
 
 def test_a_refusal_inside_the_range_stops_the_series(replay_fixture: ReplayFixture) -> None:
-    """ESR's recorded HTTP 400 (``not_an_integer``) moved to the 2023 URL: any error but
-    the empty 404 is raised, and 2024 is never asked for."""
+    """api.data.gov's recorded refusal of the key, answered alike on every path behind it
+    (conventions §10), at the 2023 URL: any error but the empty 404 stops the series."""
     later = replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    refused = replay_fixture(COUNTRY, "not_an_integer", url=_country_url(2023))
-    with pytest.raises(InvalidRequestError, match=r"HTTP 400: The request is invalid\."):
+    refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2023))
+    with pytest.raises(AuthError, match="API_KEY_INVALID"):
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
     assert (refused.call_count, later.call_count) == (1, 0)
 
