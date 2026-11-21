@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
 
-## [0.3.0] - 2026-11-20
+## [0.3.0] - 2026-11-21
 
 ### Added
 
@@ -17,6 +17,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The `NotFoundError` and the `InvalidRequestError` that the client maps from ESR's own
+  answers name the request by its method and its path, as xippios-core's
+  `request_description` gives it, where they named the path alone. An empty 404 other
+  than an exports path's empty market year reads
+  `ESR has no data for GET <path> (HTTP 404 with an empty body)`, where it read
+  `ESR has no data for <path> (HTTP 404 with an empty body)`, and the 400 for a path value
+  that is not an integer starts `ESR refused GET <path> (HTTP 400: <message>)`, where it
+  started `ESR refused <path> (HTTP 400: <message>)`. Neither error's class, source or any
+  other attribute changes. (https://github.com/xippios/sdk-usda-esr/issues/49)
+- What ESR was observed doing beyond its documentation, the answers' shapes, its empty
+  answers and its refusals, moves from `CLAUDE.md` and the docstring of
+  `params.EARLIEST_MARKET_YEAR` into `docs/upstream/OBSERVED.md`. Each note there ends
+  with the date, the operation and the recording or the request it was observed from, and
+  `docs/upstream/FETCHED.md` lists the file in a row of its own.
+  (https://github.com/xippios/sdk-usda-esr/issues/48)
 - `CLAUDE.md`, the docstrings of `tasks.py` and `params.py`, a comment in `models.py` and
   the tests cite each decision on the package's behaviour by the pull request that took it,
   where they gave a first name and a date, and `_client.py` and `CLAUDE.md` cite the shared
