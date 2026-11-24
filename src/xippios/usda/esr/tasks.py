@@ -266,32 +266,28 @@ async def get_exports_async(
 ) -> Result[list[CommodityData]]:
     """US weekly export sales of one commodity in one market year, to one country or to all.
 
-    One record per destination country and week of ESR's market year: weekly exports,
-    accumulated exports, outstanding sales, gross new sales, current and next market year
-    net sales and commitments, in the unit ``unit_id`` names (``1`` metric tons, ``2``
-    running bales for cotton; ``enums.UnitId``). A market year is named by the year it
-    ends in and differs per commodity: for wheat 2024 runs June 2023 to May 2024, for corn
-    and soybeans September to August, for cotton August to July (``get_release_dates``
-    names a commodity's current one). Codes and the year are checked before any call:
-    an unknown code raises ``InvalidRequestError`` naming the closest known codes, and a
-    market year that is not four digits or is after the current calendar year plus two
-    raises ``InvalidRequestError`` with the reason. An empty list means ESR has no records for
-    that combination: no exports, or a market year ESR has not released yet, which it answers
-    alike; a market year ESR holds no data for (1900) raises ``NotFoundError``. ``meta.vintage``
-    is the latest week ending date among the records (``"2024-06-06"``); ``meta.published_at``
-    stays empty, ``get_release_dates`` tells when ESR released the data. Every country at once
-    is one row per destination and week (cottonseed 2024: 498 rows for 11 destinations; wheat
-    HRW 2024: 1,136 rows for 28); one country is up to 54 rows.
+    One record per destination and week: weekly and accumulated exports, outstanding and
+    gross new sales, current and next market year net sales and commitments, in the unit
+    ``unit_id`` names (``list_units_of_measure``). A market year is named by the year it ends
+    in and differs per commodity; ``get_release_dates`` names a commodity's current one. Codes
+    and the year are checked before any request. An empty list means no exports, or a market
+    year ESR has not released yet, which it answers alike; a market year ESR holds no data for
+    (1900) raises ``NotFoundError``. ``meta.vintage`` is the latest week ending date among the
+    records; ``meta.published_at`` stays empty, ``get_release_dates`` tells when ESR released
+    the data. Every country at once is one row per destination and week, over a thousand for
+    some commodities; one country is up to 54 rows.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
             ``101`` (Wheat - HRW), ``401`` (Corn), ``801`` (Soybeans), ``1404`` (All
-            Upland Cotton).
+            Upland Cotton); one the packaged list lacks is refused naming the closest codes.
         market_year: ESR market year, named by its end year, e.g. ``2024`` (for wheat
-            June 2023 to May 2024).
+            June 2023 to May 2024, for corn and soybeans September to August, for cotton
+            August to July); four digits and no later than the current year plus two.
         country_code: ESR destination country code (not ISO), an integer, e.g. ``1220``
-            (Canada), ``2010`` (Mexico), ``5880`` (Japan). Omit it (``None``) for every
-            country: one record per destination and week.
+            (Canada), ``2010`` (Mexico), ``5880`` (Japan); ``9990`` (UNKNOWN) is a
+            destination like any other. Omit it (``None``) for every country: one record per
+            destination and week.
     """
     validate_commodity_code(commodity_code)
     validate_market_year(market_year)
@@ -364,19 +360,16 @@ async def get_release_dates_async(
 ) -> Result[list[DataReleaseInfo]]:
     """When ESR last released each commodity's export data, with its current market year.
 
-    One request to ``ESRData_GetDataReleaseInfo``, one record per commodity (44):
-    ``release_time_stamp``, the last release of that commodity's export data, which can
-    revise several market years; and the current market year, named by the year it ends
-    in, with its first and last day (wheat 2027 runs 2026-06-01 to 2027-05-31, corn and
-    soybeans September to August, cotton August to July, beef and pork the calendar year).
-    The time stamp is as ESR sends it, without a time zone, since the documentation names
-    none: ``meta.published_at`` is the latest release time stamp of the whole answer as
-    given, naive, with ``meta.published_at_naive`` true, and ``meta.vintage`` is its text
-    as ESR prints it, ESR's release identifier (``"2026-10-22T08:30:42.67"``), with or
-    without ``since``; both are empty only when ESR lists no commodity. To fetch only what
-    changed: store ``meta.vintage``, pass it as ``since`` on the next call, and call
-    ``get_exports`` for the commodities returned; an empty list means no commodity's data
-    was released since.
+    One request to ``ESRData_GetDataReleaseInfo``, one record per commodity:
+    ``release_time_stamp``, the last release of the commodity's export data, which can revise
+    several market years, and the current market year, named by the year it ends in, with its
+    first and last day. The time stamp is as ESR sends it, without a time zone, since the
+    documentation names none: ``meta.published_at`` is the newest of the whole answer, naive,
+    with ``meta.published_at_naive`` true, and ``meta.vintage`` its text as ESR prints it,
+    with or without a filter; both are empty only when ESR lists no commodity. To fetch only
+    what changed, store ``meta.vintage``, pass it as ``since`` on the next call and call
+    ``get_exports`` for the commodities returned; an empty list means nothing was released
+    since.
 
     Args:
         since: Keep only the commodities whose ``release_time_stamp`` is strictly later
@@ -469,57 +462,32 @@ async def get_weekly_series_async(
 ) -> Result[list[CommodityData]]:
     """One destination's weekly US export sales of a commodity over market years, oldest first.
 
-    One request to ``ESRData_GetCountryData``, the call ``get_exports`` makes with a
-    country, per market year from ``start_year`` to ``end_year``, both included, oldest
-    first, at the client's pace of one request per second; each counts against
-    api.data.gov's 1,000 requests per hour per key, shared with every package using the
-    key: wheat 2022 to 2024 is three requests and about three seconds, and the ceiling,
-    10 market years, is ten requests and about ten seconds. A range of more than 10
-    market years, or one whose ``end_year`` is before ``start_year``, raises
-    ``InvalidRequestError`` before any request.
-
-    ESR answers a market year it has not begun to release with an empty list, the same
-    answer as a year without exports, so a range past the commodity's current market
-    year is refused. When ``end_year`` is the current calendar year or later, one request
-    more comes first, the release list ``get_release_dates`` reads, which names the
-    commodity's current market year: an ``end_year`` after it raises ``NotFoundError``
-    naming the latest released market year and the range asked, before any yearly
-    request, nothing partial returned. In October 2026, wheat's current market year being
-    2027, 2024 to 2026 is four requests, 2024 to 2027 five, and 2024 to 2028 is refused
-    after one; beef muscle cuts (1701), on the calendar year, have 2026 as current, so
-    2025 to 2027 is refused. A range ending before the current calendar year makes no
-    such request (2023 to 2024 is two): ESR has released every market year named by
-    such a year.
-
-    Inside a released range, the records of every year, one per week, are put together
-    and ordered by ``week_ending_date`` ascending, and otherwise unchanged: nothing is
-    filled, a week ESR sends no record for is absent. A week that straddles two market
-    years comes once for each, the older market year's row first, and the rows carry no
-    market year: wheat white to Canada 2023 to 2024 is 53 and 54 rows, and the week
-    ending 2023-06-01 both closes 2023 and opens 2024, with ``accumulated_exports``
-    starting again. A market year ESR holds no data for (its empty 404, 1900) is skipped
-    and adds no rows, and a released year that answers an empty list had no exports to
-    that destination and adds none either; a range of such years is an empty list, a
-    range of one year included (``1900`` to ``1900``). Any other error is raised and
-    stops the call, nothing partial returned; after the first market year its message
-    names the market years fetched before it. ``9990`` (UNKNOWN in ``list_countries``) is
-    a destination code like any other. Quantities are in the unit ``unit_id`` names
-    (``enums.UnitId``). ``meta.vintage`` is the last week's ending date
-    (``"2024-06-06"``), empty for an empty list; ``meta.published_at`` stays empty,
-    ``get_release_dates`` tells when ESR released the data. Codes and both years are
-    checked before the first request.
+    One request to ``ESRData_GetCountryData``, the one ``get_exports`` makes with a country,
+    per market year from ``start_year`` to ``end_year``, both included, at most 10 market
+    years. When ``end_year`` is the current calendar year or later, the release list comes
+    first, one request more, and a range past the commodity's current market year raises
+    ``NotFoundError`` naming the latest released one, since ESR answers an unreleased year as
+    it answers one without exports. The records are ordered by ``week_ending_date`` and
+    otherwise unchanged; a week that straddles two market years comes once for each, the
+    older year's row first. A market year ESR holds no data for (1900) or without exports
+    adds no rows. Any other error stops the call and returns nothing. ``meta.vintage`` is the
+    last week's ending date; ``meta.published_at`` stays empty.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),
             ``101`` (Wheat - HRW), ``801`` (Soybeans), ``1404`` (All Upland Cotton).
         country_code: ESR destination country code (not ISO), an integer, e.g. ``1220``
-            (Canada), ``2010`` (Mexico), ``5880`` (Japan); ``list_countries`` lists them.
+            (Canada), ``2010`` (Mexico), ``5880`` (Japan); ``9990`` (UNKNOWN) is a
+            destination like any other; ``list_countries`` lists them.
         start_year: First ESR market year, named by its end year, e.g. ``2022`` (for wheat
             June 2021 to May 2022); ``get_release_dates`` names a commodity's current one.
         end_year: Last ESR market year, included, e.g. ``2024``; not before
             ``start_year`` and at most nine years after it (``start_year`` itself for one
-            market year), and no later than the commodity's current market year
-            (``get_release_dates``; wheat: 2027 in October 2026).
+            market year), and no later than the commodity's current market year: in
+            October 2026, wheat's being 2027, 2024 to 2026 is four requests, 2024 to 2027
+            five, and 2024 to 2028 is refused after one; beef muscle cuts (1701), on the
+            calendar year, refuse 2025 to 2027. A range ending before the current calendar
+            year reads no release list (2023 to 2024 is two requests).
     """
     validate_commodity_code(commodity_code)
     validate_country_code(country_code)
