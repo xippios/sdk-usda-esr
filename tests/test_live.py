@@ -1,11 +1,9 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, thirteen keyed calls in all: ``get_exports`` for
-wheat white to Canada and for soybeans to Mexico, market year 2024;
-``get_release_dates``, once whole and once with ``since``, and ``get_market_year`` for
-wheat white; the slices, ``get_latest_week`` for wheat HRW and ``get_top_destinations``
-for soybeans, one call each, and ``get_weekly_series`` for wheat white to Canada, market
-years 2023 to 2024, two calls, one per market year, and no release-list call, since the
+One live smoke test per task function: ``get_exports`` for wheat white to Canada and for
+soybeans to Mexico, market year 2024; ``get_release_dates`` whole, with ``since`` and for
+wheat white by ``commodity_code``; and ``get_weekly_series`` for wheat white to Canada,
+market years 2023 to 2024, one call per market year, and no release-list call, since the
 range ends before the current calendar year (a range ending this year or later adds
 one). The codes are taken from the packaged lists by their upstream names, so a renamed
 or recoded commodity or country fails here first. The four list tasks answer from the
@@ -28,7 +26,6 @@ from xippios.usda.fas import Gateway
 from xippios.usda.esr import api, tasks
 from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
-from xippios.usda.esr.models import ExportField
 from xippios.usda.esr.params import PACKAGE
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
@@ -42,7 +39,6 @@ def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
 
 
 WHEAT_WHITE = _code("commodities", "commodityCode", "commodityName", "Wheat - White")
-WHEAT_HRW = _code("commodities", "commodityCode", "commodityName", "Wheat - HRW")
 SOYBEANS = _code("commodities", "commodityCode", "commodityName", "Soybeans")
 CANADA = _code("countries", "countryCode", "countryDescription", "CANADA")
 MEXICO = _code("countries", "countryCode", "countryDescription", "MEXICO")
@@ -116,52 +112,16 @@ async def test_get_release_dates_since_live() -> None:
     assert result.meta.vintage == latest.release_time_stamp_text
 
 
-async def test_get_market_year_live() -> None:
-    result = await tasks.get_market_year_async(WHEAT_WHITE)
-    year = result.data
+async def test_get_release_dates_of_one_commodity_live() -> None:
+    result = await tasks.get_release_dates_async(commodity_code=WHEAT_WHITE)
+    (year,) = result.data
     assert year.commodity_code == WHEAT_WHITE
     assert year.market_year >= 2027, "wheat's 2027 began on 2026-06-01"
     assert year.market_year_start < year.market_year_end
     assert year.market_year == year.market_year_end.year, "named by its end year"
     assert datetime.fromisoformat(year.release_time_stamp_text) == year.release_time_stamp
-    assert result.meta.vintage == year.release_time_stamp_text, "upstream's text"
-    assert result.meta.published_at == year.release_time_stamp
+    assert result.meta.request == {"commodity_code": WHEAT_WHITE}
     assert result.meta.published_at_naive is True
-
-
-async def test_get_latest_week_live() -> None:
-    result = await tasks.get_latest_week_async(WHEAT_HRW, 2024)
-    assert result.data
-    weeks = {r.week_ending_date for r in result.data}
-    assert len(weeks) == 1, "one week"
-    (week,) = weeks
-    assert date(2024, 5, 1) < week < date(2024, 6, 14), "wheat's market year 2024 ends in May"
-    destinations = [r.country_code for r in result.data]
-    assert len(set(destinations)) == len(destinations), "one row per destination"
-    assert {r.commodity_code for r in result.data} == {WHEAT_HRW}
-    assert result.meta.endpoint == "ESRData_GetAllCountriesData"
-    assert result.meta.vintage == week.isoformat()
-    assert result.meta.published_at is None
-
-
-async def test_get_top_destinations_live() -> None:
-    result = await tasks.get_top_destinations_async(
-        SOYBEANS, 2024, ExportField.ACCUMULATED_EXPORTS, 5
-    )
-    assert len(result.data) == 5
-    values = [r.accumulated_exports for r in result.data]
-    assert values == sorted(values, reverse=True), "largest first"
-    weeks = {r.week_ending_date for r in result.data}
-    assert len(weeks) == 1, "one week"
-    (week,) = weeks
-    assert date(2024, 8, 1) < week < date(2024, 9, 14), "soybeans' 2024 ends in August 2024"
-    assert result.meta.request == {
-        "commodity_code": SOYBEANS,
-        "market_year": 2024,
-        "field": "accumulatedExports",
-        "n": 5,
-    }
-    assert result.meta.vintage == week.isoformat()
 
 
 async def test_get_weekly_series_live() -> None:

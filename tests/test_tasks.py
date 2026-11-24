@@ -38,10 +38,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def test_the_package_exports_the_tasks() -> None:
     assert tasks.__all__ == [
         "get_exports",
-        "get_latest_week",
-        "get_market_year",
         "get_release_dates",
-        "get_top_destinations",
         "get_weekly_series",
         "list_commodities",
         "list_countries",
@@ -64,7 +61,6 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
     assert cap.note is not None
     assert "country_code" in cap.note
-    assert "get_market_year" not in tasks.MCP_CAPS, "one record, no filter"
 
 
 def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
@@ -250,11 +246,17 @@ def _recorded_releases() -> list[DataReleaseInfo]:
     )
 
 
-def test_get_market_year(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+def test_get_release_dates_of_one_commodity(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """``commodity_code`` is upstream's ``commodityCode``, compared by equality after the one
+    request: the lookup of a commodity's market year is an argument of its list task, where
+    ``get_market_year`` was a task of its own (conventions §14). The vintage stays the whole
+    answer's newest release, as with ``since``."""
     route = replay_fixture(RELEASES, "all")
-    result = tasks.get_market_year(WHEAT_WHITE)
+    result = tasks.get_release_dates(commodity_code=WHEAT_WHITE)
     assert sent_urls(route) == [RELEASE_DATES], "one request"
-    wheat = result.data
+    (wheat,) = result.data
     assert (
         wheat.commodity_code,
         wheat.market_year,
@@ -268,19 +270,19 @@ def test_get_market_year(replay_fixture: Callable[[str, str], respx.Route]) -> N
     assert result.meta.source == "usda-esr"
     assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
     assert result.meta.request == {"commodity_code": 104}
-    assert result.meta.vintage == RELEASED, "that record's text as upstream prints it"
+    assert result.meta.vintage == RELEASED, "the newest record's text as upstream prints it"
     assert result.meta.published_at == wheat.release_time_stamp
     assert result.meta.published_at.tzinfo is None
     assert result.meta.published_at_naive is True
     assert result.meta.total is None
 
-    corn = tasks.get_market_year(401).data
+    (corn,) = tasks.get_release_dates(commodity_code=401).data
     assert (corn.market_year, corn.market_year_start, corn.market_year_end) == (
         2027,
         date(2026, 9, 1),
         date(2027, 8, 31),
     ), "corn runs September to August"
-    beef = tasks.get_market_year(1701).data
+    (beef,) = tasks.get_release_dates(commodity_code=1701).data
     assert (beef.market_year, beef.market_year_start, beef.market_year_end) == (
         2026,
         date(2026, 1, 1),
@@ -289,49 +291,42 @@ def test_get_market_year(replay_fixture: Callable[[str, str], respx.Route]) -> N
     assert route.call_count == 1, "the cache answers the second and the third"
 
 
-def test_get_market_year_checks_the_code_before_the_request(
+def test_the_release_dates_check_a_commodity_code_before_the_request(
     respx_mock: respx.MockRouter,
 ) -> None:
     """respx is active with no routes mounted, so any upstream call would fail loudly."""
     with pytest.raises(UnknownCode, match=r"1001 \(Flaxseed\)"):
-        tasks.get_market_year(999)
+        tasks.get_release_dates(commodity_code=999)
     with pytest.raises(InvalidRequestError, match="must be an integer code"):
-        tasks.get_market_year("104")  # type: ignore[arg-type]
+        tasks.get_release_dates(commodity_code="104")  # type: ignore[arg-type]
     assert not respx_mock.calls
 
 
-NOT_LISTED = (
-    "ESR lists no market year for commodity 104: GET /api/esr/datareleasedates "
-    "(ESRData_GetDataReleaseInfo) answered without a record for it, although the packaged "
-    "commodities list names it."
-)
-
-
-def test_a_commodity_the_release_list_lacks_is_not_found(
+def test_a_commodity_the_release_list_lacks_answers_the_empty_list(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A packaged code the answer lacks: upstream dropped it. Here the answer lists no
+    """A packaged code the answer lacks: upstream dropped it, and the filter keeps nothing,
+    the one answer of a list task for no data (conventions §5). Here the answer lists no
     commodity at all (``_no_releases``)."""
     calls = _no_releases(monkeypatch)
-    with pytest.raises(NotFoundError) as info:
-        tasks.get_market_year(WHEAT_WHITE)
-    assert not isinstance(info.value, InvalidRequestError), "the request was valid"
-    assert str(info.value) == NOT_LISTED
+    result = tasks.get_release_dates(commodity_code=WHEAT_WHITE)
+    assert result.data == []
+    assert result.meta.request == {"commodity_code": WHEAT_WHITE}
     assert len(calls) == 1
 
 
 def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyPatch) -> None:
     """The recorded records without wheat white, in memory (a function input, not a fixture
-    file): wheat white is not found, every other commodity still answers."""
+    file): wheat white answers the empty list, every other commodity its record."""
     recorded = _recorded_releases()
 
     async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
         return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
-    with pytest.raises(NotFoundError, match="ESR lists no market year for commodity 104"):
-        tasks.get_market_year(WHEAT_WHITE)
-    assert tasks.get_market_year(101).data.market_year == 2027
+    assert tasks.get_release_dates(commodity_code=WHEAT_WHITE).data == []
+    (hrw,) = tasks.get_release_dates(commodity_code=101).data
+    assert hrw.market_year == 2027
 
 
 def test_a_market_year_esr_lacks_is_not_found(
@@ -520,16 +515,20 @@ async def test_release_dates_since_over_mcp(
 
 
 @pytest.mark.anyio
-async def test_market_year_over_mcp(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+async def test_release_dates_of_one_commodity_over_mcp(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
     route = replay_fixture(RELEASES, "all")
-    payload = await mcp_call(server, "usda_esr_get_market_year", {"commodity_code": 104})
-    assert payload["data"] == {
-        "commodity_code": 104,
-        "market_year_start": "2026-06-01",
-        "market_year_end": "2027-05-31",
-        "market_year": 2027,
-        "release_time_stamp": "2026-10-22T08:30:42.670000",
-    }, "one record, the text not among its fields"
+    payload = await mcp_call(server, "usda_esr_get_release_dates", {"commodity_code": 104})
+    assert payload["data"] == [
+        {
+            "commodity_code": 104,
+            "market_year_start": "2026-06-01",
+            "market_year_end": "2027-05-31",
+            "market_year": 2027,
+            "release_time_stamp": "2026-10-22T08:30:42.670000",
+        }
+    ], "one record, the text not among its fields"
     assert "note" not in payload
     assert payload["meta"]["endpoint"] == "ESRData_GetDataReleaseInfo"
     assert payload["meta"]["request"] == {"commodity_code": 104}
@@ -537,11 +536,13 @@ async def test_market_year_over_mcp(replay_fixture: Callable[[str, str], respx.R
     assert payload["meta"]["published_at"] == "2026-10-22T08:30:42.670000", "no zone added"
     assert payload["meta"]["published_at_naive"] is True
     with pytest.raises(AssertionError, match=r"UnknownCode.*1001 \(Flaxseed\)"):
-        await mcp_call(server, "usda_esr_get_market_year", {"commodity_code": 999})
+        await mcp_call(server, "usda_esr_get_release_dates", {"commodity_code": 999})
     assert sent_urls(route) == [RELEASE_DATES], "the unknown code sent nothing"
 
 
-def test_market_year_over_http(replay_fixture: Callable[[str, str], respx.Route]) -> None:
+def test_release_dates_of_one_commodity_over_http(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -551,13 +552,14 @@ def test_market_year_over_http(replay_fixture: Callable[[str, str], respx.Route]
     app = FastAPI()
     app.include_router(router)
     http = TestClient(app)
-    response = http.get("/usda-esr/get_market_year", params={"commodity_code": 104})
+    response = http.get("/usda-esr/get_release_dates", params={"commodity_code": 104})
     assert response.status_code == 200, response.text
     body = response.json()
-    assert (body["data"]["market_year"], body["data"]["market_year_end"]) == (2027, "2027-05-31")
+    (wheat,) = body["data"]
+    assert (wheat["market_year"], wheat["market_year_end"]) == (2027, "2027-05-31")
     assert (body["meta"]["vintage"], body["meta"]["published_at_naive"]) == (RELEASED, True)
     assert body["meta"]["request"] == {"commodity_code": 104}
-    rejected = http.get("/usda-esr/get_market_year", params={"commodity_code": 999})
+    rejected = http.get("/usda-esr/get_release_dates", params={"commodity_code": 999})
     assert rejected.status_code == 422
     assert rejected.json()["title"] == "UnknownCode"
     assert route.call_count == 1
@@ -663,9 +665,9 @@ def test_retrieved_at_is_the_answers_time_a_cache_hit_included(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("name", ["get_exports", "get_latest_week", "get_top_destinations"])
+@pytest.mark.parametrize("name", ["get_exports"])
 async def test_a_one_year_tool_says_an_empty_list_may_be_a_year_not_released(name: str) -> None:
-    """The three tools that fetch one market year read no release list, and ESR answers a
+    """The tool that fetches one market year reads no release list, and ESR answers a
     market year it has not released with ``[]``, as it answers one without exports: the
     description an agent reads, the task's docstring, names both readings of an empty list
     (conventions §4; sdk-core ADR-0041, decision 6;
