@@ -11,11 +11,15 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from xippios.core import InvalidRequestError, PackagedList, UnknownCode, parse
+import respx
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode, UpstreamModel, parse
 from xippios.core.http import status_for
+from xippios.core.refresh import Lists
 from xippios.core.testing import load_fixture
+from xippios.usda.fas import REMAINING_HEADER
 
 from xippios.usda.esr import enums
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Commodity, CommodityData, Country, Region, UnitOfMeasure
 from xippios.usda.esr.params import (
     PACKAGE,
@@ -28,7 +32,7 @@ from xippios.usda.esr.params import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "refresh_reference.py"
-SOURCES = {
+SOURCES: dict[str, tuple[str, str, type[UpstreamModel]]] = {
     # packaged list: the operation it came from, its wrapper (the fixture directory), model
     "commodities": ("ESRData_GetCommodities", "get_commodities", Commodity),
     "countries": ("ESRData_GetCountries", "get_countries", Country),
@@ -89,17 +93,24 @@ def test_every_packaged_list_loads_and_parses() -> None:
 
 
 def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
-    """The script writes a list's ``endpoint`` from the operation its entry names, not from
-    the wrapper's name (conventions 1.22 §2), so a refresh cannot drift from the verbatim
-    ``operationId``: the entry's operation is the packaged file's ``endpoint``, the one
-    ``endpoint=`` literal its wrapper passes and the first line of the wrapper's docstring;
-    the wrapper names the list's fixture directory (conventions §10)."""
+    """The script declares one ``Lists`` of core's frame, one ``Listed`` per packaged list
+    (conventions §3; https://github.com/xippios/sdk-usda-esr/issues/34), and the frame writes
+    a list's ``endpoint`` from the operation its ``Listed`` names, not from the wrapper's name
+    (conventions 1.22 §2), so a refresh cannot drift from the verbatim ``operationId``: the
+    declared operation is the packaged file's ``endpoint``, the one ``endpoint=`` literal its
+    wrapper passes and the first line of the wrapper's docstring; the wrapper names the list's
+    fixture directory (conventions §10). ``unitsOfMeasure`` alone makes an enum, and the quota
+    left is read from the gateway's header, the shared package's ``REMAINING_HEADER``."""
     script = _refresh_script()
-    assert script.LISTS == {}, "ESR publishes no value list"
-    entries: dict[str, tuple[str, Callable[[], object]]] = {
-        **{name: (operation, fetch) for name, (operation, fetch) in script.TABLES.items()},
-        **{name: (operation, fetch) for name, (operation, fetch, _, _) in script.ID_LISTS.items()},
+    lists = script.LISTS
+    assert isinstance(lists, Lists)
+    assert (lists.package, set(lists.packaged)) == (PACKAGE, set(PACKAGED_LISTS))
+    assert lists.client is client
+    assert lists.quota_header == REMAINING_HEADER == "x-ratelimit-remaining"
+    entries: dict[str, tuple[str | None, Callable[[], object]]] = {
+        listed.name: (listed.endpoint, listed.fetch) for listed in lists.lists
     }
+    assert [listed.name for listed in lists.lists if listed.enum is not None] == ["unitsOfMeasure"]
     assert set(entries) == set(PACKAGED_LISTS) == set(SOURCES)
     for name, (operation, fetch) in entries.items():
         assert (operation, fetch.__name__) == SOURCES[name][:2], name
@@ -107,6 +118,25 @@ def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
         assert operation == PackagedList.load(PACKAGE, name).endpoint, name
         assert _endpoint_literals(fetch) == [operation], name
         assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
+
+
+@pytest.mark.anyio
+async def test_each_list_is_fetched_as_its_wrappers_records(
+    replay_fixture: Callable[[str, str], respx.Route],
+) -> None:
+    """The frame takes records, and a wrapper answers core's ``Answer``: each declared fetch
+    hands the frame its wrapper's payload, one request (conventions §6)."""
+    lists = _refresh_script().LISTS
+    for listed in lists.lists:
+        operation, wrapper, model = SOURCES[listed.name]
+        route = replay_fixture(wrapper, "all")
+        records = await listed.fetch()
+        recorded = [
+            parse(model, record, source="usda-esr", endpoint=operation)
+            for record in _recorded(wrapper, "all")
+        ]
+        assert records == recorded, listed.name
+        assert route.call_count == 1, listed.name
 
 
 def test_packaged_lists_equal_the_recorded_answers() -> None:
