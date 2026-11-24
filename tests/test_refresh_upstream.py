@@ -1,25 +1,33 @@
-"""``scripts/refresh_upstream.py``'s ``FETCHED.md`` and its writing, offline.
+"""``scripts/refresh_upstream.py``'s own code, offline: its ``Snapshot`` and its own hooks.
 
-Nothing here sends a request: ``render_fetched`` and ``write_snapshot`` take what a capture
-run fetched, here one row of the portal's document whose body the snapshot gives, and its
-ESR part as ``document_row`` cuts it, written under ``tmp_path``, never to
+The script declares a ``Snapshot`` that sdk-core's frame runs, ``xippios.core.refresh``
+(conventions §3): the fetch through core's client, ``FETCHED.md``, the write and ``--check``
+are the frame's, and core's tests hold them. The portal's pages, the hooks that read them and
+the paragraphs that say how are the kit of the FAS portal in ``xippios.usda.fas``, whose tests
+hold its units (https://github.com/xippios/sdk-usda-esr/issues/33). The tests here hold what
+the script declares on the kit, its own pages, its own paragraph and its own notes, and that
+the kit's cut reproduces the committed ESR part. Nothing here sends a request or writes under
 ``docs/upstream/``. ``OBSERVED.md`` is the one file under ``docs/upstream/`` written by hand
 (conventions §3, sdk-core ADR-0028).
 """
 
 import importlib.util
-import itertools
-import json
-import re
 from pathlib import Path
 from types import ModuleType
+
+from xippios.core.refresh import Page, Response, Row
+from xippios.usda.fas import (
+    BACKEND_FILE,
+    CLASSIC_UI_URL,
+    PORTAL_FILE,
+    PORTAL_SWAGGER_URL,
+    PORTAL_URL,
+    Portal,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "refresh_upstream.py"
 UPSTREAM = ROOT / "docs" / "upstream"
-FETCHED = "2026-11-20T09:00:00Z"
-HAND = "written by hand: what upstream does but never documents; not fetched or checked"
-TABLE = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
 
 def load_script() -> ModuleType:
@@ -34,111 +42,123 @@ def load_script() -> ModuleType:
 script = load_script()
 
 
-PORTAL = UPSTREAM / script.PORTAL_FILE
+PORTAL = UPSTREAM / PORTAL_FILE
 
 
-def a_row() -> tuple[object, object]:
-    """A row of the portal's document kept as a file, and its ESR part, as a run makes them.
+def portal_page() -> Page:
+    pages: tuple[Page, ...] = script.SNAPSHOT.pages
+    (page,) = [page for page in pages if page.file == PORTAL_FILE]
+    return page
 
-    NOT RECORDED as served: the body is composed from what the snapshot documents, the ESR
-    part of the portal's document that the capture of 2026-11-20 kept in ``PORTAL``, read at
-    test time without its final newline, in the shape upstream answered the whole document,
-    the text ``json.dumps(indent=2, ensure_ascii=False)`` reproduces (conventions §10). The
-    tests assert what the script makes of it, never that upstream sends it.
-    """
-    response = script.Response(
-        url=script.PORTAL_SWAGGER_URL,
-        status=200,
-        body=PORTAL.read_bytes().removesuffix(b"\n"),
-        content_type="application/json",
+
+def answer(url: str, status: int, body: bytes, content_type: str) -> Response:
+    """An answer as a run reads it, composed by the test: an input, not one from USDA FAS."""
+    return Response(
+        url=url,
+        status=status,
+        body=body,
+        content_type=content_type,
         etag=None,
         last_modified=None,
         redirects=(),
     )
-    row, part = script.document_row(script.PORTAL_FILE, response)
-    return row, part
 
 
-def render(*, observed: bool) -> str:
-    row, part = a_row()
-    text: str = script.render_fetched(
-        [row],
-        part,
-        part,
-        "main.0123abcd.js",
-        "https://apps.fas.usda.gov/opendata/swagger/docs/v1",
-        FETCHED,
-        observed,
+def portal_answer() -> Response:
+    """The portal's document as a run reads it, here composed from the snapshot.
+
+    NOT RECORDED as served: the body is composed from what the snapshot documents, the ESR
+    part of the portal's document that the capture of 2026-11-20 kept in ``PORTAL``, read at
+    test time without its final newline, in the shape upstream answered the whole document,
+    the text ``json.dumps(indent=2, ensure_ascii=False)`` reproduces. The tests assert what
+    the script makes of it, never that upstream sends it. The answer is an input of the test,
+    not an answer from USDA FAS. (conventions §10; sdk-core ADR-0049, decision 10)
+    """
+    return answer(
+        PORTAL_SWAGGER_URL, 200, PORTAL.read_bytes().removesuffix(b"\n"), "application/json"
     )
-    return text
 
 
-def test_fetched_md_lists_observed_md_in_a_row_of_its_own() -> None:
-    """Once ``OBSERVED.md`` exists, the table lists it as written by hand."""
-    text = render(observed=True)
-    row = f"| {script.OBSERVED} | - | - | - | - | - | - | - | {HAND} |"
-    assert row in text.splitlines()
-    assert f"edited by hand but `{script.OBSERVED}`" in " ".join(text.split())
+def test_the_script_builds_on_the_kit_of_the_portal_for_esr() -> None:
+    """One ``Portal`` for ESR's prefix, whose hooks the snapshot takes, but ``note``, which
+    names the script's own pages first."""
+    assert isinstance(script.PORTAL, Portal)
+    assert (script.PORTAL.prefix, script.PORTAL.service) == ("/api/esr/", "ESR")
+    snapshot = script.SNAPSHOT
+    assert (snapshot.name, snapshot.slug) == ("USDA FAS Export Sales Reporting", "usda-esr")
+    assert snapshot.reduce == script.PORTAL.reduce
+    assert snapshot.linked == script.PORTAL.linked
+    assert snapshot.sections == script.PORTAL.sections
+    assert snapshot.note is script.note
 
 
-def test_fetched_md_names_no_observed_md_while_there_is_none() -> None:
-    text = render(observed=False)
-    assert script.OBSERVED not in text
-    assert "Nothing here was edited by hand." in " ".join(text.split())
+def test_reduce_cuts_a_document_to_its_esr_part_as_committed() -> None:
+    """The kit's cut, applied to the ESR part itself, gives back the committed part byte for
+    byte: its paths, the definitions they reference, in upstream order,
+    ``json.dumps(indent=2, ensure_ascii=False)`` and a final newline."""
+    assert script.SNAPSHOT.reduce(portal_page(), portal_answer()) == PORTAL.read_bytes()
 
 
-def test_fetched_md_cites_core_s_standing_record() -> None:
-    """The two sentences that cite the record of upstream fidelity cite it as it stands at
-    sdk-core 0.4.0, sdk-core ADR-0028, which superseded sdk-core ADR-0003; ``FETCHED.md``
-    takes them at the next capture (conventions §15)."""
-    text = " ".join(render(observed=False).split())
-    assert text.count("(sdk-core ADR-0028)") == 2
-    assert "ADR-0003" not in text
+def test_a_document_row_counts_the_paths_kept_and_dropped() -> None:
+    """The script's ``note`` leaves a document's row to the kit, which names what the cut
+    kept; the frame adds that the row's Bytes and sha256 are the whole document's
+    (``excerpt``)."""
+    page, response = portal_page(), portal_answer()
+    assert page.excerpt
+    content = script.SNAPSHOT.reduce(page, response)
+    note = script.SNAPSHOT.note(Row(page, response, content, page.note))
+    assert note == (
+        "ESR part: kept 7 `/api/esr/` paths; dropped none (out of scope here, own packages); "
+        "kept 0 of 0 definitions"
+    )
 
 
-def test_a_snapshot_leaves_observed_md_as_written(tmp_path: Path) -> None:
-    """The run writes its files and ``FETCHED.md`` and never touches the notes."""
-    notes = tmp_path / script.OBSERVED
-    notes.write_text("# What ESR does but never documents\n", encoding="utf-8")
-    (tmp_path / "FETCHED.md").write_text("old\n", encoding="utf-8")
-    row, _ = a_row()
-    script.write_snapshot(tmp_path, [row], render(observed=True))
-    assert notes.read_text(encoding="utf-8") == "# What ESR does but never documents\n"
-    assert (tmp_path / script.PORTAL_FILE).read_bytes() == PORTAL.read_bytes()
-
-
-def test_the_committed_fetched_md_is_the_scripts_text() -> None:
-    """Beside the rows of what the capture fetched, ``FETCHED.md`` is ``render_fetched``'s
-    text for the committed snapshot, the row of ``OBSERVED.md`` where the file exists, as a
-    run's ``main`` renders it. The prose quotes the two ESR parts under ``openapi/``, the
-    backend document's URL and the bundle's name, which the fetched rows hold."""
-    committed = (UPSTREAM / "FETCHED.md").read_text(encoding="utf-8").splitlines()
-    head = committed.index(TABLE) + 1
-    table = itertools.takewhile(lambda line: line.startswith("| "), committed[head:])
-    rows = [line for line in table if not line.startswith(f"| {script.OBSERVED} |")]
-    by_file = {line.split(" | ")[0].removeprefix("| "): line.split(" | ") for line in rows}
-    bundle = re.search(r"loads the bundle `(main\.[0-9a-f]+\.js)`", "\n".join(rows))
-    assert bundle is not None
-    parts = [
-        script.EsrPart(
-            part=json.loads((UPSTREAM / path).read_text(encoding="utf-8")),
-            kept=0,
-            dropped={},
-            definitions_kept=0,
-            definitions_total=0,
-        )
-        for path in (script.PORTAL_FILE, script.BACKEND_FILE)
+def test_the_snapshot_declares_its_pages_in_order() -> None:
+    """The portal's three pages first, the kit's: its shell, its document and the classic
+    Swagger UI, whose page names the backend document (``linked``); then ESR's own: the
+    program page the CDN refuses, which goes to ``Not fetched``, and the two ESR query URLs,
+    recorded by their 404."""
+    pages = script.SNAPSHOT.pages
+    assert [(page.url, page.file, page.status) for page in pages] == [
+        (PORTAL_URL, None, 200),
+        (PORTAL_SWAGGER_URL, PORTAL_FILE, 200),
+        (CLASSIC_UI_URL, None, 200),
+        (script.ESR_PROGRAM_URL, None, 403),
+        *((url, None, 404) for url in script.ESRQUERY_URLS),
     ]
-    rendered = script.render_fetched(
-        [],
-        *parts,
-        bundle.group(1),
-        by_file[script.BACKEND_FILE][1],
-        FETCHED,
-        (UPSTREAM / script.OBSERVED).is_file(),
-    ).splitlines()
-    assert len(rows) == 7
-    assert committed[:head] + committed[head + len(rows) :] == rendered
+    assert pages[:3] == script.PORTAL.pages
+    refused = pages[3]
+    assert (refused.stable, refused.names) == (False, "Access Denied")
+    assert script.SNAPSHOT.attribution == (), "neither document states a copyright line"
+    assert BACKEND_FILE == "openapi/backend-docs-v1.json", "the file the linked page writes"
+
+
+def test_an_esr_query_url_s_row_says_what_it_answered() -> None:
+    """The script's own note for the two ESR query URLs, from the answer: its status was
+    expected to be a shell when the snapshot was set up, and the body it answers now."""
+    for url in script.ESRQUERY_URLS:
+        page = next(page for page in script.SNAPSHOT.pages if page.url == url)
+        empty = answer(url, 404, b"", "text/html; charset=utf-8")
+        assert script.note(Row(page, empty, None, page.note)) == (
+            "404 Not Found with an empty body; when this snapshot was set up on 2026-10-25 "
+            "this URL was expected to serve the ESR query application's client-rendered "
+            "shell, and it does not"
+        )
+        html = answer(url, 404, b"<html></html>", "text/html; charset=utf-8")
+        assert script.note(Row(page, html, None, page.note)).startswith(
+            "404 Not Found with a text/html body; "
+        )
+
+
+def test_the_capture_is_the_kit_s_then_esr_s_own_paragraph() -> None:
+    """How this is captured: the kit's four paragraphs, then ESR's own on the pages that
+    answer 404 and the program page, which leaves the shells' bound to the kit's."""
+    capture = script.SNAPSHOT.capture
+    assert capture.startswith(f"{script.PORTAL.capture}\n\n")
+    own = capture.removeprefix(f"{script.PORTAL.capture}\n\n")
+    assert own.startswith("Pages that answer 404 get no file")
+    assert "\n\n" not in own, "one paragraph of the script's own"
+    assert "bytes" not in own, "the shells' bound is the kit's to state"
 
 
 def test_fetched_md_says_when_and_where_the_portal_document_was_found() -> None:
@@ -148,12 +168,12 @@ def test_fetched_md_says_when_and_where_the_portal_document_was_found() -> None:
     can check against the portal, and names nobody who fetched it or where they kept the copies;
     nor does the script's own text (https://github.com/xippios/sdk-usda-esr/issues/17).
     """
-    text = " ".join(render(observed=False).split())
+    text = " ".join(script.SNAPSHOT.capture.split())
     found = (
-        f"On {script.PORTAL_SWAGGER_FOUND_ON}, when sdk-usda-psd's snapshot was set up, the"
-        " portal page and its JavaScript bundle were fetched into a temporary directory and"
-        " that URL was found in the bundle's Swagger UI configuration; those copies have"
-        " since been deleted, and this script reuses the URL."
+        "On 2026-10-23, when sdk-usda-psd's snapshot was set up, the portal page and its"
+        " JavaScript bundle were fetched into a temporary directory and that URL was found in"
+        " the bundle's Swagger UI configuration; those copies have since been deleted, and this"
+        " script reuses the URL."
     )
     assert found in text
     assert "scratch" not in text
