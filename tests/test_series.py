@@ -74,7 +74,9 @@ def in_2026(monkeypatch: pytest.MonkeyPatch) -> None:
 def _serve(respx_mock: respx.MockRouter, answers: dict[str, tuple[str, str]]) -> respx.Route:
     """One route for every URL in ``answers``, each served the recorded answer of its
     ``(wrapper, case)``, moved where the URL is another, so ``sent_urls(route)`` shows the
-    order of the requests across both operations."""
+    order of the requests across both operations.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     recorded = {
         url: load_fixture(fixture_path(FIXTURES, wrapper, case)).response
         for url, (wrapper, case) in answers.items()
@@ -162,7 +164,9 @@ def test_get_weekly_series_spans_market_years_oldest_first(
 
 def test_the_requests_go_out_oldest_first(respx_mock: respx.MockRouter) -> None:
     """One route for every year's URL, so ``sent_urls`` shows the order the requests went
-    out in; it serves the two recorded answers in turn, as recorded."""
+    out in; it serves the two recorded answers in turn, as recorded.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     answers = [
         load_fixture(fixture_path(FIXTURES, COUNTRY, f"wheat_white_canada_{year}")).response
         for year in (2023, 2024)
@@ -233,7 +237,9 @@ def test_weekly_series_orders_what_upstream_sends_out_of_order(
 def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture) -> None:
     """ESR's ``[]`` for one destination: the recorded body of ``year_2099`` (HTTP 200,
     ``[]``) served at a valid year's URL (``url=``), moved, not written. Nothing is
-    filled, and an empty answer has no vintage."""
+    filled, and an empty answer has no vintage.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     route = replay_fixture(COUNTRY, "year_2099", url=_country_url(2025))
     result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2025, 2025)
     assert sent_urls(route) == [_country_url(2025)]
@@ -253,7 +259,9 @@ def test_a_released_year_without_exports_adds_no_rows(replay_fixture: ReplayFixt
     """``year_2099``'s recorded ``[]`` at the 2023 URL. In 2026 market year 2023 is long
     released, so its ``[]`` is a year without exports to Canada, as rye 2024's is for every
     country (``rye_2024``): it adds no rows, 2024's come alone, and the range, ending
-    before the calendar year, reads no release list."""
+    before the calendar year, reads no release list.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     releases = replay_fixture(RELEASES, "all")
     empty = replay_fixture(COUNTRY, "year_2099", url=_country_url(2023))
     newer = replay_fixture(COUNTRY, "wheat_white_canada_2024")
@@ -454,7 +462,9 @@ def test_a_market_year_esr_lacks_inside_the_range_is_skipped(
 ) -> None:
     """``year_1900``'s recorded empty 404 (``text/plain``) at the 2023 URL: the year adds no
     rows, no error is raised, and the series goes on with 2024 (conventions §4, as
-    sdk-usda-psd's ``get_time_series`` skips PSD's empty 404)."""
+    sdk-usda-psd's ``get_time_series`` skips PSD's empty 404).
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     absent = load_fixture(fixture_path(FIXTURES, COUNTRY, "year_1900"))
     assert (absent.response.status, absent.response.content) == (404, b"")
     missing = replay_fixture(COUNTRY, "year_1900", url=_country_url(2023))
@@ -469,7 +479,9 @@ def test_a_market_year_esr_lacks_inside_the_range_is_skipped(
 def test_a_range_esr_lacks_entirely_is_an_empty_list(replay_fixture: ReplayFixture) -> None:
     """Every year answers the empty 404: an empty list without a vintage, not an error.
     Market year 1900 as a range of one is the recorded answer itself, where 0.1.0 raised
-    ``NoDataForYear``; 2023 to 2024 serves it at both URLs."""
+    ``NoDataForYear``; 2023 to 2024 serves it at both URLs.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     route = replay_fixture(COUNTRY, "year_1900")
     result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 1900, 1900)
     assert sent_urls(route) == [_country_url(1900)]
@@ -507,7 +519,9 @@ def test_the_gateways_not_found_inside_the_range_stops_the_series(
 ) -> None:
     """NOT RECORDED: the gateway's documented ``NOT_FOUND`` body at the 2023 URL, as
     ``test_tasks.py`` builds it. It says the request is wrong, not that the year is empty:
-    raised, the request for 2024 never sent, nothing partial returned."""
+    raised, the request for 2024 never sent, nothing partial returned.
+    The body is composed from api.data.gov's documented answer (conventions §10, kind 2).
+    """
     newer = replay_fixture(COUNTRY, "wheat_white_canada_2024")
     gateway = respx_mock.get(_country_url(2023)).mock(
         return_value=httpx.Response(
@@ -524,7 +538,9 @@ def test_the_gateways_not_found_inside_the_range_stops_the_series(
 
 def test_a_refusal_inside_the_range_stops_the_series(replay_fixture: ReplayFixture) -> None:
     """api.data.gov's recorded refusal of the key, answered alike on every path behind it
-    (conventions §10), at the 2023 URL: any error but the empty 404 stops the series."""
+    (conventions §10), at the 2023 URL: any error but the empty 404 stops the series.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
     later = replay_fixture(COUNTRY, "wheat_white_canada_2024")
     refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2023))
     with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
@@ -553,7 +569,9 @@ def test_a_refusal_after_the_first_market_year_names_the_years_fetched(
 
 def test_the_gateways_not_found_propagates_unchanged(respx_mock: respx.MockRouter) -> None:
     """NOT RECORDED: api.data.gov's documented ``NOT_FOUND`` body, as ``test_tasks.py``
-    builds it. Only ESR's empty 404 means "no data for this market year"."""
+    builds it. Only ESR's empty 404 means "no data for this market year".
+    The body is composed from api.data.gov's documented answer (conventions §10, kind 2).
+    """
     respx_mock.get(f"{EXPORTS}/104/countryCode/1220/marketYear/2024").mock(
         return_value=httpx.Response(
             404,

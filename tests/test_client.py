@@ -61,7 +61,9 @@ def synthesised(
     headers: dict[str, str] | None = None,
     path: str = "/api/esr/commodities",
 ) -> httpx.Response:
-    """NOT RECORDED as such: an answer in the shape api.data.gov documents and sends."""
+    """NOT RECORDED as such: an answer in the shape api.data.gov documents and sends.
+    It is composed from what the gateway documents (conventions §10, kind 2).
+    """
     return httpx.Response(
         status,
         json=body,
@@ -78,10 +80,11 @@ OVER_RATE_LIMIT = {
     }
 }
 """NOT RECORDED: api.data.gov's 429 body, in the shape sdk-usda-psd recorded on 2026-10-23
-behind the same gateway (``OVER_RATE_LIMIT`` and a message ending in the gateway's URL)."""
+behind the same gateway (``OVER_RATE_LIMIT`` and a message ending in the gateway's URL;
+conventions §10, kind 2)."""
 QUOTA_SPENT = {"Retry-After": "3151", "x-ratelimit-limit": "1000", "x-ratelimit-remaining": "0"}
 """NOT RECORDED: the 429's headers as sdk-usda-psd recorded them: ``Retry-After`` and the
-quota headers at zero."""
+quota headers at zero (conventions §10, kind 2)."""
 
 
 def test_the_client_is_wired_for_the_gateway() -> None:
@@ -239,7 +242,9 @@ async def test_market_year_1900_answers_alike_on_the_every_country_path(
 
 def test_the_content_type_is_compared_without_case() -> None:
     """NOT RECORDED as such: the recorded empty 404 with its content type upper-cased.
-    Media types are case-insensitive (RFC 9110), so it is still ESR's empty year."""
+    Media types are case-insensitive (RFC 9110), so it is still ESR's empty year.
+    A recorded answer with a header replaced (conventions §10, kind 4).
+    """
     response = httpx.Response(
         404,
         headers=[("Content-Type", "TEXT/PLAIN; charset=utf-8")],
@@ -251,7 +256,7 @@ def test_the_content_type_is_compared_without_case() -> None:
 
 def test_an_empty_404_is_no_data_for_year_only_on_an_exports_path_as_text() -> None:
     """NOT RECORDED as such: each recorded empty 404 of 1900 at its own URL, its ``text/plain``
-    replaced (conventions §10, a header replaced), is a plain ``NotFoundError``. Off an
+    replaced (conventions §10, kind 4: a header replaced), is a plain ``NotFoundError``. Off an
     exports path nothing is served: no other operation was seen answering an empty 404 and
     the snapshot documents none, so that half rests on the gateway's ``data_path``, which
     matches the path of no other operation."""
@@ -293,8 +298,8 @@ def test_each_error_classify_maps_names_the_request_by_cores_description() -> No
     ``request_description`` gives it, its method and its path, never the host (conventions
     §5, sdk-core ADR-0030): the 400 recorded at its own path, and, since no empty 404 off an
     exports path or without ``text/plain`` was recorded, the recorded empty 404 of 1900 at its
-    own URL, NOT RECORDED as such: its ``text/plain`` replaced (conventions §10, a header
-    replaced)."""
+    own URL, NOT RECORDED as such: its ``text/plain`` replaced (conventions §10, kind 4: a
+    header replaced)."""
     empty = response_from_fixture(load_fixture(FIXTURES / COUNTRY / "year_1900.json"))
     empty.headers["content-type"] = "application/json"
     responses = [
@@ -327,12 +332,15 @@ def test_classify_itself_keeps_an_empty_404_a_plain_not_found_error(
 
 
 def test_a_400_without_esrs_message_falls_through_to_core() -> None:
-    """NOT RECORDED: a 400 in another shape is core's ``UpstreamError``, not a guess."""
+    """NOT RECORDED: a 400 in another shape is core's ``UpstreamError``, not a guess.
+    A body of no shape upstream sends (conventions §10, kind 5).
+    """
     assert classify(synthesised(400, ["not", "an", "object"])) is None
 
 
 def test_a_429_is_a_rate_limit_error_with_its_retry_after() -> None:
-    """NOT RECORDED: api.data.gov's 429 with ``Retry-After`` and the quota at zero.
+    """NOT RECORDED: api.data.gov's 429 with ``Retry-After`` and the quota at zero (conventions
+    §10, kind 2).
     ``classify`` called on its own gives the exact wait: no client has observed it."""
     error = classify(synthesised(429, OVER_RATE_LIMIT, QUOTA_SPENT))
     assert isinstance(error, RateLimitError)
@@ -346,7 +354,8 @@ def test_a_429_is_a_rate_limit_error_with_its_retry_after() -> None:
 
 
 def test_a_429_without_retry_after_falls_back_to_the_quota_window() -> None:
-    """NOT RECORDED: the 429 body without Retry-After or quota headers."""
+    """NOT RECORDED: the 429 body without Retry-After or quota headers (conventions §10, kind
+    2)."""
     error = classify(synthesised(429, OVER_RATE_LIMIT))
     assert isinstance(error, RateLimitError)
     assert error.retry_after == Gateway.policy.window == 3600.0
@@ -361,7 +370,9 @@ async def test_the_policy_reads_a_429_through_core(respx_mock: respx.MockRouter)
     marks the quota spent until its ``Retry-After``, ``classify`` raises after one request
     (3151 s is beyond ``backoff_max``) with the snapshot's wait from now, and the next
     request is refused before it is sent, in the gateway's name. Marked ``rate_limited``:
-    the refusal is the policy's pause, which the plugin turns off."""
+    the refusal is the policy's pause, which the plugin turns off.
+    The 429 is composed from what the gateway documents (conventions §10, kind 2).
+    """
     route = respx_mock.get(f"{BASE_URL}/api/esr/commodities").mock(
         return_value=httpx.Response(429, json=OVER_RATE_LIMIT, headers=QUOTA_SPENT)
     )

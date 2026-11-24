@@ -159,6 +159,7 @@ def test_the_enum_matches_the_packaged_units() -> None:
 
 
 def test_enum_members_compare_equal_to_upstream_ints() -> None:
+    """The record is an input of the test, not an answer from ESR."""
     record = UnitOfMeasure.model_validate({"unitId": 2, "unitNames": "Running Bales"})
     assert record.unit_id == enums.UnitId.RUNNING_BALES
     assert enums.UnitId(1) is enums.UnitId.METRIC_TONS
@@ -186,6 +187,7 @@ def test_every_recorded_destination_is_in_the_packaged_list() -> None:
 
 
 def test_a_unit_the_list_lacks_still_parses() -> None:
+    """The record is an input of the test, not an answer from ESR."""
     record = CommodityData.model_validate(
         {
             "commodityCode": 104,

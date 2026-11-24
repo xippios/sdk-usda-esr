@@ -411,7 +411,9 @@ def test_the_gateways_not_found_propagates_unchanged(
 ) -> None:
     """NOT RECORDED: api.data.gov's documented ``NOT_FOUND`` body. Only ESR's empty 404 means
     "no data for this market year"; the gateway's 404 says the route is wrong and reaches
-    the caller as classify raised it."""
+    the caller as classify raised it.
+    The body is composed from api.data.gov's documented answer (conventions §10, kind 2).
+    """
     respx_mock.get(f"{EXPORTS}/{path}").mock(
         return_value=httpx.Response(
             404,
