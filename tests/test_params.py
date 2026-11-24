@@ -11,19 +11,22 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-import respx
 from xippios.core import InvalidRequestError, PackagedList, UnknownCode, UpstreamModel, parse
 from xippios.core.http import status_for
 from xippios.core.refresh import Lists
 from xippios.core.testing import load_fixture
 from xippios.usda.fas import REMAINING_HEADER
 
-from xippios.usda.esr import enums
+from xippios.usda.esr import api, enums
 from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Commodity, CommodityData, Country, Region, UnitOfMeasure
 from xippios.usda.esr.params import (
+    COMMODITIES,
+    COUNTRIES,
     PACKAGE,
     PACKAGED_LISTS,
+    REGIONS,
+    UNITS,
     latest_market_year,
     validate_commodity_code,
     validate_country_code,
@@ -120,23 +123,27 @@ def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
         assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
 
 
-@pytest.mark.anyio
-async def test_each_list_is_fetched_as_its_wrappers_records(
-    replay_fixture: Callable[[str, str], respx.Route],
-) -> None:
-    """The frame takes records, and a wrapper answers core's ``Answer``: each declared fetch
-    hands the frame its wrapper's payload, one request (conventions §6)."""
-    lists = _refresh_script().LISTS
-    for listed in lists.lists:
-        operation, wrapper, model = SOURCES[listed.name]
-        route = replay_fixture(wrapper, "all")
-        records = await listed.fetch()
-        recorded = [
-            parse(model, record, source="usda-esr", endpoint=operation)
-            for record in _recorded(wrapper, "all")
-        ]
-        assert records == recorded, listed.name
-        assert route.call_count == 1, listed.name
+def test_each_list_is_fetched_by_its_wrapper_itself() -> None:
+    """Core's reference frame and its nightly comparison take a wrapper's ``Answer`` and read
+    its payload (conventions §3, §10): each ``Listed`` of the script and each entry of
+    ``LIVE_LISTS`` in ``tests/test_live.py`` fetches by the ``api/`` wrapper itself, the same
+    one for a list, and declares the packaged list that ``params`` checks with."""
+    lists = {listed.name: listed.fetch for listed in _refresh_script().LISTS.lists}
+    spec = importlib.util.spec_from_file_location(
+        "live_lists", Path(__file__).parent / "test_live.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    live = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(live)
+    declared = {"commodities": COMMODITIES, "countries": COUNTRIES, "regions": REGIONS}
+    declared["unitsOfMeasure"] = UNITS
+    assert set(lists) == set(live.LIVE_LISTS) == set(SOURCES)
+    for name, (_, wrapper, _) in SOURCES.items():
+        assert lists[name] is getattr(api, wrapper), name
+        codes, fetch = live.LIVE_LISTS[name]
+        assert fetch is getattr(api, wrapper), name
+        assert codes is declared[name], name
 
 
 def test_packaged_lists_equal_the_recorded_answers() -> None:
