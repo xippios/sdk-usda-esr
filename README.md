@@ -6,6 +6,17 @@ Typed Python client, MCP server and FastAPI routes for
 upstream documentation; every response carries its metadata (source, endpoint,
 retrieved_at, request).
 
+Of ESR's API the package wraps all seven operations that its documentation lists
+(`docs/upstream/`): the weekly exports of one commodity in one market year, to one country
+or to every country, the release list, and the four lists of codes, which the package ships
+and refreshes before each release. ESR documents path parameters alone, `commodityCode`,
+`countryCode` and `marketYear`, and the tasks take every one. Each operation also answers
+in XML, with the same records; the package reads JSON, so XML is the one documented choice
+that a caller cannot make. What the package adds is one destination's series over market
+years and filters that select records of the release list and of the packaged lists. It
+ranks no destination, selects no week for the caller and derives no figure from the
+records: a caller reads every record as ESR sends it from `get_exports`.
+
 ## Install
 
 ```bash
@@ -132,10 +143,12 @@ destination, and its note says to narrow `start_year` and `end_year`.
 | `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |
 | `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | `list_units_of_measure()` | `usda_esr_list_units_of_measure` | packaged, `enums.UnitId`; `list_*` task |
 
-0.3.0 covers the same tasks as 0.2.0, which added `get_market_year`, `since` on
-`get_release_dates` and the range of `get_weekly_series`, and requires xippios-core 0.4.x
-(`~=0.4.0`); 0.2.0 does not work with core 0.4.0. Alpha: the public surface may change in a
-minor version before 1.0 (conventions §12); `CHANGELOG.md` lists every change.
+0.4.0 exports seven tasks where 0.3.0 exported ten: `get_top_destinations` and
+`get_latest_week` left, and the lookup of `get_market_year` is the argument
+`commodity_code` of `get_release_dates`. It requires xippios-core 0.5.x (`~=0.5.0`) and
+xippios-usda-fas 0.1.x (`~=0.1.0`); 0.3.0 does not work with core 0.5.0. Alpha: the public
+surface may change in a minor version before 1.0 (conventions §12); `CHANGELOG.md` lists
+every change.
 
 Every request counts against api.data.gov's quota of 1,000 requests per hour per key,
 shared by every package using the same `DATA_GOV_API_KEY`; the `list_*` tasks spend none.
