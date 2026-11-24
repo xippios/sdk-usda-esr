@@ -19,16 +19,22 @@ model's docstring; every field is an assumption from that fixture. No ESR record
 personal identifier. Codes and ids are integers, as the snapshot types the path parameters
 (``int32``) and as every recorded record carries them; ``unit_id`` stays a plain ``int``,
 not ``enums.UnitId``, so that a unit ESR adds before the packaged lists are refreshed does
-not fail an answer, and ``UnitId`` members compare equal to it.
+not fail an answer, and ``UnitId`` members compare equal to it. A record's country and unit
+codes declare the packaged list that names them, ``NamedBy`` (sdk-core ADR-0067), so every
+answer that holds the record names each code of its rows in ``meta.names``, and a code the
+list lacks is said in ``meta.notes`` rather than refused
+(https://github.com/xippios/sdk-usda-esr/issues/30).
 """
 
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 from pydantic import Field, ModelWrapValidatorHandler, PrivateAttr, model_validator
-from xippios.core import UpstreamModel
+from xippios.core import NamedBy, UpstreamModel
+
+from xippios.usda.esr.params import COUNTRIES, UNITS
 
 __all__ = [
     "Commodity",
@@ -55,7 +61,7 @@ class Commodity(UpstreamModel):
 
     commodity_code: int = Field(validation_alias="commodityCode")
     commodity_name: str = Field(validation_alias="commodityName")
-    unit_id: int = Field(validation_alias="unitId")
+    unit_id: Annotated[int, NamedBy(UNITS)] = Field(validation_alias="unitId")
 
 
 class Country(UpstreamModel):
@@ -227,7 +233,7 @@ class CommodityData(UpstreamModel):
     """
 
     commodity_code: int = Field(validation_alias="commodityCode")
-    country_code: int = Field(validation_alias="countryCode")
+    country_code: Annotated[int, NamedBy(COUNTRIES)] = Field(validation_alias="countryCode")
     weekly_exports: Decimal = Field(validation_alias="weeklyExports")
     accumulated_exports: Decimal = Field(validation_alias="accumulatedExports")
     outstanding_sales: Decimal = Field(validation_alias="outstandingSales")
@@ -236,5 +242,5 @@ class CommodityData(UpstreamModel):
     current_my_total_commitment: Decimal = Field(validation_alias="currentMYTotalCommitment")
     next_my_outstanding_sales: Decimal = Field(validation_alias="nextMYOutstandingSales")
     next_my_net_sales: Decimal = Field(validation_alias="nextMYNetSales")
-    unit_id: int = Field(validation_alias="unitId")
+    unit_id: Annotated[int, NamedBy(UNITS)] = Field(validation_alias="unitId")
     week_ending_date: date = Field(validation_alias="weekEndingDate")

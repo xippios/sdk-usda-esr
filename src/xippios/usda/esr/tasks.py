@@ -33,10 +33,12 @@ are ``None`` for an empty answer.
 
 Change detection is ``get_release_dates``' parameter ``since``
 (https://github.com/xippios/sdk-usda-esr/pull/9): the ``meta.vintage`` text of an earlier call,
-parsed with ``datetime.fromisoformat`` to a naive time, since upstream's text carries no zone; a
-text that does not parse, or parses to an aware time, is refused before the call
-(``InvalidRequestError``, conventions §5, sdk-core ADR-0007). The filter keeps the commodities
-released strictly after it, an equal time being no newer, and only selects (sdk-core ADR-0028).
+read by the package's own ``_since`` with ``datetime.fromisoformat`` to a naive time, since
+upstream's text carries no zone; a text that does not parse, or parses to an aware time, is
+refused before the call (``InvalidRequestError``, conventions §5, sdk-core ADR-0007). Core's
+``newer_than``, handed that reader, keeps the commodities released strictly after it, an equal
+time being no newer, and only selects (sdk-core ADR-0028, ADR-0052;
+https://github.com/xippios/sdk-usda-esr/issues/31).
 ``meta.vintage`` and ``meta.published_at`` stay the newest release of upstream's whole answer,
 filtered or not, so an empty filtered answer still hands the caller the marker to store for the
 next call. It is one request either way, and core's cache answers a second within its
@@ -53,7 +55,8 @@ A ranking, a selection of the newest week and the other slices are no task of a 
 request ``get_exports`` makes for one country (sdk-core ADR-0028): no record is changed,
 nothing is derived, converted, filled or excluded, and nothing is compared with another source.
 It makes its one-country request once per market year from ``start_year`` to ``end_year``, at
-most ``SERIES_MAX_YEARS`` of them (https://github.com/xippios/sdk-usda-esr/pull/10;
+most ``SERIES.value`` of them, core's ``Ceiling`` and ``fetch_periods``
+(https://github.com/xippios/sdk-usda-esr/pull/10, https://github.com/xippios/sdk-usda-esr/issues/29;
 conventions §4's period series, as sdk-usda-psd's ``get_time_series``), and, for a range
 ending in the current calendar year or later, reads the release list first and refuses a range
 past the commodity's current market year with ``NotFoundError``, since ESR answers an
@@ -74,8 +77,9 @@ these lists no release identifier, and a fetch date is not one. ``meta.published
 ``None``, and so does ``meta.total``, since upstream reports no count (sdk-core ADR-0034). The
 records keep upstream's order, field names (snake_cased) and values, padding included. Their
 filters only select records of the packaged list (sdk-core ADR-0028), and ``meta.request``
-carries those given: ``region_id`` is named after upstream's ``regionId`` and matches it
-exactly, ``search`` is the package's own (the four operations take no parameters), a
+carries those given: ``region_id`` is named after upstream's ``regionId``, checked against the
+packaged regions list and matched exactly (https://github.com/xippios/sdk-usda-esr/issues/27),
+``search`` is the package's own (the four operations take no parameters), a
 case-insensitive substring match on codes, as digits, on names and, for countries, on GENC codes
 (``xippios.core.matches``).
 """
@@ -84,13 +88,16 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from xippios.core import (
+    Ceiling,
     InvalidRequestError,
     NotFoundError,
     PackagedList,
     Result,
     ResultCap,
     ResultMeta,
+    fetch_periods,
     matches,
+    newer_than,
     sync,
 )
 from xippios.usda.fas import NoDataForYear
@@ -110,6 +117,7 @@ from xippios.usda.esr.params import (
     validate_commodity_code,
     validate_country_code,
     validate_market_year,
+    validate_region_id,
 )
 
 __all__ = [
@@ -137,7 +145,9 @@ BULK_TASKS: frozenset[str] = frozenset()
 
 MCP_CAPS: Mapping[str, ResultCap] = {
     "get_exports": ResultCap(
-        note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+        note="pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows",
+        paged=True,
+        keep="last",
     ),
     "get_release_dates": ResultCap(
         note=(
@@ -148,8 +158,9 @@ MCP_CAPS: Mapping[str, ResultCap] = {
     "get_weekly_series": ResultCap(
         note=(
             "narrow start_year and end_year, e.g. 2023 and 2024: each market year is up to "
-            "54 rows, so three fit, and the oldest weeks come first"
-        )
+            "54 rows, so three fit, and the newest weeks are shown"
+        ),
+        keep="last",
     ),
     "list_commodities": ResultCap(
         note='pass search, e.g. "wheat" or "104", to narrow by code or name'
@@ -168,16 +179,23 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 with filters names them in its cap's note (§8; https://github.com/xippios/sdk-usda-esr/pull/3).
 Every country at once is one row per destination and week (cottonseed 2024: 498 rows for 11
 destinations), and ``country_code`` narrows it to one destination's weeks, up to 54 rows (wheat
-white to Canada 2024). ``get_release_dates``, 44 rows, fits the default and keeps the family's
-bounds, but it has filters, so its entry carries a note naming ``since`` and
-``commodity_code``, as ``list_commodities``' names ``search``.
+white to Canada 2024). Its cap is paged and keeps the last rows (sdk-core ADR-0047;
+https://github.com/xippios/sdk-usda-esr/issues/28): the answer runs oldest week first, so a cut
+answer shows the newest weeks, and the tool's ``offset`` continues to older ones, each
+continuation running the task again, which the cache answers within its lifetime, so a
+continuation costs upstream nothing (conventions §8; sdk-core ADR-0061, decision 9).
+``get_release_dates``, 44 rows, fits the default and keeps the family's bounds, but it has
+filters, so its entry carries a note naming ``since`` and ``commodity_code``, as
+``list_commodities``' names ``search``.
 
 ``get_weekly_series`` keeps the family's bounds too, with a note of its own that names
 ``start_year`` and ``end_year`` (https://github.com/xippios/sdk-usda-esr/pull/10; §8, sdk-core
 ADR-0038), as ``get_exports``' names ``country_code``: one destination's market year is up to 54
 rows (wheat white to Canada: 53 in 2023, 54 in 2024), so three market years fit 200 rows and the
-ceiling of ``SERIES_MAX_YEARS``, ten, can reach some 540; the cut keeps the first rows, the
-oldest weeks, and narrowing the range shows the rest. No ceiling of the process's own and no
+ceiling of ``SERIES``, ten, can reach some 540; the cut keeps the last rows, the newest weeks
+(sdk-core ADR-0047; https://github.com/xippios/sdk-usda-esr/issues/28), and narrowing the range
+shows the rest. It is not paged: past the cache's lifetime a second run would send its yearly
+requests again, up to 11 with the release list. No ceiling of the process's own and no
 option: the ceiling is the task's, the same in Python, over HTTP and over MCP.
 
 ``list_countries`` is a reference list an agent needs whole to find codes (sdk-core ADR-0038;
@@ -190,13 +208,14 @@ bounds, but it has a filter, so its entry carries a note naming ``search`` and n
 """
 
 
-SERIES_MAX_YEARS = 10
-"""Most market years one ``get_weekly_series`` call spans, ends included
-(https://github.com/xippios/sdk-usda-esr/pull/10; conventions §4): one request per market year,
-so ten years are ten requests, about ten seconds at ``RATE_LIMIT``'s pace of one a second, of
-the 1,000 an hour the api.data.gov key shares with every package that uses it, and one more for
-the release list when the range ends in the current calendar year or later. The same in Python,
-over HTTP and over MCP; a longer range is refused before the first request."""
+SERIES = Ceiling(10, unit="market years", source=SOURCE)
+"""Most market years one ``get_weekly_series`` call spans, ends included, core's ``Ceiling``
+(https://github.com/xippios/sdk-usda-esr/pull/10, https://github.com/xippios/sdk-usda-esr/issues/29;
+conventions §4): one request per market year, so ten years are ten requests, about ten seconds
+at ``RATE_LIMIT``'s pace of one a second, of the 1,000 an hour the api.data.gov key shares with
+every package that uses it, and one more for the release list when the range ends in the
+current calendar year or later. The same in Python, over HTTP and over MCP, with no option; a
+longer range is refused before the first request."""
 
 
 def _calendar_year() -> int:
@@ -311,6 +330,10 @@ _SINCE_EXAMPLE = "2026-10-22T08:30:42.67"
 def _since(since: object) -> datetime:
     """``since`` as the naive time it names; ``InvalidRequestError`` naming the form otherwise.
 
+    The package's own reader, which ``newer_than`` is handed, since core ships none (sdk-core
+    ADR-0059, decision 4; https://github.com/xippios/sdk-core/issues/473). It is called before
+    the request, so its refusal says that nothing was sent (conventions §5).
+
     Parsed with ``datetime.fromisoformat``, so a date alone (``"2026-10-01"``) is its
     midnight; a time with a zone is refused, since ESR's release times carry none and the
     two cannot be compared without inventing one (sdk-core ADR-0041, decision 2).
@@ -331,7 +354,7 @@ def _since(since: object) -> datetime:
     raise InvalidRequestError(
         "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
         f"date and time without a time zone such as {_SINCE_EXAMPLE!r}; got {since!r}, and "
-        f"{reason}.",
+        f"{reason}. Nothing was sent.",
         source=SOURCE,
     )
 
@@ -373,16 +396,18 @@ async def get_release_dates_async(
     """
     if commodity_code is not None:
         validate_commodity_code(commodity_code)
-    after = None if since is None else _since(since)
+    if since is not None:
+        _since(since)  # refused before the request
     answer = await api.get_data_release_info()
     releases = answer.payload
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
     selected = [
         release
-        for release in releases
-        if (after is None or release.release_time_stamp > after)
-        and (commodity_code is None or release.commodity_code == commodity_code)
+        for release in newer_than(
+            since, releases, released=lambda release: release.release_time_stamp, read=_since
+        )
+        if commodity_code is None or release.commodity_code == commodity_code
     ]
     meta = ResultMeta(
         source=SOURCE,
@@ -414,26 +439,29 @@ def _release_of(commodity_code: int, releases: list[DataReleaseInfo]) -> DataRel
 
 
 def _series_range(start_year: int, end_year: int) -> None:
-    """Refuse a range that runs backwards or spans more than ``SERIES_MAX_YEARS`` market years.
+    """Refuse a range that runs backwards or spans more market years than ``SERIES`` allows.
 
     Both years have passed ``validate_market_year``; the range is checked before the first
-    request, as conventions §4 and §5 ask, with ``InvalidRequestError`` (sdk-core ADR-0007).
+    request, as conventions §4 and §5 ask, with ``InvalidRequestError`` (sdk-core ADR-0007),
+    each refusal saying that nothing was sent. The order of the range is the task's own, and
+    the ceiling core's ``Ceiling.check``, its advice naming the range to ask for (sdk-core
+    ADR-0054).
     """
     if start_year > end_year:
         raise InvalidRequestError(
-            f"start_year {start_year} is after end_year {end_year}: pass the earlier market "
-            "year first, e.g. start_year=2022, end_year=2024.",
+            f"start_year {start_year} is after end_year {end_year}. Nothing was sent. Pass the "
+            "earlier market year first, e.g. start_year=2022, end_year=2024.",
             source=SOURCE,
         )
-    years = end_year - start_year + 1
-    if years > SERIES_MAX_YEARS:
-        raise InvalidRequestError(
-            f"{start_year} to {end_year} is {years} market years, and the weekly series makes "
-            f"one request per market year; it spans at most {SERIES_MAX_YEARS} market years "
-            f"per call. Narrow the range, e.g. start_year={end_year - SERIES_MAX_YEARS + 1}, "
-            f"end_year={end_year}, or split it into calls of at most {SERIES_MAX_YEARS}.",
-            source=SOURCE,
-        )
+    most = SERIES.value
+    SERIES.check(
+        end_year - start_year + 1,
+        asked=f"{start_year} to {end_year}",
+        advice=(
+            f"Narrow the range, e.g. start_year={end_year - most + 1}, end_year={end_year}, or "
+            f"split it into calls of at most {most}."
+        ),
+    )
 
 
 async def get_weekly_series_async(
@@ -473,7 +501,8 @@ async def get_weekly_series_async(
     and adds no rows, and a released year that answers an empty list had no exports to
     that destination and adds none either; a range of such years is an empty list, a
     range of one year included (``1900`` to ``1900``). Any other error is raised and
-    stops the call, nothing partial returned. ``9990`` (UNKNOWN in ``list_countries``) is
+    stops the call, nothing partial returned; after the first market year its message
+    names the market years fetched before it. ``9990`` (UNKNOWN in ``list_countries``) is
     a destination code like any other. Quantities are in the unit ``unit_id`` names
     (``enums.UnitId``). ``meta.vintage`` is the last week's ending date
     (``"2024-06-06"``), empty for an empty list; ``meta.published_at`` stays empty,
@@ -519,15 +548,15 @@ async def get_weekly_series_async(
                 f"without it; ask for market years up to {latest}.",
                 source=SOURCE,
             )
-    records: list[CommodityData] = []
-    retrieved: list[datetime] = []
-    for market_year in range(start_year, end_year + 1):
-        try:
-            answer = await api.get_country_data(commodity_code, country_code, market_year)
-        except NoDataForYear:
-            continue  # ESR's empty 404: no data for this market year, which adds no rows
-        records.extend(answer.payload)
-        retrieved.append(answer.retrieved_at)
+    # ESR's empty 404 is no data for that market year, which adds no rows; any other error
+    # stops the series, naming the market years fetched before it (sdk-core ADR-0054).
+    fetched = await fetch_periods(
+        range(start_year, end_year + 1),
+        lambda market_year: api.get_country_data(commodity_code, country_code, market_year),
+        skip=(NoDataForYear,),
+    )
+    records = [record for _, answer in fetched for record in answer.payload]
+    retrieved = [answer.retrieved_at for _, answer in fetched]
     # sorted() is stable: a week in two market years keeps the older year's row first.
     series = sorted(records, key=lambda record: record.week_ending_date)
     meta = ResultMeta(
@@ -592,15 +621,18 @@ async def list_countries_async(
             as upstream sends them: the aggregate ``1`` itself, ``4120`` UNITED KINGDOM and
             ``4230`` BELGIUM-LUXEMBOURG as one code besides 24 other members, while ``4791``
             CROATIA sits in ``2`` OTHER EUROPE); ``5`` (JAPAN), ``6`` (TAIWAN), ``7``
-            (CHINA) and ``8`` (INDIA) hold one country each. Matched exactly and not
-            checked: a region no country carries, e.g. ``12``, yields an empty list. Omit
-            (``None``) for every region.
+            (CHINA) and ``8`` (INDIA) hold one country each. Matched exactly, and checked
+            against the packaged regions list first: an id it lacks, e.g. ``12``, raises
+            ``InvalidRequestError`` naming the closest ids. Omit (``None``) for every
+            region.
         search: Keep the countries where this text occurs, ignoring case, in the code (as
             digits), the name, the description or the GENC code, e.g. ``"united"`` (4120
             UNITED KINGDOM, 5200 UNITED ARAB EMIRATES, 7830 TANZANIA, UNITED REPUBLIC OF),
             ``"korea"`` (5790 and 5800), ``"DEU"`` (4280 GERMANY, by its GENC code),
             ``"1220"`` (CANADA). Omit (``None``) for every country.
     """
+    if region_id is not None:
+        validate_region_id(region_id)
     packaged = PackagedList.load(PACKAGE, "countries")
     countries = packaged.parse(Country, source=SOURCE)
     selected = [
