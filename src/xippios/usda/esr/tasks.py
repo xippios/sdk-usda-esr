@@ -29,8 +29,10 @@ the time by hours in an as-of store. Its ``meta.vintage`` is that time in the fo
 prints it (``"2026-10-22T08:30:42.67"``), upstream's release identifier: where the identifier
 is the timestamp text, ``vintage`` holds the text and ``published_at`` its parsed value with
 the flag (conventions §4). The record keeps no text beside the parsed time, which keeps every
-digit upstream sends (https://github.com/xippios/sdk-usda-esr/issues/69), so ``_as_printed``
-writes the text from it. Both are ``None`` for an empty answer.
+digit upstream sends (https://github.com/xippios/sdk-usda-esr/issues/69), so the release list's
+wrapper hands the task each release time as upstream sent it beside the records, its
+``ReleaseList``, and ``vintage`` is the newest record's, unchanged. Both are ``None`` for an
+empty answer.
 
 Change detection is ``get_release_dates``' parameter ``since``
 (https://github.com/xippios/sdk-usda-esr/pull/9): the ``meta.vintage`` text of an earlier call,
@@ -253,17 +255,6 @@ def _calendar_year() -> int:
     return datetime.now(UTC).year
 
 
-def _as_printed(time: datetime) -> str:
-    """A naive release time in the form ESR prints ``releaseTimeStamp``, ``meta.vintage``'s text.
-
-    The ISO date and time with the fraction of a second, its trailing zeros dropped:
-    ``datetime(2026, 10, 22, 8, 30, 42, 670000)`` is ``"2026-10-22T08:30:42.67"``, as every
-    record of the recorded release list prints it. A whole second, which no recording shows,
-    is written without a fraction. ``_since`` reads the text back to the same time.
-    """
-    return time.isoformat(timespec="microseconds").rstrip("0").rstrip(".")
-
-
 def _newest_release(releases: list[DataReleaseInfo]) -> DataReleaseInfo | None:
     """The record with the latest ``releaseTimeStamp``, the first of equals; ``None`` if empty."""
     return max(releases, key=lambda release: release.release_time_stamp, default=None)
@@ -397,8 +388,8 @@ async def get_release_dates_async(
     several market years, and the current market year, named by the year it ends in, with its
     first and last day. The time stamp is as ESR sends it, without a time zone, since the
     documentation names none: ``meta.published_at`` is the newest of the whole answer, naive,
-    with ``meta.published_at_naive`` true, and ``meta.vintage`` that time as ESR prints it,
-    with or without a filter; both are empty only when ESR lists no commodity. To fetch only
+    with ``meta.published_at_naive`` true, and ``meta.vintage`` that time's text as ESR sent
+    it, with or without a filter; both are empty only when ESR lists no commodity. To fetch only
     what changed, store ``meta.vintage``, pass it as ``since`` on the next call and call
     ``get_exports`` for the commodities returned; an empty list means nothing was released
     since.
@@ -424,7 +415,7 @@ async def get_release_dates_async(
     if since is not None:
         _since(since)  # refused before the request
     answer = await api.get_data_release_info()
-    releases = answer.payload
+    releases = answer.payload.records
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
     selected = [
@@ -440,7 +431,7 @@ async def get_release_dates_async(
         retrieved_at=answer.retrieved_at,
         published_at=published_at,
         published_at_naive=published_at is not None,
-        vintage=None if newest is None else _as_printed(newest.release_time_stamp),
+        vintage=None if newest is None else answer.payload.printed[newest.commodity_code],
         request={"commodity_code": commodity_code, "since": since},
     )
     return Result(data=selected, meta=meta)
@@ -485,7 +476,7 @@ async def _check_released(
     if market_year < _calendar_year():
         return
     releases = await api.get_data_release_info()
-    latest = _release_of(commodity_code, releases.payload).market_year
+    latest = _release_of(commodity_code, releases.payload.records).market_year
     if market_year > latest:
         raise NotFoundError(
             f"ESR has not released market year {market_year} of commodity {commodity_code} "

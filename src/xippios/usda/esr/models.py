@@ -143,8 +143,8 @@ class DataReleaseInfo(UpstreamModel):
     is invented, and no text of it stands beside the time, since the type keeps all that
     upstream sends (https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
     ``get_release_dates`` gives the newest one as ``meta.published_at``, flagged
-    ``published_at_naive``, and as ``meta.vintage`` in the form upstream prints it (sdk-core
-    ADR-0041, decision 2).
+    ``published_at_naive``, and its text as upstream sent it, which the wrapper reads from the
+    decoded answer, as ``meta.vintage`` (sdk-core ADR-0041, decision 2).
 
     Attributes:
         commodity_code: ``commodityCode``, e.g. ``104`` (Wheat - White).
