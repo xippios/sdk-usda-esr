@@ -14,12 +14,10 @@ run ``/refresh-reference-data``. Core's testing plugin prints the run's requests
 lifetime, so the run sends fewer requests than its calls.
 """
 
-from collections.abc import Awaitable, Callable, Sequence
 from datetime import date, datetime
-from typing import Any
 
 import pytest
-from xippios.core import Answer, PackagedList, UpstreamModel
+from xippios.core import PackagedList
 from xippios.core.testing.live import *  # noqa: F403
 from xippios.usda.fas import Gateway
 
@@ -30,23 +28,11 @@ from xippios.usda.esr.params import COMMODITIES, COUNTRIES, PACKAGE, REGIONS, UN
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
 
-def _records(
-    wrapper: Callable[[], Awaitable[Answer[Any]]],
-) -> Callable[[], Awaitable[Sequence[UpstreamModel]]]:
-    """The wrapper as the comparison's fetch: its answer's payload, the records it compares."""
-
-    async def fetch() -> Sequence[UpstreamModel]:
-        records: Sequence[UpstreamModel] = (await wrapper()).payload
-        return records
-
-    return fetch
-
-
 LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
-    "commodities": (COMMODITIES, _records(api.get_commodities)),
-    "countries": (COUNTRIES, _records(api.get_countries)),
-    "regions": (REGIONS, _records(api.get_regions)),
-    "unitsOfMeasure": (UNITS, _records(api.get_units_of_measure)),
+    "commodities": (COMMODITIES, api.get_commodities),
+    "countries": (COUNTRIES, api.get_countries),
+    "regions": (REGIONS, api.get_regions),
+    "unitsOfMeasure": (UNITS, api.get_units_of_measure),
 }
 NO_LIVE_LIST: dict[str, str] = {}  # every packaged list is compared
 

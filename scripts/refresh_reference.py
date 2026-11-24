@@ -6,12 +6,13 @@ every source: it fetches every list through its layer-1 wrapper in ``api/``, nev
 task that might answer from the package, before it writes one, through the package's client
 with one attempt per request, so a 5xx or a 429 spends no second call of the key's quota,
 and prints the requests it sent and the quota left that the gateway reported in its
-``REMAINING_HEADER``, a failed run's too. Then it writes each list to
-``reference/<name>.json`` by ``PackagedList.write``, the list's name, the upstream operation
-it came from (the ``operationId`` its ``Listed`` names, never the wrapper's name:
-conventions §2), the UTC time of the fetch to the second and upstream's records under
-upstream's field names, rewrites the rows of the provenance table of ``reference/README.md``
-and renders ``enums.py``, formatted by ruff as it is committed, all as one.
+``REMAINING_HEADER``, a failed run's too, each wrapper's ``Answer`` read by its payload.
+Then it writes each list to ``reference/<name>.json`` by ``PackagedList.write``, the list's
+name, the upstream operation it came from (the ``operationId`` its ``Listed`` names, never
+the wrapper's name: conventions §2), the UTC time of the fetch to the second and upstream's
+records under upstream's field names, rewrites the rows of the provenance table of
+``reference/README.md`` and renders ``enums.py``, formatted by ruff as it is committed, all
+as one.
 
 ESR publishes four lists, all of them records: ``unitsOfMeasure`` is a list of integer ids,
 which makes ``UnitId``, core's default name for its id field ``unitId``; ``commodities``,
@@ -27,33 +28,13 @@ packaged files alone, without a request and without a key, as after a core relea
 changes the renderer (conventions §15).
 """
 
-import functools
-from collections.abc import Awaitable, Callable, Sequence
-
-from xippios.core import Answer, PackagedList, UpstreamModel
+from xippios.core import PackagedList
 from xippios.core.refresh import Enumeration, Listed, Lists, run
 from xippios.usda.fas import REMAINING_HEADER
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import BASE_URL, client
 from xippios.usda.esr.params import PACKAGE, PACKAGED_LISTS
-
-
-def records[R: UpstreamModel](
-    wrapper: Callable[[], Awaitable[Answer[list[R]]]],
-) -> Callable[[], Awaitable[Sequence[R]]]:
-    """The wrapper as the frame's fetch: its answer's payload, the records the frame takes.
-
-    A wrapper answers core's ``Answer``, the payload with the time it was retrieved, and the
-    frame stamps a list with its own time of the fetch; the fetch keeps the wrapper's name,
-    module and docstring, so the declaration still names the wrapper it calls.
-    """
-
-    @functools.wraps(wrapper)
-    async def fetch() -> Sequence[R]:
-        return (await wrapper()).payload
-
-    return fetch
 
 
 def origin(packaged: PackagedList) -> str:
@@ -66,21 +47,19 @@ LISTS = Lists(
     lists=(
         Listed(
             "unitsOfMeasure",
-            records(api.get_units_of_measure),
+            api.get_units_of_measure,
             endpoint="ESRData_GetUnitsOfMeasure",
             enum=Enumeration(ids="unitId", names="unitNames"),
             origin=origin,
         ),
         Listed(
             "commodities",
-            records(api.get_commodities),
+            api.get_commodities,
             endpoint="ESRData_GetCommodities",
             origin=origin,
         ),
-        Listed(
-            "countries", records(api.get_countries), endpoint="ESRData_GetCountries", origin=origin
-        ),
-        Listed("regions", records(api.get_regions), endpoint="ESRData_GetRegions", origin=origin),
+        Listed("countries", api.get_countries, endpoint="ESRData_GetCountries", origin=origin),
+        Listed("regions", api.get_regions, endpoint="ESRData_GetRegions", origin=origin),
     ),
     packaged=PACKAGED_LISTS,
     client=client,
