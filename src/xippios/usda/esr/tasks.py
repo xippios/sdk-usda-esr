@@ -82,6 +82,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from xippios.core import (
+    Answer,
     InvalidRequestError,
     NotFoundError,
     PackagedList,
@@ -91,7 +92,7 @@ from xippios.core import (
     matches,
     sync,
 )
-from xippios.core.data_gov import NoDataForYear
+from xippios.usda.fas import NoDataForYear
 
 from xippios.usda.esr import api
 from xippios.usda.esr._client import SOURCE
@@ -123,6 +124,15 @@ __all__ = [
     "list_regions",
     "list_units_of_measure",
 ]
+
+MCP_INSTRUCTIONS = (
+    "USDA FAS Export Sales Reporting via xippios. "
+    "Tools are read-only. "
+    "Where list tools (usda_esr_list_*) exist, call them first to find valid values, "
+    "then query."
+)
+"""The read server's instructions for agents, which core's tool set reads from this module
+(conventions §8; sdk-core ADR-0063, decision 7)."""
 
 # A task named here is Python-only: no tool, no route; the adapters skip it
 # (sdk-core ADR-0040, decision 4).
@@ -288,14 +298,21 @@ async def get_exports_async(
     try:
         if country_code is None:
             endpoint = "ESRData_GetAllCountriesData"
-            records = await api.get_all_countries_data(commodity_code, market_year)
+            answer = await api.get_all_countries_data(commodity_code, market_year)
         else:
             endpoint = "ESRData_GetCountryData"
-            records = await api.get_country_data(commodity_code, country_code, market_year)
+            answer = await api.get_country_data(commodity_code, country_code, market_year)
     except NoDataForYear as exc:
         country = "every country" if country_code is None else f"country {country_code}"
         raise _absent(exc, commodity_code, country, market_year) from exc
-    meta = ResultMeta(source=SOURCE, endpoint=endpoint, vintage=_vintage(records), request=request)
+    records = answer.payload
+    meta = ResultMeta(
+        source=SOURCE,
+        endpoint=endpoint,
+        retrieved_at=answer.retrieved_at,
+        vintage=_vintage(records),
+        request=request,
+    )
     return Result(data=records, meta=meta)
 
 
@@ -358,7 +375,8 @@ async def get_release_dates_async(since: str | None = None) -> Result[list[DataR
             time is refused before the call. Omit (``None``) for every commodity.
     """
     after = None if since is None else _since(since)
-    releases = await api.get_data_release_info()
+    answer = await api.get_data_release_info()
+    releases = answer.payload
     newest = _newest_release(releases)
     published_at = None if newest is None else newest.release_time_stamp
     selected = (
@@ -369,6 +387,7 @@ async def get_release_dates_async(since: str | None = None) -> Result[list[DataR
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetDataReleaseInfo",
+        retrieved_at=answer.retrieved_at,
         published_at=published_at,
         published_at_naive=published_at is not None,
         vintage=None if newest is None else newest.release_time_stamp_text,
@@ -418,10 +437,12 @@ async def get_market_year_async(commodity_code: int) -> Result[DataReleaseInfo]:
             calendar year); ``list_commodities`` lists them.
     """
     validate_commodity_code(commodity_code)
-    record = _release_of(commodity_code, await api.get_data_release_info())
+    answer = await api.get_data_release_info()
+    record = _release_of(commodity_code, answer.payload)
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetDataReleaseInfo",
+        retrieved_at=answer.retrieved_at,
         published_at=record.release_time_stamp,
         published_at_naive=True,
         vintage=record.release_time_stamp_text,
@@ -464,8 +485,10 @@ def _export_field(field: object) -> ExportField:
     )
 
 
-async def _every_destination(commodity_code: int, market_year: int) -> list[CommodityData]:
-    """``ESRData_GetAllCountriesData``'s records; ESR's empty 404 raised again, naming the ask."""
+async def _every_destination(
+    commodity_code: int, market_year: int
+) -> Answer[list[CommodityData]]:
+    """``ESRData_GetAllCountriesData``'s answer; ESR's empty 404 raised again, naming the ask."""
     try:
         return await api.get_all_countries_data(commodity_code, market_year)
     except NoDataForYear as exc:
@@ -512,10 +535,12 @@ async def get_latest_week_async(
     validate_commodity_code(commodity_code)
     validate_market_year(market_year)
     request: dict[str, int] = {"commodity_code": commodity_code, "market_year": market_year}
-    week = _latest_week(await _every_destination(commodity_code, market_year))
+    answer = await _every_destination(commodity_code, market_year)
+    week = _latest_week(answer.payload)
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetAllCountriesData",
+        retrieved_at=answer.retrieved_at,
         vintage=_vintage(week),
         request=request,
     )
@@ -569,7 +594,8 @@ async def get_top_destinations_async(
         "field": field.value,
         "n": n,
     }
-    week = _latest_week(await _every_destination(commodity_code, market_year))
+    answer = await _every_destination(commodity_code, market_year)
+    week = _latest_week(answer.payload)
     attribute = _FIELD_ATTRIBUTES[field.value]
     ranked = sorted(
         week,
@@ -579,6 +605,7 @@ async def get_top_destinations_async(
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetAllCountriesData",
+        retrieved_at=answer.retrieved_at,
         vintage=_vintage(week),
         request=request,
     )
@@ -679,7 +706,8 @@ async def get_weekly_series_async(
         # An unreleased market year answers [] as a year without exports does, so it is
         # refused, naming the latest released one (conventions §4; sdk-core ADR-0041,
         # decisions 6 and 7).
-        latest = _release_of(commodity_code, await api.get_data_release_info()).market_year
+        releases = await api.get_data_release_info()
+        latest = _release_of(commodity_code, releases.payload).market_year
         if end_year > latest:
             raise NotFoundError(
                 f"ESR has not released market year {end_year} of commodity {commodity_code} "
@@ -691,16 +719,21 @@ async def get_weekly_series_async(
                 source=SOURCE,
             )
     records: list[CommodityData] = []
+    retrieved: list[datetime] = []
     for market_year in range(start_year, end_year + 1):
         try:
-            records.extend(await api.get_country_data(commodity_code, country_code, market_year))
+            answer = await api.get_country_data(commodity_code, country_code, market_year)
         except NoDataForYear:
             continue  # ESR's empty 404: no data for this market year, which adds no rows
+        records.extend(answer.payload)
+        retrieved.append(answer.retrieved_at)
     # sorted() is stable: a week in two market years keeps the older year's row first.
     series = sorted(records, key=lambda record: record.week_ending_date)
     meta = ResultMeta(
         source=SOURCE,
         endpoint="ESRData_GetCountryData",
+        # the oldest answer assembled; now where every year answered ESR's empty 404 (§4)
+        retrieved_at=min(retrieved, default=datetime.now(UTC)),
         vintage=_vintage(series),
         request=request,
     )

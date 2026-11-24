@@ -18,15 +18,17 @@ answers HTTP 404 with an empty ``text/plain`` body, as the one-country form does
 (``year_1900``), which ``_client.classify`` maps to core's ``NoDataForYear``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import CommodityData
 
 __all__ = ["get_all_countries_data"]
 
 
-async def get_all_countries_data(commodity_code: int, market_year: int) -> list[CommodityData]:
+async def get_all_countries_data(
+    commodity_code: int, market_year: int
+) -> Answer[list[CommodityData]]:
     """Call ``ESRData_GetAllCountriesData``.
 
     Args:
@@ -34,8 +36,8 @@ async def get_all_countries_data(commodity_code: int, market_year: int) -> list[
         market_year: ``marketYear``, named by its end year, e.g. ``2024``.
 
     Returns:
-        One ``CommodityData`` per destination and week, in upstream order; ``[]`` when
-        upstream has none.
+        The ``Answer``, when it was retrieved and, as its payload, one ``CommodityData`` per
+            destination and week, in upstream order; ``[]`` when upstream has none.
 
     Raises:
         NoDataForYear: Upstream answered HTTP 404 with an empty body (no such market year).
@@ -45,5 +47,6 @@ async def get_all_countries_data(commodity_code: int, market_year: int) -> list[
     path = (
         f"/api/esr/exports/commodityCode/{commodity_code:d}/allCountries/marketYear/{market_year:d}"
     )
-    raw = await client.get_json(path)
-    return parse(list[CommodityData], raw, source=SOURCE, endpoint="ESRData_GetAllCountriesData")
+    return await client.get_answer(
+        path, parse=list[CommodityData], endpoint="ESRData_GetAllCountriesData"
+    )

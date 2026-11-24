@@ -2,20 +2,24 @@
 
 One ``AsyncClient`` for the whole package, shared by the tasks, the sync facades and the
 MCP server, on api.data.gov's gateway at ``BASE_URL`` with ``Accept: application/json``.
-It keeps a pace of its own, ``RATE_LIMIT``, since the snapshot documents none. The gateway
-is core's, ``xippios.core.data_gov``'s ``Gateway`` (sdk-core ADR-0032, decision 5):
-``gateway.auth`` sends the key from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header;
-``Gateway.policy``, the one ``QuotaPolicy`` per process for that key, keeps api.data.gov's
-hourly quota from every answer and never fires a request into a spent one, waiting within
-the policy's ``pause_cap`` or refusing without sending, a refusal that speaks for
-``api.data.gov`` (sdk-core ADR-0033, sdk-core ADR-0037); and ``gateway.classify`` maps the
-gateway's ``API_KEY_*`` answers to ``AuthError``, its 429 to ``RateLimitError`` (its
-``Retry-After`` read by the gateway), its ``NOT_FOUND`` to ``NotFoundError`` and, since
-``Gateway(SOURCE, data_path=DATA_PATH)`` names the exports paths, ESR's empty 404 there to
-core's ``NoDataForYear`` (https://github.com/xippios/sdk-core/issues/106). ``classify``
-asks the gateway first and then maps ESR's own answers: an empty 404 anywhere else to a
-plain ``NotFoundError`` and its 400 for a path value that is not an integer to
-``InvalidRequestError``.
+It keeps a pace of its own, ``RATE_LIMIT``, since the snapshot documents none, and keeps
+upstream's answers in core's response cache, ``MemoryCache`` at core's default lifetime of
+300 s for every path, since the package only reads public data (conventions §6; sdk-core
+ADR-0061, decision 11): the release list that ``get_weekly_series`` reads before its yearly
+requests is one request per lifetime, and a continuation of a cut ``get_exports`` answer is
+the cache's. The gateway is the shared package's, ``xippios.usda.fas``'s ``Gateway``
+(sdk-core ADR-0032, decision 5; sdk-core ADR-0065, decision 1): ``gateway.auth`` sends the key
+from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header; ``Gateway.policy``, the one
+``QuotaPolicy`` per process for that key, keeps api.data.gov's hourly quota from every answer
+from the wire and never fires a request into a spent one, refusing it without sending, a
+refusal that speaks for ``api.data.gov`` (sdk-core ADR-0033, sdk-core ADR-0037); and
+``gateway.classify`` maps the gateway's ``API_KEY_*`` answers to ``AuthError``, its 429 to
+``RateLimitError`` (its ``Retry-After`` read by the gateway), its ``NOT_FOUND`` to
+``NotFoundError`` and, since ``Gateway(SOURCE, data_path=DATA_PATH)`` names the exports
+paths, FAS's empty 404 there to the shared package's ``NoDataForYear``
+(https://github.com/xippios/sdk-core/issues/106). ``classify`` asks the gateway first and
+then maps ESR's own answers: an empty 404 anywhere else to a plain ``NotFoundError`` and its
+400 for a path value that is not an integer to ``InvalidRequestError``.
 """
 
 import re
@@ -26,12 +30,13 @@ from xippios.core import (
     ClientConfig,
     EnvVar,
     InvalidRequestError,
+    MemoryCache,
     NotFoundError,
     RateLimit,
     XippiosError,
 )
-from xippios.core.data_gov import API_KEY_ENV, Gateway
 from xippios.core.errors import request_description
+from xippios.usda.fas import API_KEY_ENV, Gateway
 
 from xippios.usda.esr._version import __version__
 
@@ -62,7 +67,7 @@ DATA_PATH = re.compile(
 gateway = Gateway(SOURCE, data_path=DATA_PATH)
 """api.data.gov for this package: ``auth``, ``classify`` and ``install``.
 
-``classify`` maps ESR's empty ``text/plain`` 404 on ``DATA_PATH`` to core's
+``classify`` maps FAS's empty ``text/plain`` 404 on ``DATA_PATH`` to the shared package's
 ``NoDataForYear``, in this package's name."""
 
 _URL = re.compile(r"https?://[^/\s]+")
@@ -88,7 +93,7 @@ def classify(response: httpx.Response) -> XippiosError | None:
     ESR's own answer for a market year it holds no data for, a 404 with an empty
     ``text/plain`` body on an exports path, recorded for 1900 on both forms
     (``get_country_data/year_1900.json``, ``get_all_countries_data/year_1900.json``), as
-    core's ``NoDataForYear``, a ``NotFoundError``. ESR's own follow:
+    the shared package's ``NoDataForYear``, a ``NotFoundError``. ESR's own follow:
 
     - An empty 404 anywhere else, off an exports path or not ``text/plain``, is a plain
       ``NotFoundError``: it says the request is wrong, not that the year is empty.
@@ -131,6 +136,7 @@ config = gateway.install(
         version=__version__,
         base_url=BASE_URL,
         rate_limit=RATE_LIMIT,
+        cache=MemoryCache(),
         headers={"Accept": "application/json"},
         classify=classify,
     )

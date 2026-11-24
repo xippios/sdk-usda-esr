@@ -9,24 +9,26 @@ by querying Commodity Data End point". The record shape is the recorded one,
 ``xippios.usda.esr._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import UnitOfMeasure
 
 __all__ = ["get_units_of_measure"]
 
 
-async def get_units_of_measure() -> list[UnitOfMeasure]:
+async def get_units_of_measure() -> Answer[list[UnitOfMeasure]]:
     """Call ``ESRData_GetUnitsOfMeasure``.
 
     Returns:
-        Every ESR unit, in upstream order, one ``UnitOfMeasure`` per record, e.g.
+        The ``Answer``, when it was retrieved and, as its payload, every ESR unit, in upstream
+            order, one ``UnitOfMeasure`` per record, e.g.
             ``UnitOfMeasure(unit_id=1, unit_names="Metric Tons")``
 
     Raises:
         AuthError: api.data.gov refused the key in ``DATA_GOV_API_KEY``.
         RateLimitError: api.data.gov's hourly quota for the key is spent.
     """
-    raw = await client.get_json("/api/esr/unitsOfMeasure")
-    return parse(list[UnitOfMeasure], raw, source=SOURCE, endpoint="ESRData_GetUnitsOfMeasure")
+    return await client.get_answer(
+        "/api/esr/unitsOfMeasure", parse=list[UnitOfMeasure], endpoint="ESRData_GetUnitsOfMeasure"
+    )

@@ -19,9 +19,9 @@ year in the future (``year_2099``); market year 1900 is HTTP 404 with an empty
 of 2024 as well, with other values, since the week straddles wheat's market years.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import CommodityData
 
 __all__ = ["get_country_data"]
@@ -29,7 +29,7 @@ __all__ = ["get_country_data"]
 
 async def get_country_data(
     commodity_code: int, country_code: int, market_year: int
-) -> list[CommodityData]:
+) -> Answer[list[CommodityData]]:
     """Call ``ESRData_GetCountryData``.
 
     Args:
@@ -38,7 +38,8 @@ async def get_country_data(
         market_year: ``marketYear``, named by its end year, e.g. ``2024``.
 
     Returns:
-        One ``CommodityData`` per week, in upstream order; ``[]`` when upstream has none.
+        The ``Answer``, when it was retrieved and, as its payload, one ``CommodityData`` per week,
+            in upstream order; ``[]`` when upstream has none.
 
     Raises:
         NoDataForYear: Upstream answered HTTP 404 with an empty body (no such market year).
@@ -49,5 +50,6 @@ async def get_country_data(
         f"/api/esr/exports/commodityCode/{commodity_code:d}"
         f"/countryCode/{country_code:d}/marketYear/{market_year:d}"
     )
-    raw = await client.get_json(path)
-    return parse(list[CommodityData], raw, source=SOURCE, endpoint="ESRData_GetCountryData")
+    return await client.get_answer(
+        path, parse=list[CommodityData], endpoint="ESRData_GetCountryData"
+    )
