@@ -5,16 +5,13 @@
 
 import json
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import httpx
 import pytest
 import respx
-from mcp.types import TextContent
-from xippios.core import InvalidRequestError, NotFoundError, UnknownCode, parse
-from xippios.core.data_gov import NoDataForYear
-from xippios.core.mcp import ToolSet
+from xippios.core import Answer, InvalidRequestError, NotFoundError, UnknownCode, parse
 from xippios.core.testing import (
     fixture_path,
     load_fixture,
@@ -22,13 +19,10 @@ from xippios.core.testing import (
     mcp_call_text,
     sent_urls,
 )
+from xippios.usda.fas import NoDataForYear
 
 from xippios.usda.esr import (
-    __version__,
     api,
-    get_exports,
-    get_market_year,
-    get_release_dates,
     tasks,
 )
 from xippios.usda.esr import mcp as esr_mcp
@@ -42,9 +36,6 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_the_package_exports_the_tasks() -> None:
-    assert get_exports is tasks.get_exports
-    assert get_release_dates is tasks.get_release_dates
-    assert get_market_year is tasks.get_market_year
     assert tasks.__all__ == [
         "get_exports",
         "get_latest_week",
@@ -180,7 +171,7 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
     whole = tasks.get_release_dates()
     same = tasks.get_release_dates(since=RELEASED)
     earlier = tasks.get_release_dates(since=A_SECOND_EARLIER)
-    assert sent_urls(route) == [RELEASE_DATES] * 3, "one request each, filtered or not"
+    assert sent_urls(route) == [RELEASE_DATES], "one request, the cache's answer after it"
     assert len(whole.data) == 44
     assert whole.meta.request == {}, "since left None is left out (sdk-core ADR-0041, decision 3)"
     assert same.data == [], "a release at exactly since is not newer"
@@ -206,9 +197,9 @@ def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     calls."""
     calls: list[int] = []
 
-    async def empty() -> list[DataReleaseInfo]:
+    async def empty() -> Answer[list[DataReleaseInfo]]:
         calls.append(1)
-        return []
+        return Answer([], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", empty)
     return calls
@@ -295,7 +286,7 @@ def test_get_market_year(replay_fixture: Callable[[str, str], respx.Route]) -> N
         date(2026, 1, 1),
         date(2026, 12, 31),
     ), "beef muscle cuts, the calendar year"
-    assert route.call_count == 3
+    assert route.call_count == 1, "the cache answers the second and the third"
 
 
 def test_get_market_year_checks_the_code_before_the_request(
@@ -334,8 +325,8 @@ def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyP
     file): wheat white is not found, every other commodity still answers."""
     recorded = _recorded_releases()
 
-    async def without_wheat_white() -> list[DataReleaseInfo]:
-        return [r for r in recorded if r.commodity_code != WHEAT_WHITE]
+    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
+        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError, match="ESR lists no market year for commodity 104"):
@@ -523,7 +514,9 @@ async def test_release_dates_since_over_mcp(
         "get_release_dates call"
     )
     assert "it carries a time zone" in refused
-    assert sent_urls(route) == [RELEASE_DATES] * 2, "the refusal sent nothing"
+    assert sent_urls(route) == [RELEASE_DATES], (
+        "the cache answered the second; the refusal sent nothing"
+    )
 
 
 @pytest.mark.anyio
@@ -612,7 +605,7 @@ def test_release_dates_since_over_http(
     refused = http.get("/usda-esr/get_release_dates", params={"since": "not a time"})
     assert refused.status_code == 422
     assert refused.json()["title"] == "InvalidRequestError"
-    assert sent_urls(route) == [RELEASE_DATES] * 2
+    assert sent_urls(route) == [RELEASE_DATES], "the cache answered the second"
 
 
 def test_quantities_are_json_numbers_over_http(
@@ -647,93 +640,26 @@ def test_quantities_are_json_numbers_over_http(
 
 
 def test_build_returns_the_tool_set_the_entry_point_serves() -> None:
-    """``mcp.build()``, the package contract (conventions §8; sdk-core ADR-0026, amendment
-    2026-11-18, points c and d): a host that serves it beside other sources' tool sets
-    serves the tools, caps, text and version that ``xippios-usda-esr-mcp`` serves."""
+    """``mcp.build()`` holds what ``tasks.py`` declares for the server: its caps and its
+    instructions, ``MCP_INSTRUCTIONS``, and no option of its own (conventions §8; sdk-core
+    ADR-0063, decision 7). Core's family check holds the rest of the package contract."""
     tools = esr_mcp.build()
-    assert isinstance(tools, ToolSet)
-    assert tools.source == "usda-esr"
-    assert [task.__name__ for task in tools.tasks] == tasks.__all__
     assert dict(tools.caps or {}) == dict(tasks.MCP_CAPS)
-    assert (tools.instructions, tools.version) == (esr_mcp.INSTRUCTIONS, __version__)
-    assert tools.read_only
+    assert tools.instructions == tasks.MCP_INSTRUCTIONS
+    assert tools.instructions.startswith("USDA FAS Export Sales Reporting via xippios. ")
     assert (tools.add_options, tools.apply_options) == (None, None), "no options of its own"
 
 
-@pytest.mark.anyio
-async def test_the_adapters_refuse_a_bad_argument_before_the_task_runs(
-    respx_mock: respx.MockRouter,
+def test_retrieved_at_is_the_answers_time_a_cache_hit_included(
+    replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    """Core 0.4.0's adapters on this package's tools and routes. A tool refuses an argument
-    it does not declare (sdk-core#84), so ``country`` for ``country_code`` no longer runs
-    ``get_exports`` for every destination; a tool's error answer is flagged ``is_error``
-    (sdk-core#168); and a route answers a value its schema refuses as problem details,
-    the value not echoed (sdk-core#66). respx has no route mounted: nothing is sent."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from mcp.client import Client
-
-    from xippios.usda.esr.http import router
-
-    async with Client(server) as client:
-        undeclared = await client.call_tool(
-            "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024, "country": 5880}
-        )
-        unknown = await client.call_tool(
-            "usda_esr_get_exports", {"commodity_code": 999, "market_year": 2024}
-        )
-    assert undeclared.is_error
-    assert isinstance(undeclared.content[0], TextContent)
-    assert undeclared.content[0].text == (
-        "error: InvalidRequestError: country: Not an argument of this tool; it takes "
-        "commodity_code, market_year, country_code"
-    )
-    assert unknown.is_error
-    assert isinstance(unknown.content[0], TextContent)
-    assert unknown.content[0].text.startswith("error: UnknownCode: 999 is not a commodity_code")
-    app = FastAPI()
-    app.include_router(router)
-    http = TestClient(app)
-    refused = http.get(
-        "/usda-esr/get_exports", params={"commodity_code": 104, "market_year": "2024/25"}
-    )
-    assert refused.status_code == 422
-    assert refused.headers["content-type"].startswith("application/problem+json")
-    assert refused.json()["title"] == "InvalidRequestError"
-    assert refused.json()["detail"].startswith("market_year: ")
-    assert "2024/25" not in refused.text, "the input is not echoed"
-    missing = http.get("/usda-esr/get_exports", params={"market_year": 2024})
-    assert missing.status_code == 422
-    assert missing.json()["title"] == "InvalidRequestError"
-    assert missing.json()["detail"].startswith("commodity_code: ")
-    assert not respx_mock.calls
-
-
-def test_the_entry_point_names_itself(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """``xippios-usda-esr-mcp`` names itself in its usage line and its errors, where core 0.3
-    named the server, ``xippios-usda-esr``, and its help says that ``--allow-remote``
-    changes nothing on this read server (sdk-core#167). The output is plain text at a width
-    of its own: Python 3.14's argparse colors it under ``FORCE_COLOR``."""
-    monkeypatch.setenv("PYTHON_COLORS", "0")
-    monkeypatch.setenv("COLUMNS", "100")
-    monkeypatch.setattr("sys.argv", ["xippios-usda-esr-mcp", "--bogus"])
-    with pytest.raises(SystemExit) as refused:
-        esr_mcp.run()
-    assert refused.value.code == 2
-    assert capsys.readouterr().err.splitlines()[-1] == (
-        "xippios-usda-esr-mcp: error: unrecognized arguments: --bogus"
-    )
-    monkeypatch.setattr("sys.argv", ["xippios-usda-esr-mcp", "--help"])
-    with pytest.raises(SystemExit) as helped:
-        esr_mcp.run()
-    assert helped.value.code == 0
-    text = capsys.readouterr().out
-    assert text.startswith("usage: xippios-usda-esr-mcp ")
-    assert "--allow-remote changes nothing: this read server is not held to loopback" in " ".join(
-        text.split()
-    )
+    """``meta.retrieved_at`` is the client's time of the answer (conventions §4): a second
+    call that the cache answers carries the time its entry was stored."""
+    route = replay_fixture(RELEASES, "all")
+    first = tasks.get_release_dates()
+    second = tasks.get_release_dates()
+    assert route.call_count == 1
+    assert second.meta.retrieved_at == first.meta.retrieved_at
 
 
 @pytest.mark.anyio

@@ -24,7 +24,6 @@ from xippios.core import PackagedList
 from xippios.core.mcp import cap_result
 from xippios.core.testing import ReplayFixture, load_fixture, mcp_call
 
-import xippios.usda.esr as package
 from xippios.usda.esr import tasks
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import Commodity, Country, Region, UnitOfMeasure
@@ -68,13 +67,6 @@ def _recorded(wrapper: str, model: type[BaseModel]) -> list[Any]:
     """The records of ``tests/fixtures/<wrapper>/all.json``, parsed into ``model``."""
     body = json.loads(load_fixture(FIXTURES / wrapper / "all.json").response.body)
     return [model.model_validate(record) for record in body]
-
-
-def test_every_list_task_is_exported() -> None:
-    for task in IDS:
-        assert task in tasks.__all__
-        assert task in package.__all__
-        assert getattr(package, task) is getattr(tasks, task)
 
 
 @pytest.mark.anyio

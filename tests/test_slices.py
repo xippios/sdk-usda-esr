@@ -19,7 +19,7 @@ import dataclasses
 import json
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -27,8 +27,7 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from xippios.core import AuthError, InvalidRequestError, NotFoundError, UnknownCode, parse
-from xippios.core.data_gov import NoDataForYear
+from xippios.core import Answer, AuthError, InvalidRequestError, NotFoundError, UnknownCode, parse
 from xippios.core.mcp import cap_result
 from xippios.core.testing import (
     ReplayFixture,
@@ -38,6 +37,7 @@ from xippios.core.testing import (
     mcp_call_text,
     sent_urls,
 )
+from xippios.usda.fas import NoDataForYear
 
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
@@ -124,10 +124,6 @@ def _latest_week_recorded() -> list[CommodityData]:
 
 
 def test_every_slice_is_exported() -> None:
-    for name in SLICES:
-        assert name in tasks.__all__
-        assert name in package.__all__
-        assert getattr(package, name) is getattr(tasks, name)
     for name in ["get_latest_week", "get_top_destinations"]:
         assert name not in tasks.MCP_CAPS, "one week of every destination fits the default"
     assert "ExportField" in models.__all__
@@ -253,7 +249,7 @@ def test_top_destinations_by_accumulated_exports(
     by_name = tasks.get_top_destinations(COTTONSEED, 2024, "accumulatedExports", 3)  # type: ignore[arg-type]
     assert by_name.data == top.data, "upstream's name as a plain string is the member"
     assert by_name.meta.request["field"] == "accumulatedExports"
-    assert route.call_count == 4
+    assert route.call_count == 1, "the cache answers the next three"
 
 
 # get_weekly_series
@@ -350,8 +346,8 @@ def test_weekly_series_orders_what_upstream_sends_out_of_order(
         2024: _recorded(COUNTRY, "wheat_white_canada_2024"),
     }
 
-    async def reversed_answer(_: int, __: int, market_year: int) -> list[CommodityData]:
-        return answers[market_year][::-1]
+    async def reversed_answer(_: int, __: int, market_year: int) -> Answer[list[CommodityData]]:
+        return Answer(answers[market_year][::-1], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_country_data", reversed_answer)
     one = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2024)
@@ -381,7 +377,7 @@ def test_valid_codes_without_exports_are_an_empty_result(
         "field": "weeklyExports",
         "n": 10,
     }
-    assert route.call_count == 2
+    assert route.call_count == 1, "the cache answers the second"
 
 
 def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture) -> None:
@@ -503,9 +499,8 @@ def test_a_range_ending_before_this_year_reads_no_release_list(
     assert sent_urls(route) == [
         _country_url(2023),
         _country_url(2024),
-        _country_url(2024),
         _country_url(2025),
-    ]
+    ], "the second range's 2024 is the cache's"
     assert sent_urls(releases) == [], "no release list for either range"
 
 
@@ -590,8 +585,8 @@ def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
     )
 
-    async def without_wheat_white() -> list[DataReleaseInfo]:
-        return [r for r in recorded if r.commodity_code != WHEAT_WHITE]
+    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
+        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError) as info:
@@ -786,7 +781,7 @@ def test_top_destinations_rank_the_unknown_destination_like_a_country(
     ]
     recorded = _recorded(ALL, "wheat_white_2027")
     assert all(r in recorded for r in [*top.data, *net.data]), "records as upstream sent them"
-    assert route.call_count == 2
+    assert route.call_count == 1, "the cache answers the second"
 
 
 def test_list_countries_names_the_unknown_destination() -> None:

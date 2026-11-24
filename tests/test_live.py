@@ -23,7 +23,7 @@ from typing import Any
 import httpx
 import pytest
 from xippios.core import PackagedList
-from xippios.core.data_gov import Gateway
+from xippios.usda.fas import Gateway
 
 from xippios.usda.esr import api, tasks
 from xippios.usda.esr._client import BASE_URL, config
