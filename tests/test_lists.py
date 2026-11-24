@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 import respx
 from pydantic import BaseModel
-from xippios.core import PackagedList
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode
 from xippios.core.mcp import cap_result
 from xippios.core.testing import ReplayFixture, load_fixture, mcp_call
 
@@ -224,13 +224,23 @@ def test_list_countries_by_region(respx_mock: respx.MockRouter) -> None:
     assert not respx_mock.calls
 
 
-def test_an_unknown_region_is_an_empty_list(respx_mock: respx.MockRouter) -> None:
-    """No validation: a region no country carries has no countries, a correct answer."""
-    unknown = tasks.list_countries(region_id=12)
-    assert unknown.data == []
-    assert unknown.meta.request == {"region_id": 12}
-    assert unknown.meta.retrieved_at == _fetched("countries")
-    assert tasks.list_countries(region_id=0).data == []
+def test_an_unknown_region_is_refused_naming_the_closest(respx_mock: respx.MockRouter) -> None:
+    """A region the packaged ``regions`` list lacks is refused by core's check, naming the
+    closest ids, where it answered an empty list (https://github.com/xippios/sdk-usda-esr/issues/27;
+    sdk-core ADR-0045): every region of the list holds a country, so an empty list could only
+    mean a mistyped id."""
+    with pytest.raises(UnknownCode) as info:
+        tasks.list_countries(region_id=12)
+    error = info.value
+    assert (error.param, error.value, error.list_name) == ("region_id", 12, "regions")
+    assert error.fetched == _fetched("regions")
+    assert error.closest[0] == (11, "WESTERN HEMISPHERE")
+    assert error.source == "usda-esr"
+    assert "Nothing was sent." in str(error)
+    with pytest.raises(UnknownCode, match="0 is not a region_id in the packaged regions list"):
+        tasks.list_countries(region_id=0)
+    with pytest.raises(InvalidRequestError, match="is not an integer code: region_id takes"):
+        tasks.list_countries(region_id="11")  # type: ignore[arg-type]
     assert not respx_mock.calls
 
 

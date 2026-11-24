@@ -287,8 +287,8 @@ def test_records_serialise_snake_case_with_numbers_and_iso_dates() -> None:
     dumped = record.model_dump(mode="json")
     assert dumped["week_ending_date"] == "2024-06-06"
     assert dumped["accumulated_exports"] == 16217
-    assert isinstance(dumped["accumulated_exports"], float), (
-        "a JSON number (sdk-core ADR-0031, decision 1)"
+    assert isinstance(dumped["accumulated_exports"], int), (
+        "a JSON number, an integer where the Decimal has no fractional digits (sdk-core#478)"
     )
     assert dumped["current_my_net_sales"] == -5
     assert set(dumped) == set(CommodityData.model_fields)

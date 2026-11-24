@@ -16,7 +16,7 @@ January case.
 import dataclasses
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -152,6 +152,10 @@ def test_get_weekly_series_spans_market_years_oldest_first(
         "end_year": 2024,
     }
     assert result.meta.vintage == "2024-06-06", "the last week"
+    assert result.meta.names == {
+        "country_code": {"1220": "CANADA"},
+        "unit_id": {"1": "Metric Tons"},
+    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30)"
     assert result.meta.published_at is None
     assert result.meta.total is None
 
@@ -523,9 +527,28 @@ def test_a_refusal_inside_the_range_stops_the_series(replay_fixture: ReplayFixtu
     (conventions §10), at the 2023 URL: any error but the empty 404 stops the series."""
     later = replay_fixture(COUNTRY, "wheat_white_canada_2024")
     refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2023))
-    with pytest.raises(AuthError, match="API_KEY_INVALID"):
+    with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
     assert (refused.call_count, later.call_count) == (1, 0)
+    assert "The series stopped" not in str(info.value), "nothing was fetched before it"
+
+
+def test_a_refusal_after_the_first_market_year_names_the_years_fetched(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """The same recorded refusal at the 2024 URL, after 2023 was answered: the error keeps
+    its class and names the market years fetched before it, and nothing is returned, core's
+    walk of periods (https://github.com/xippios/sdk-usda-esr/issues/29; sdk-core ADR-0054).
+    NOT RECORDED at that URL: api.data.gov refuses an invalid key alike on every path behind
+    it, so the recorded refusal stands for this one (conventions §10, kind 3)."""
+    earlier = replay_fixture(COUNTRY, "wheat_white_canada_2023")
+    refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2024))
+    with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    assert (earlier.call_count, refused.call_count) == (1, 1)
+    assert str(info.value).endswith(
+        " The series stopped at 2024 after 1 period answered, 2023, and returns nothing."
+    )
 
 
 def test_the_gateways_not_found_propagates_unchanged(respx_mock: respx.MockRouter) -> None:
@@ -575,7 +598,7 @@ def test_the_series_checks_its_arguments_before_any_request(respx_mock: respx.Mo
         tasks.get_weekly_series(WHEAT_WHITE, 9999, 2024, 2024)
     with pytest.raises(UnknownCode, match="commodity_code"):
         tasks.get_weekly_series(999, CANADA, 2024, 2024)
-    with pytest.raises(InvalidRequestError, match="must be an integer code"):
+    with pytest.raises(InvalidRequestError, match="is not an integer code"):
         tasks.get_weekly_series(WHEAT_WHITE, "1220", 2024, 2024)  # type: ignore[arg-type]
     with pytest.raises(InvalidRequestError, match=r"^start_year must be a four-digit year"):
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 24, 2024)
@@ -594,17 +617,18 @@ def test_the_weekly_series_checks_its_range_before_any_request(
     with pytest.raises(InvalidRequestError) as backwards:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2023)
     assert str(backwards.value) == (
-        "start_year 2024 is after end_year 2023: pass the earlier market year first, e.g. "
-        "start_year=2022, end_year=2024."
-    )
-    assert tasks.SERIES_MAX_YEARS == 10
+        "start_year 2024 is after end_year 2023. Nothing was sent. Pass the earlier market "
+        "year first, e.g. start_year=2022, end_year=2024."
+    ), "§5's sentence after the first (sdk-core#481)"
+    assert (tasks.SERIES.most, tasks.SERIES.value, tasks.SERIES.unit) == (10, 10, "market years")
+    assert (tasks.SERIES.mcp, tasks.SERIES.option) == (None, None), "the same over MCP"
     with pytest.raises(InvalidRequestError) as eleven:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2015, 2025)
     assert str(eleven.value) == (
-        "2015 to 2025 is 11 market years, and the weekly series makes one request per market "
-        "year; it spans at most 10 market years per call. Narrow the range, e.g. "
-        "start_year=2016, end_year=2025, or split it into calls of at most 10."
-    )
+        "2015 to 2025 is 11 market years; one call fetches at most 10 market years. Nothing "
+        "was sent. Narrow the range, e.g. start_year=2016, end_year=2025, or split it into "
+        "calls of at most 10."
+    ), "core's Ceiling with the task's advice (sdk-usda-esr#29; sdk-core ADR-0054)"
     future = latest_market_year() + 1
     with pytest.raises(InvalidRequestError, match="answers a future one") as end:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, future)
@@ -615,14 +639,23 @@ def test_the_weekly_series_checks_its_range_before_any_request(
     assert not respx_mock.calls
 
 
+@pytest.fixture
+def ceiling_of_two() -> Iterator[None]:
+    """The series' ceiling set to 2 for the test, and to its most again after it."""
+    tasks.SERIES.set(2)
+    try:
+        yield
+    finally:
+        tasks.SERIES.set(tasks.SERIES.most)
+
+
+@pytest.mark.usefixtures("ceiling_of_two")
 def test_the_ceiling_counts_market_years_ends_included(
     replay_fixture: ReplayFixture,
     respx_mock: respx.MockRouter,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With the ceiling lowered to 2, 2023 to 2024 is served and 2023 to 2025 refused before
     any request; the real ceiling is 10, and ten years would need ten recordings."""
-    monkeypatch.setattr(tasks, "SERIES_MAX_YEARS", 2)
     with pytest.raises(InvalidRequestError, match="2023 to 2025 is 3 market years"):
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2025)
     assert not respx_mock.calls
@@ -679,8 +712,8 @@ async def test_weekly_series_tool_end_to_end(replay_fixture: ReplayFixture) -> N
         server, "usda_esr_get_weekly_series", {**arguments, "start_year": 2015, "end_year": 2025}
     )
     assert refused.startswith(
-        "error: InvalidRequestError: 2015 to 2025 is 11 market years, and the weekly series "
-        "makes one request per market year; it spans at most 10 market years per call."
+        "error: InvalidRequestError: 2015 to 2025 is 11 market years; one call fetches at "
+        "most 10 market years. Nothing was sent."
     )
     backwards = await mcp_call_text(
         server, "usda_esr_get_weekly_series", {**arguments, "start_year": 2024, "end_year": 2023}
@@ -704,12 +737,16 @@ async def test_an_unreleased_market_year_over_mcp(replay_fixture: ReplayFixture)
 
 def test_the_weekly_series_cap_note_names_the_range() -> None:
     """A note of the task's own, the family's bounds kept (conventions §8, sdk-core ADR-0038;
-    https://github.com/xippios/sdk-usda-esr/pull/10), as ``get_exports``' names ``country_code``."""
+    https://github.com/xippios/sdk-usda-esr/pull/10), as ``get_exports``' names ``country_code``.
+    The cap keeps the newest weeks and is not paged: a second run would send its yearly
+    requests again past the cache's lifetime (https://github.com/xippios/sdk-usda-esr/issues/28;
+    sdk-core ADR-0047)."""
     cap = tasks.MCP_CAPS["get_weekly_series"]
-    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
+    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "the family's bounds"
+    assert (cap.paged, cap.keep) == (False, "last")
     assert cap.note == (
         "narrow start_year and end_year, e.g. 2023 and 2024: each market year is up to 54 "
-        "rows, so three fit, and the oldest weeks come first"
+        "rows, so three fit, and the newest weeks are shown"
     )
 
 
@@ -717,17 +754,19 @@ def test_the_series_note_is_what_an_agent_reads_when_the_range_outgrows_the_cap(
     replay_fixture: ReplayFixture,
 ) -> None:
     """Not reachable with two recordings, 107 rows; with the row bound lowered to 100 the
-    same cap shows the text an agent reads past 200 rows, four market years or more."""
+    same cap shows the text an agent reads past 200 rows, four market years or more: the
+    newest 100 weeks, oldest first, and no offset to continue with."""
     replay_fixture(COUNTRY, "wheat_white_canada_2023")
     replay_fixture(COUNTRY, "wheat_white_canada_2024")
     cap = dataclasses.replace(tasks.MCP_CAPS["get_weekly_series"], max_rows=100)
     payload = json.loads(cap_result(tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024), cap))
     assert len(payload["data"]) == 100
-    assert payload["data"][0]["week_ending_date"] == "2022-06-02", "the oldest weeks first"
+    assert payload["data"][0]["week_ending_date"] == "2022-07-21", "the eighth week first"
+    assert payload["data"][-1]["week_ending_date"] == "2024-06-06", "the newest week kept"
     assert payload["note"] == (
-        "showing 100 of 107 rows (cap: 100 rows or 65536 bytes); narrow start_year and "
+        "showing rows 8 to 107 of 107 (cap: 100 rows or 65536 bytes); narrow start_year and "
         "end_year, e.g. 2023 and 2024: each market year is up to 54 rows, so three fit, and "
-        "the oldest weeks come first"
+        "the newest weeks are shown"
     )
 
 

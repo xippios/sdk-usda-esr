@@ -47,8 +47,12 @@ def test_the_package_exports_the_tasks() -> None:
     ]
 
 
-def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
-    """The list tasks' caps are checked in ``test_lists.py``, the weekly series' in
+def test_get_exports_has_a_paged_cap_that_keeps_the_newest_weeks() -> None:
+    """The family's bounds, a note of its own, and a paged cap that keeps the last rows: a
+    continuation is the cache's answer and costs upstream nothing (conventions §8; sdk-core
+    ADR-0061, decision 9), and the rows run oldest week first, so a cut answer shows the
+    newest weeks (https://github.com/xippios/sdk-usda-esr/issues/28). The list tasks' caps are
+    checked in ``test_lists.py``, the weekly series' in
     ``test_slices.py``."""
     assert set(tasks.MCP_CAPS) == {
         "get_exports",
@@ -58,7 +62,8 @@ def test_get_exports_has_a_note_only_cap_with_the_family_bounds() -> None:
         "list_countries",
     }
     cap = tasks.MCP_CAPS["get_exports"]
-    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "a note-only cap"
+    assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "the family's bounds"
+    assert (cap.paged, cap.keep) == (True, "last")
     assert cap.note is not None
     assert "country_code" in cap.note
 
@@ -99,6 +104,11 @@ def test_get_exports_for_one_country(replay_fixture: Callable[[str, str], respx.
     assert result.meta.endpoint == "ESRData_GetCountryData"
     assert result.meta.request == {"commodity_code": 104, "market_year": 2024, "country_code": 1220}
     assert result.meta.vintage == "2024-06-06", "the latest weekEndingDate, an ISO date"
+    assert result.meta.names == {
+        "country_code": {"1220": "CANADA"},
+        "unit_id": {"1": "Metric Tons"},
+    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30)"
+    assert result.meta.notes == []
     assert result.meta.published_at is None
     assert result.meta.total is None
     assert result.meta.retrieved_at.tzinfo is not None
@@ -114,6 +124,9 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     )
     assert len(result.data) == 498
     assert len({r.country_code for r in result.data}) == 11
+    assert set(result.meta.names) == {"country_code", "unit_id"}
+    assert result.meta.names["country_code"]["5880"] == "JAPAN", "every destination named"
+    assert len(result.meta.names["country_code"]) == 11
     assert result.meta.vintage == "2024-08-01", "cottonseed 2024 runs August 2023 to July 2024"
     assert result.meta.published_at is None
 
@@ -233,8 +246,9 @@ def test_since_is_refused_before_the_request(
     assert message.startswith(
         "since must be the meta.vintage text of an earlier get_release_dates call, an ISO "
         "date and time without a time zone such as '2026-10-22T08:30:42.67'; got "
-    )
+    ), "the package's own reader and words (sdk-core#473)"
     assert reason in message
+    assert message.endswith(". Nothing was sent."), "a refusal before the request (§5)"
     assert sent_urls(route) == [], "refused before any request"
 
 
@@ -297,7 +311,7 @@ def test_the_release_dates_check_a_commodity_code_before_the_request(
     """respx is active with no routes mounted, so any upstream call would fail loudly."""
     with pytest.raises(UnknownCode, match=r"1001 \(Flaxseed\)"):
         tasks.get_release_dates(commodity_code=999)
-    with pytest.raises(InvalidRequestError, match="must be an integer code"):
+    with pytest.raises(InvalidRequestError, match="is not an integer code"):
         tasks.get_release_dates(commodity_code="104")  # type: ignore[arg-type]
     assert not respx_mock.calls
 
@@ -379,7 +393,7 @@ def test_unknown_codes_and_future_years_are_refused_before_any_request(
         tasks.get_exports(WHEAT_WHITE, latest_market_year() + 1)
     with pytest.raises(InvalidRequestError, match="four-digit year"):
         tasks.get_exports(WHEAT_WHITE, 24)
-    with pytest.raises(InvalidRequestError, match="must be an integer code"):
+    with pytest.raises(InvalidRequestError, match="is not an integer code"):
         tasks.get_exports("104", 2024)  # type: ignore[arg-type]
     assert not respx_mock.calls
 
@@ -436,7 +450,10 @@ async def test_mcp_tool_call_end_to_end(replay_fixture: Callable[[str, str], res
         "unit_id": 1,
         "week_ending_date": "2023-06-01",
     }
-    assert all(isinstance(row["accumulated_exports"], float) for row in payload["data"])
+    assert all(isinstance(row["accumulated_exports"], int) for row in payload["data"]), (
+        "a Decimal without fractional digits is a JSON integer (sdk-core#478)"
+    )
+    assert payload["meta"]["names"]["country_code"] == {"1220": "CANADA"}
     assert payload["meta"]["endpoint"] == "ESRData_GetCountryData"
     assert payload["meta"]["request"] == {
         "commodity_code": 104,
@@ -451,21 +468,33 @@ async def test_mcp_tool_call_end_to_end(replay_fixture: Callable[[str, str], res
 
 
 @pytest.mark.anyio
-async def test_every_country_over_mcp_is_cut_with_a_note_naming_country_code(
+async def test_every_country_over_mcp_is_cut_to_its_newest_weeks_and_continues(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
-    """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's bounds, and
-    the cap's note names the tool's filter, ``country_code`` (conventions §8, sdk-core ADR-0038)."""
-    replay_fixture(ALL, "cottonseed_2024")
-    payload = await mcp_call(
-        server, "usda_esr_get_exports", {"commodity_code": 1201, "market_year": 2024}
-    )
-    shown = len(payload["data"])
-    assert shown == 200, "the row bound comes first; 200 rows fit 64 KB"
+    """Cottonseed 2024 for every country, 498 rows, over MCP: cut at the family's bounds to
+    the newest 200 rows, oldest first, with a note that names the tool's filter,
+    ``country_code`` (conventions §8, sdk-core ADR-0038), and the call for the next rows, older
+    ones. A continuation runs the task again, which the cache answers: one request in all
+    (https://github.com/xippios/sdk-usda-esr/issues/28; sdk-core ADR-0047, ADR-0061, decision
+    9). The last page names its rows alone."""
+    route = replay_fixture(ALL, "cottonseed_2024")
+    arguments: dict[str, int] = {"commodity_code": 1201, "market_year": 2024}
+    payload = await mcp_call(server, "usda_esr_get_exports", dict(arguments))
+    assert len(payload["data"]) == 200, "the row bound comes first; 200 rows fit 64 KB"
+    assert payload["data"][-1]["week_ending_date"] == "2024-08-01", "the newest week kept"
     assert payload["note"] == (
-        f"showing {shown} of 498 rows (cap: 200 rows or 65536 bytes); pass country_code, e.g. "
-        "1220 (Canada), for one destination's weeks, up to 54 rows"
+        "showing rows 299 to 498 of 498 (cap: 200 rows or 65536 bytes); pass country_code, "
+        "e.g. 1220 (Canada), for one destination's weeks, up to 54 rows; continue with "
+        "offset=200"
     )
+    older = await mcp_call(server, "usda_esr_get_exports", {**arguments, "offset": 200})
+    assert older["note"].startswith("showing rows 99 to 298 of 498 ")
+    assert older["note"].endswith("; continue with offset=400")
+    oldest = await mcp_call(server, "usda_esr_get_exports", {**arguments, "offset": 400})
+    assert len(oldest["data"]) == 98
+    assert oldest["data"][0]["week_ending_date"] == "2023-08-03"
+    assert oldest["note"] == "showing rows 1 to 98 of 498", "the last page: nothing after it"
+    assert route.call_count == 1, "each continuation is the cache's answer"
     assert "country_code" not in payload["meta"]["request"]
     assert payload["meta"]["vintage"] == "2024-08-01"
 
@@ -632,7 +661,7 @@ def test_quantities_are_json_numbers_over_http(
     rows = response.json()["data"]
     assert len(rows) == 54
     assert rows[-1]["accumulated_exports"] == 16217
-    assert isinstance(rows[-1]["accumulated_exports"], float)
+    assert isinstance(rows[-1]["accumulated_exports"], int), "a whole Decimal is an integer"
     assert rows[-1]["week_ending_date"] == "2024-06-06"
     rejected = http.get(
         "/usda-esr/get_exports", params={"commodity_code": 999, "market_year": 2024}

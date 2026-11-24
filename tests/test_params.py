@@ -193,10 +193,10 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
     assert error.source == "usda-esr"
     assert error.message == (
         "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-28). "
-        "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers unknown codes with an "
-        "empty result, so the package refuses them. If upstream added it since, the packaged "
-        "list is out of date."
-    ), "core 0.4.0's tail names no maintainer's command (sdk-core#111)"
+        "Nothing was sent. Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers "
+        "unknown codes with an empty result, so the package refuses them. If upstream added it "
+        "since, the packaged list is out of date."
+    ), "core's sentence that nothing was sent, after the first (sdk-core#481)"
 
 
 def test_a_stray_digit_leads_to_the_code_by_its_digits() -> None:
@@ -224,7 +224,10 @@ def test_swapped_digits_lead_to_the_country() -> None:
 
 
 def test_a_name_instead_of_a_code_is_refused_naming_codes_by_name() -> None:
-    with pytest.raises(InvalidRequestError, match="must be an integer code") as commodity:
+    """A text for an integer code is refused in core's wording (sdk-core ADR-0045,
+    decision 4, amended 2026-11-22), naming the codes whose upstream name holds it: the
+    package's own strategy, which reads digits, names none for a text."""
+    with pytest.raises(InvalidRequestError, match="is not an integer code") as commodity:
         validate_commodity_code("wheat")  # type: ignore[arg-type]
     assert not isinstance(commodity.value, UnknownCode)
     assert "By name: 101 (Wheat - HRW), 102 (Wheat - SRW), 103 (Wheat - HRS)." in str(
@@ -236,10 +239,35 @@ def test_a_name_instead_of_a_code_is_refused_naming_codes_by_name() -> None:
 
 @pytest.mark.parametrize("value", ["104", True, False, 104.0, None])
 def test_codes_that_are_not_integers_are_refused(value: object) -> None:
-    with pytest.raises(InvalidRequestError, match="commodity_code must be an integer code") as info:
+    """Core's wording: the value, the list's kind of code and the list with its fetch date,
+    that nothing was sent, and for a text of digits the integer to pass (sdk-core ADR-0045,
+    decision 4; https://github.com/xippios/sdk-usda-esr/issues/27)."""
+    with pytest.raises(InvalidRequestError) as info:
         validate_commodity_code(value)  # type: ignore[arg-type]
+    assert not isinstance(info.value, UnknownCode)
+    assert str(info.value).startswith(
+        f"{value!r} is not an integer code: commodity_code takes the integer codes of the "
+        "packaged commodities list (fetched 2026-10-28), such as 101 (Wheat - HRW). Nothing "
+        "was sent."
+    )
+    assert str(info.value).endswith(
+        " ESR answers unknown codes with an empty result, so the package refuses them."
+    ), "the reason closes it, as UnknownCode's"
     if value == "104":
-        assert "Pass it as the integer 104." in str(info.value)
+        assert " Pass it as the integer 104. ESR answers " in str(info.value)
+
+
+def test_a_text_for_a_country_code_names_the_integer_to_pass() -> None:
+    with pytest.raises(InvalidRequestError) as info:
+        validate_country_code("1220")  # type: ignore[arg-type]
+    assert str(info.value).startswith(
+        "'1220' is not an integer code: country_code takes the integer codes of the packaged "
+        "countries list (fetched 2026-10-28), such as "
+    )
+    assert str(info.value).endswith(
+        " Pass it as the integer 1220. ESR answers unknown codes with an empty result, so the "
+        "package refuses them."
+    )
 
 
 def test_the_latest_market_year_is_this_year_plus_two() -> None:
@@ -274,6 +302,7 @@ def test_a_future_market_year_is_refused_as_future() -> None:
         validate_market_year(2099)
     assert "answers a future one with an empty result" in info.value.message
     assert "four-digit" not in info.value.message
+    assert ", got 2099. Nothing was sent. ESR names" in info.value.message, "§5's sentence"
 
 
 def test_a_refusal_names_the_parameter_the_year_came_in() -> None:
@@ -301,5 +330,5 @@ def test_a_market_year_that_is_not_four_digits_is_refused_as_such(year: int) -> 
     one, and ``True`` and ``2024.0`` are not integers."""
     with pytest.raises(InvalidRequestError, match="must be a four-digit year") as info:
         validate_market_year(year)
-    assert f"got {year!r}" in info.value.message
+    assert f"got {year!r}. Nothing was sent. ESR names a market year" in info.value.message
     assert "future" not in info.value.message
