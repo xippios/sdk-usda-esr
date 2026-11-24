@@ -51,14 +51,14 @@ MEXICO = _code("countries", "countryCode", "countryDescription", "MEXICO")
 
 
 async def test_get_exports_for_one_country_live() -> None:
-    result = await tasks.get_exports_async(WHEAT_WHITE, 2024, CANADA)
+    result = await tasks.get_exports_async(WHEAT_WHITE, 2024, country_code=CANADA)
     assert result.data
     assert {(r.commodity_code, r.country_code) for r in result.data} == {(WHEAT_WHITE, CANADA)}
     assert {r.unit_id for r in result.data} == {UnitId.METRIC_TONS}
     weeks = [r.week_ending_date for r in result.data]
     assert date(2023, 5, 25) < min(weeks), "wheat's market year 2024 starts in June 2023"
     assert max(weeks) < date(2024, 6, 14), "and ends in May 2024; its last week ends in June"
-    assert result.meta.vintage == max(weeks).isoformat()
+    assert result.meta.vintage is None, "ESR states no release for the records answered"
     assert result.meta.published_at is None
     snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
@@ -66,14 +66,14 @@ async def test_get_exports_for_one_country_live() -> None:
 
 
 async def test_get_exports_soybeans_live() -> None:
-    result = await tasks.get_exports_async(SOYBEANS, 2024, MEXICO)
+    result = await tasks.get_exports_async(SOYBEANS, 2024, country_code=MEXICO)
     assert result.data
     assert {(r.commodity_code, r.country_code) for r in result.data} == {(SOYBEANS, MEXICO)}
     weeks = [r.week_ending_date for r in result.data]
     assert date(2023, 8, 25) < min(weeks), "soybeans' market year 2024 starts in September 2023"
     assert max(weeks) < date(2024, 9, 14), "and ends in August 2024"
     assert result.meta.endpoint == "ESRData_GetCountryData"
-    assert result.meta.vintage == max(weeks).isoformat()
+    assert result.meta.vintage is None
 
 
 async def test_get_release_dates_live() -> None:
@@ -86,7 +86,10 @@ async def test_get_release_dates_live() -> None:
     assert (wheat.market_year_start.month, wheat.market_year_end.month) == (6, 5)
     assert all(r.release_time_stamp.tzinfo is None for r in result.data)
     latest = max(result.data, key=lambda r: r.release_time_stamp)
-    assert result.meta.vintage == latest.release_time_stamp_text, "upstream's text"
+    assert result.meta.vintage is not None
+    assert datetime.fromisoformat(result.meta.vintage) == latest.release_time_stamp, (
+        "upstream's text of the newest release"
+    )
     assert result.meta.published_at == latest.release_time_stamp, "naive, as upstream gives it"
     assert result.meta.published_at_naive is True
 
@@ -100,7 +103,8 @@ async def test_get_release_dates_since_live() -> None:
     )
     assert result.meta.request == {"since": since}
     latest = max(result.data, key=lambda r: r.release_time_stamp)
-    assert result.meta.vintage == latest.release_time_stamp_text
+    assert result.meta.vintage is not None
+    assert datetime.fromisoformat(result.meta.vintage) == latest.release_time_stamp
 
 
 async def test_get_release_dates_of_one_commodity_live() -> None:
@@ -110,13 +114,15 @@ async def test_get_release_dates_of_one_commodity_live() -> None:
     assert year.market_year >= 2027, "wheat's 2027 began on 2026-06-01"
     assert year.market_year_start < year.market_year_end
     assert year.market_year == year.market_year_end.year, "named by its end year"
-    assert datetime.fromisoformat(year.release_time_stamp_text) == year.release_time_stamp
+    assert year.release_time_stamp.tzinfo is None, "one parsed field, no text beside it"
     assert result.meta.request == {"commodity_code": WHEAT_WHITE}
     assert result.meta.published_at_naive is True
 
 
 async def test_get_weekly_series_live() -> None:
-    result = await tasks.get_weekly_series_async(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = await tasks.get_weekly_series_async(
+        WHEAT_WHITE, CANADA, start_year=2023, end_year=2024
+    )
     weeks = [r.week_ending_date for r in result.data]
     assert weeks
     assert weeks == sorted(weeks), "oldest first"
@@ -132,5 +138,8 @@ async def test_get_weekly_series_live() -> None:
         "start_year": 2023,
         "end_year": 2024,
     }
-    assert result.meta.vintage == weeks[-1].isoformat()
+    assert result.meta.vintage is None
+    (note,) = result.meta.notes
+    assert note.startswith("Market years in the order of the rows: 2023 with "), "both years"
+    assert ", 2024 with " in note
     assert result.meta.published_at is None
