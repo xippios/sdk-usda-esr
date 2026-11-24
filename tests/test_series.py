@@ -40,6 +40,7 @@ from xippios.usda.fas import NoDataForYear
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
+from xippios.usda.esr.api.get_data_release_info import ReleaseList
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, DataReleaseInfo
 from xippios.usda.esr.params import latest_market_year
@@ -465,8 +466,11 @@ def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
     )
 
-    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
-        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
+    records = [r for r in recorded if r.commodity_code != WHEAT_WHITE]
+    printed = {r["commodityCode"]: r["releaseTimeStamp"] for r in body}
+
+    async def without_wheat_white() -> Answer[ReleaseList]:
+        return Answer(ReleaseList(records, printed), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError) as info:

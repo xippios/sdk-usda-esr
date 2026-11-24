@@ -36,6 +36,7 @@ from xippios.usda.esr import (
 )
 from xippios.usda.esr import mcp as esr_mcp
 from xippios.usda.esr._client import BASE_URL, config
+from xippios.usda.esr.api.get_data_release_info import ReleaseList
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import DataReleaseInfo
@@ -327,9 +328,9 @@ def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     the test, not an answer from ESR (conventions §10)."""
     calls: list[int] = []
 
-    async def empty() -> Answer[list[DataReleaseInfo]]:
+    async def empty() -> Answer[ReleaseList]:
         calls.append(1)
-        return Answer([], datetime.now(UTC))
+        return Answer(ReleaseList([], {}), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", empty)
     return calls
@@ -344,6 +345,42 @@ def test_get_release_dates_since_over_an_empty_answer(monkeypatch: pytest.Monkey
     assert result.meta.published_at_naive is False
     assert result.meta.request == {"since": RELEASED}
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("printed", "time"),
+    [
+        ("2026-10-29T08:30:42.60", datetime(2026, 10, 29, 8, 30, 42, 600000)),
+        ("2026-10-29T08:30:40.00", datetime(2026, 10, 29, 8, 30, 40)),
+    ],
+    ids=["fraction_ending_in_zero", "whole_second_with_a_fraction"],
+)
+def test_the_vintage_is_upstreams_text_as_sent_and_comes_back_through_since(
+    respx_mock: respx.MockRouter, printed: str, time: datetime
+) -> None:
+    """``meta.vintage`` is the newest record's ``releaseTimeStamp`` exactly as upstream sent
+    it, which printing the parsed time again would not give, and handed back as ``since`` it
+    keeps nothing released at that time and the record released after an earlier one
+    (https://github.com/xippios/sdk-usda-esr/issues/60, part 3;
+    https://github.com/xippios/sdk-usda-esr/issues/69).
+    NOT RECORDED: the recorded release list with wheat white's ``releaseTimeStamp`` changed in
+    memory to a later time, in a form upstream was not seen to send (conventions §10, kind 4).
+    """
+    body = json.loads(load_fixture(fixture_path(FIXTURES, RELEASES, "all")).response.body)
+    for record in body:
+        if record["commodityCode"] == WHEAT_WHITE:
+            record["releaseTimeStamp"] = printed
+    route = respx_mock.get(RELEASE_DATES).mock(return_value=httpx.Response(200, json=body))
+    result = tasks.get_release_dates()
+    assert result.meta.vintage == printed, "upstream's text, not the parsed time printed again"
+    assert result.meta.published_at == time
+    assert not hasattr(result.data[0], "release_time_stamp_text"), "no text on the record"
+    newer = tasks.get_release_dates(since=result.meta.vintage)
+    assert newer.data == [], "nothing is newer than the newest release"
+    assert newer.meta.vintage == printed
+    (wheat,) = tasks.get_release_dates(since=RELEASED).data
+    assert (wheat.commodity_code, wheat.release_time_stamp) == (WHEAT_WHITE, time)
+    assert route.call_count == 1, "the cache answers the second and the third call"
 
 
 @pytest.mark.parametrize(
@@ -379,6 +416,13 @@ def _recorded_releases() -> list[DataReleaseInfo]:
     return parse(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
     )
+
+
+def _without_wheat_white() -> ReleaseList:
+    """The recorded release list without wheat white's record, as the wrapper hands it on, in
+    memory (a function input, not a fixture file)."""
+    records = [r for r in _recorded_releases() if r.commodity_code != WHEAT_WHITE]
+    return ReleaseList(records, {r.commodity_code: RELEASED for r in records})
 
 
 def test_get_release_dates_of_one_commodity(
@@ -454,10 +498,9 @@ def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyP
     """The recorded records without wheat white, handed on by a replaced wrapper: wheat white
     answers the empty list, every other commodity its record. The records are an input of the
     test, not an answer from ESR (conventions §10)."""
-    recorded = _recorded_releases()
 
-    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
-        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
+    async def without_wheat_white() -> Answer[ReleaseList]:
+        return Answer(_without_wheat_white(), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     assert tasks.get_release_dates(commodity_code=WHEAT_WHITE).data == []
@@ -908,10 +951,9 @@ def test_get_exports_of_a_commodity_the_release_list_lacks(
     """The recorded release list without wheat white, in memory (a function input, not a
     fixture file): a market year from the calendar year on cannot be told released, so it is
     refused, as the weekly series refuses its range, before any exports request."""
-    recorded = _recorded_releases()
 
-    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
-        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
+    async def without_wheat_white() -> Answer[ReleaseList]:
+        return Answer(_without_wheat_white(), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError) as info:

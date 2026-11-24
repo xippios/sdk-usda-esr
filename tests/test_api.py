@@ -103,8 +103,12 @@ async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.R
 
 async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_data_release_info", "all")
-    releases = (await api.get_data_release_info()).payload
+    answer = await api.get_data_release_info()
+    releases = answer.payload.records
     assert len(releases) == 44
+    assert answer.payload.printed == dict.fromkeys(
+        (r.commodity_code for r in releases), "2026-10-22T08:30:42.67"
+    ), "each releaseTimeStamp as upstream sent it, by its commodity, beside no record"
     wheat = next(r for r in releases if r.commodity_code == 104)
     # The record equals one built from its values: no text of the time stands beside it
     # (https://github.com/xippios/sdk-usda-esr/issues/69).
@@ -135,7 +139,7 @@ async def test_the_release_list_names_every_commodity(
 ) -> None:
     replay_fixture("get_data_release_info", "all")
     replay_fixture("get_commodities", "all")
-    released = {r.commodity_code for r in (await api.get_data_release_info()).payload}
+    released = {r.commodity_code for r in (await api.get_data_release_info()).payload.records}
     assert released == {c.commodity_code for c in (await api.get_commodities()).payload}
 
 
