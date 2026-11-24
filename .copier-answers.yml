@@ -1,22 +1,15 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.4.0
+_commit: v0.4.1-54-g35864c4
 _src_path: https://github.com/xippios/sdk-template.git
-api_base_url: https://api.fas.usda.gov
 api_key_env: DATA_GOV_API_KEY
-api_key_location: header
-api_key_name: X-Api-Key
-core_git_ref: ''
-core_version: 0.4.0
-gateway: api.data.gov
+core_git_ref: d2642353117ad27b3073e767a5a9e9a455d50174
+core_version: 0.5.0
 has_files: false
 has_reference_data: true
-human: jdidaskalu
 import_path: usda.esr
 live_secrets: '[]'
-rate_limit_burst: 1
-rate_limit_per_minute: 60
-rate_limit_provenance: self-imposed
-source_dependencies: '[]'
+shape: source
+source_dependencies: '[{name: usda-fas, minor: "0.1", key_env: DATA_GOV_API_KEY}]'
 source_name: USDA FAS Export Sales Reporting
 source_slug: usda-esr
 tenant_param: ''

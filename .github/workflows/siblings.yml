@@ -1,14 +1,3 @@
-# Sibling proof for sdk-core ADR-0006: this wheel installs beside every sibling under the
-# same provider namespace that is on PyPI, as portions of the namespaces between xippios and
-# the package (.github/scripts/check-siblings.sh says how it finds them), and beside the
-# source packages it depends on, as pyproject.toml declares them (sdk-core ADR-0021).
-# sdk-template renders this workflow and the script where the import path nests or the
-# source declares a source package it depends on, and copier update keeps both as the
-# template's. It runs next to ci.yml, which is core's file and which publish.yml calls for
-# a release, so a job there would tie this package's releases to its siblings: `siblings`
-# is a visible check the org ruleset does not require.
-# Hardened as every workflow of the family (conventions §13): the actions pinned to the
-# commits ci.yml pins, the checkout keeps no credentials, the token reads only.
 name: Siblings
 
 on:
@@ -22,6 +11,7 @@ permissions:
 jobs:
   siblings:
     name: siblings
+    if: vars.WORKFLOW_SIBLINGS != 'off'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +22,4 @@ jobs:
           python-version: "3.12"
       - run: .github/scripts/check-siblings.sh
         env:
-          # The job's read-only token, for the listing of the organisation's repositories:
-          # GitHub limits an unauthenticated runner's API calls.
           GITHUB_TOKEN: ${{ github.token }}

@@ -1,18 +1,19 @@
 """FastAPI router for USDA FAS Export Sales Reporting.
 
 One route per task in ``tasks.__all__``, at ``/usda-esr/<task>``, but those
-``tasks.BULK_TASKS`` names, which core skips: the router is passed ``tasks.__all__`` whole
-(sdk-core ADR-0040). A task whose parameters are all scalars is a ``GET`` with query parameters; a
-task with any non-scalar parameter is a ``POST`` whose JSON body is keyed by parameter
-name (sdk-core ADR-0007). No logic lives here (sdk-core ADR-0001). The consumer mounts it; it is
-never served standalone.
+``tasks.BULK_TASKS`` names: the router is passed ``tool_functions(tasks)``, the list that
+``mcp.py`` serves (sdk-core ADR-0040). A task whose parameters are all scalars is a ``GET``
+with query parameters; a task with any non-scalar parameter is a ``POST`` whose JSON body is
+keyed by parameter name (sdk-core ADR-0007). No logic lives here (sdk-core ADR-0001). The
+consumer mounts it; it is never served standalone.
 """
 
+from xippios.core import tool_functions
 from xippios.core.http import router_from_tasks
 
 from xippios.usda.esr import tasks
 from xippios.usda.esr._client import SOURCE
 
-router = router_from_tasks(SOURCE, [getattr(tasks, name) for name in tasks.__all__])
+router = router_from_tasks(SOURCE, tool_functions(tasks))
 
 __all__ = ["router"]

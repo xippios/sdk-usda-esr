@@ -1,0 +1,12 @@
+name: ADR index
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  adr-index:
+    uses: xippios/.github/.github/workflows/adr-index.yml@main

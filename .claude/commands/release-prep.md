@@ -16,7 +16,10 @@ in a pull request of its own as well, never in a release's:
 `uvx --from 'copier>=9.19' copier update --defaults --vcs-ref=<tag>`, with
 `-d core_version=X.Y.Z` where it carries a new core minor, its conflicts resolved and the
 Hand-apply entries of sdk-template's `CHANGELOG.md` since the tag `.copier-answers.yml`
-names ported by hand (conventions §15). The release meets sdk-core's definition of done,
+names ported by hand (conventions §15). That pull request's fragment names the core
+bound, the template's tag and the conventions' version as they stand after the update,
+changed or not, and is `breaking` where the update brings a core minor and `changed` where
+it brings none (conventions §15 item 9). The release meets sdk-core's definition of done,
 https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md, and its review
 checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md.
 
@@ -32,40 +35,48 @@ checklist, https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.m
    core bound, in a pull request of its own before the release's: it changes
    `.copier-answers.yml`, which a release does not. `publish.yml` refuses to tag a pinned
    release as well.
-2. **Reference data.** Where the source packages lists, run `/refresh-reference-data`
-   before the release; the release's pull request fetches nothing. The refresh is a pull
-   request of its own, before the release's, only when a record changed or `fetched`
-   goes from a bare date to the full time; otherwise it gets none, and the release's pull
-   request cites the run, "unchanged" meaning the records, not the files (conventions
-   §12).
+   The source packages this one depends on, `xippios-usda-fas`, are
+   released on PyPI before this release: each tags first, its bound in `pyproject.toml`
+   names that published version, and no `[tool.uv.sources]` entry pins it, which
+   `publish.yml` refuses too (sdk-core ADR-0021 decision 5, conventions §12).
+2. **Reference data.** Run `/refresh-reference-data` before the release, whose pull
+   request fetches nothing. The refresh is a pull request of its own only where a record
+   changed or `fetched` went from a bare date to the full time, and the release's pull
+   request cites the run otherwise (conventions §12).
 3. **Live evidence.** The release's pull request cites a green run of `live.yml` on the
-   commit of `main` it starts from: the nightly run, or, where none ran after the last
-   pull request before the release, one dispatch of `live.yml` on `main`. An adoption
-   that landed late counts as such a pull request, since it changes what the live tests
-   run through, and a task added since the last green run would otherwise reach its tag
-   without a live test. Before a dispatch, where the live tests can run here
+   commit of `main` it starts from: the nightly run, or one dispatch of `live.yml` on
+   `main`. A run on an earlier commit of `main` is no such run, whatever the pull requests
+   after it changed, so a release whose base moved after its run waits for the next
+   nightly or one more dispatch. Before a dispatch, where the live tests can run here
    (`XIPPIOS_LIVE_TESTS=1`), run them first,
    `uv run pytest -m live --tb=short --assert=plain`, so that a failure shows before the
-   dispatch spends a run.
-4. SemVer check (conventions §12): pre-1.0, only a breaking change bumps the minor, and
-   added tasks or parameters make a patch. An upstream API change that changed our public
-   surface is a breaking change, and so is an adoption of a core minor, whatever else the
-   release brings: it moves the core bound to the new minor, so the release no longer
-   installs beside a package still bound to the old one, and the adoption's fragment names
-   that minor. Read the fragments under `changelog/` and what `## [Unreleased]` holds, and
-   confirm that the version matches them; say so in the pull request if it does not.
-5. `pyproject.toml`: set `version`, the version `publish.yml` tags, then `uv lock`. A
-   first release keeps the scaffold's `0.1.0`: its CHANGELOG section alone makes it a
-   release.
-6. `CHANGELOG.md`: write `## [<version>] - <today>` in place of `## [Unreleased]`, or
-   above the last release where there is none, and assemble its section from the
-   fragments under `changelog/` and what `## [Unreleased]` held, as `changelog/README.md`
-   lays it out. The repository keeps no script for it: copy each fragment's bullet into
-   the section by hand, then delete the fragments it took; `changelog/README.md` stays.
+   dispatch spends a run. After the live tests, xippios-core's testing plugin prints the
+   requests they sent in one line, `requests sent by the live run: <n>`, in the log of the
+   pytest step of `live.yml` as in a run here. The release cites that count of the run it
+   names, and counts as its live calls the requests of every run it dispatched or ran
+   here, their lines added up.
+4. **SemVer**, by conventions §12: an adoption of a core minor is a breaking
+   change, whatever else the release brings, and its fragment is `breaking`. Read the
+   fragments under `changelog/` and what `## [Unreleased]` holds, which
+   `python3 -I scripts/changelog_assemble.py --notes` prints as the section will hold
+   them, writing nothing, and confirm that the version matches them; say so in the pull
+   request if it does not.
+5. **The version.** `version` in `pyproject.toml` is the version `publish.yml` tags, and
+   `uv.lock` holds it on this package's own entry. Step 6's script sets both and runs no
+   `uv lock`, so the release builds nothing and reaches no index. A first release keeps
+   the scaffold's `0.1.0`: its CHANGELOG section alone makes it a release.
+6. **The section.** Run
+   `python3 -I scripts/release_prepare.py <version> --date <YYYY-MM-DD>`, the date
+   today's in UTC. It writes `## [<version>] - <date>` into `CHANGELOG.md` in place of
+   `## [Unreleased]`, or above the last release where there is none, assembles its section
+   from the fragments under `changelog/` and what `## [Unreleased]` held, as
+   `changelog/README.md` lays it out, deletes the fragments it took, the README kept, and
+   sets the version of step 5. The release rewords and regroups no entry: a wrong one
+   is corrected in its fragment, by a pull request before the release's (conventions §12).
    `publish.yml` tags only a version whose section has this heading, and the section
    becomes the tag's message. The date is the tag's, the day the pull request reaches
-   `main`: if that slips to a later day, re-date the heading in a commit of its own
-   before it.
+   `main`: if that slips to a later day, the same command with that day's `--date`
+   re-dates the heading alone, in a commit of its own before it.
 7. README: the status table reflects what this version covers; install snippets are
    current.
 8. Run the checks,
