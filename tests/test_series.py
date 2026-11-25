@@ -467,7 +467,7 @@ def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
     )
 
     records = [r for r in recorded if r.commodity_code != WHEAT_WHITE]
-    printed = {r["commodityCode"]: r["releaseTimeStamp"] for r in body}
+    printed = [r["releaseTimeStamp"] for r in body if r["commodityCode"] != WHEAT_WHITE]
 
     async def without_wheat_white() -> Answer[ReleaseList]:
         return Answer(ReleaseList(records, printed), datetime.now(UTC))

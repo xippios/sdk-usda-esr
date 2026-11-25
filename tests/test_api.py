@@ -106,9 +106,9 @@ async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.
     answer = await api.get_data_release_info()
     releases = answer.payload.records
     assert len(releases) == 44
-    assert answer.payload.printed == dict.fromkeys(
-        (r.commodity_code for r in releases), "2026-10-22T08:30:42.67"
-    ), "each releaseTimeStamp as upstream sent it, by its commodity, beside no record"
+    assert answer.payload.printed == ["2026-10-22T08:30:42.67"] * 44, (
+        "each releaseTimeStamp as upstream sent it, in the records' order, beside no record"
+    )
     wheat = next(r for r in releases if r.commodity_code == 104)
     # The record equals one built from its values: no text of the time stands beside it
     # (https://github.com/xippios/sdk-usda-esr/issues/69).

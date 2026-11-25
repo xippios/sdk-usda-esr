@@ -268,7 +268,7 @@ def test_no_release_has_no_newest_release() -> None:
     """No computed week stands in for a vintage any more: ``_vintage`` left with it
     (https://github.com/xippios/sdk-usda-esr/issues/67)."""
     assert not hasattr(tasks, "_vintage")
-    assert tasks._newest_release([]) is None, "no release: vintage and published_at None"
+    assert tasks._newest([]) is None, "no release: vintage and published_at None"
 
 
 def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) -> None:
@@ -330,7 +330,7 @@ def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
     async def empty() -> Answer[ReleaseList]:
         calls.append(1)
-        return Answer(ReleaseList([], {}), datetime.now(UTC))
+        return Answer(ReleaseList([], []), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", empty)
     return calls
@@ -383,6 +383,34 @@ def test_the_vintage_is_upstreams_text_as_sent_and_comes_back_through_since(
     assert route.call_count == 1, "the cache answers the second and the third call"
 
 
+def test_a_commodity_sent_twice_gives_the_vintage_of_its_newest_release(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """A commodity whose record upstream sends twice, the second copy released later: the
+    vintage is the newest record's text as sent, the second copy's, and handed back as
+    ``since`` it keeps nothing, where the first copy's text would keep the newer record on
+    every call.
+    NOT RECORDED: the recorded release list with a second record of wheat white appended in
+    memory, released later and printed with a fraction ending in zero, a form upstream was not
+    seen to send (conventions §10, kind 4).
+    """
+    body = json.loads(load_fixture(fixture_path(FIXTURES, RELEASES, "all")).response.body)
+    (first,) = [record for record in body if record["commodityCode"] == WHEAT_WHITE]
+    body.append({**first, "releaseTimeStamp": "2026-10-29T08:30:42.60"})
+    route = respx_mock.get(RELEASE_DATES).mock(return_value=httpx.Response(200, json=body))
+    result = tasks.get_release_dates()
+    assert len(result.data) == 45, "both copies, unchanged, in upstream's order"
+    assert result.meta.vintage == "2026-10-29T08:30:42.60", "the newer copy's text as sent"
+    assert result.meta.published_at == datetime(2026, 10, 29, 8, 30, 42, 600000)
+    assert tasks.get_release_dates(since=result.meta.vintage).data == []
+    (newer,) = tasks.get_release_dates(since=RELEASED).data
+    assert (newer.commodity_code, newer.release_time_stamp) == (
+        WHEAT_WHITE,
+        result.meta.published_at,
+    )
+    assert route.call_count == 1
+
+
 @pytest.mark.parametrize(
     ("since", "reason"),
     [
@@ -422,7 +450,7 @@ def _without_wheat_white() -> ReleaseList:
     """The recorded release list without wheat white's record, as the wrapper hands it on, in
     memory (a function input, not a fixture file)."""
     records = [r for r in _recorded_releases() if r.commodity_code != WHEAT_WHITE]
-    return ReleaseList(records, {r.commodity_code: RELEASED for r in records})
+    return ReleaseList(records, [RELEASED] * len(records))
 
 
 def test_get_release_dates_of_one_commodity(
