@@ -1,8 +1,9 @@
 """Refresh the upstream documentation snapshot in ``docs/upstream/`` (``/refresh-upstream``).
 
 The script declares the snapshot, a ``Snapshot`` of ``xippios.core.refresh``, and runs it on
-core's frame (conventions §3): the fetch through the package's client, the attribution check,
-``FETCHED.md``, the write and ``--check`` are the frame's, the same in every source. The FAS
+core's frame (conventions §3): the fetch through core's client, which the frame builds without
+credentials and names after the package, the attribution check, ``FETCHED.md``, the write and
+``--check`` are the frame's, the same in every source. The FAS
 Open Data Services portal (https://apps.fas.usda.gov/opendatawebV2/) documents ESR, GATS and
 PSD alike, and what the three FAS sources read of it is the kit of ``xippios.usda.fas``,
 ``Portal``: the portal's pages, the cut of its two Swagger documents to one service's paths,

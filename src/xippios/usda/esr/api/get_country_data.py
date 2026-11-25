@@ -11,8 +11,8 @@ Recorded answers (2026-10-25): wheat white to Canada, market year 2024, is 54 we
 records (``wheat_white_canada_2024``); an unknown commodity or country code is HTTP 200
 with ``[]`` (``unknown_commodity``, 999; ``unknown_country``, 9999), and so is a market
 year in the future (``year_2099``); market year 1900 is HTTP 404 with an empty
-``text/plain`` body (``year_1900``), which ``_client.classify`` maps to core's
-``NoDataForYear``; a path value that is not an integer is HTTP 400
+``text/plain`` body (``year_1900``), which ``_client.classify`` maps to the shared
+package's ``NoDataForYear``; a path value that is not an integer is HTTP 400
 (``not_an_integer``), never sent here since every parameter is an ``int``. Recorded
 2026-10-28: market year 2023 of the same pair, 53 weekly records from 2022-06-02 to
 2023-06-01, 14,829 bytes of JSON (``wheat_white_canada_2023``); its last week is the first

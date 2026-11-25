@@ -194,8 +194,8 @@ ADR-0038), as ``get_exports``' names ``country_code``: one destination's market 
 rows (wheat white to Canada: 53 in 2023, 54 in 2024), so three market years fit 200 rows and the
 ceiling of ``SERIES``, ten, can reach some 540; the cut keeps the last rows, the newest weeks
 (sdk-core ADR-0047; https://github.com/xippios/sdk-usda-esr/issues/28), and narrowing the range
-shows the rest. It is not paged: past the cache's lifetime a second run would send its yearly
-requests again, up to 11 with the release list. No ceiling of the process's own and no
+shows the rest. It is not paged: with the cache a continuation would cost upstream nothing, so
+the rule allows a paged cap, and nothing asks for one. No ceiling of the process's own and no
 option: the ceiling is the task's, the same in Python, over HTTP and over MCP.
 
 ``list_countries`` is a reference list an agent needs whole to find codes (sdk-core ADR-0038;
@@ -249,8 +249,8 @@ def _absent(
 ) -> NoDataForYear:
     """ESR's empty 404 again, naming what was asked for, in the source's name.
 
-    Only ``NoDataForYear``, core's class that the gateway returns on an exports path, means
-    "no data for this market year"; any other ``NotFoundError`` (the gateway's
+    Only ``NoDataForYear``, the shared package's class that the gateway returns on an exports
+    path, means "no data for this market year"; any other ``NotFoundError`` (the gateway's
     ``NOT_FOUND``) is not caught and propagates as is.
     """
     return NoDataForYear(

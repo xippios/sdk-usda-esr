@@ -15,7 +15,7 @@ destinations, 319,532 bytes, and wheat white 2024 1,012 records for 22 destinati
 bytes, ``9990`` in all 54 weeks (their probes are noted in ``docs/upstream/OBSERVED.md``).
 Rye, market year 2024, answers HTTP 200 with ``[]`` (``rye_2024``). Market year 1900
 answers HTTP 404 with an empty ``text/plain`` body, as the one-country form does
-(``year_1900``), which ``_client.classify`` maps to core's ``NoDataForYear``.
+(``year_1900``), which ``_client.classify`` maps to the shared package's ``NoDataForYear``.
 """
 
 from xippios.core import Answer
