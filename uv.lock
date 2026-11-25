@@ -1463,7 +1463,7 @@ requires-dist = [
     { name = "xippios-core", extras = ["http"], marker = "extra == 'http'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
     { name = "xippios-core", extras = ["mcp"], marker = "extra == 'mcp'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
     { name = "xippios-core", extras = ["testing"], marker = "extra == 'testing'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
-    { name = "xippios-usda-fas", git = "https://github.com/xippios/sdk-usda-fas.git?rev=cb5106a47a9cc282004214df602d7ea4e1452477" },
+    { name = "xippios-usda-fas", git = "https://github.com/xippios/sdk-usda-fas.git?rev=fdb28c2a747b0597a8bcd0fa0d43e629a33b5e57" },
 ]
 provides-extras = ["mcp", "http", "testing"]
 
@@ -1481,7 +1481,7 @@ dev = [
 [[package]]
 name = "xippios-usda-fas"
 version = "0.1.0"
-source = { git = "https://github.com/xippios/sdk-usda-fas.git?rev=cb5106a47a9cc282004214df602d7ea4e1452477#cb5106a47a9cc282004214df602d7ea4e1452477" }
+source = { git = "https://github.com/xippios/sdk-usda-fas.git?rev=fdb28c2a747b0597a8bcd0fa0d43e629a33b5e57#fdb28c2a747b0597a8bcd0fa0d43e629a33b5e57" }
 dependencies = [
     { name = "xippios-core" },
 ]

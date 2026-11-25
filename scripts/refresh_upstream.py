@@ -3,11 +3,11 @@
 The script declares the snapshot, a ``Snapshot`` of ``xippios.core.refresh``, and runs it on
 core's frame (conventions §3): the fetch through core's client, which the frame builds without
 credentials and names after the package, the attribution check, ``FETCHED.md``, the write and
-``--check`` are the frame's, the same in every source. The FAS
-Open Data Services portal (https://apps.fas.usda.gov/opendatawebV2/) documents ESR, GATS and
-PSD alike, and what the three FAS sources read of it is the kit of ``xippios.usda.fas``,
-``Portal``: the portal's pages, the cut of its two Swagger documents to one service's paths,
-the backend document that the classic Swagger UI names, the comparison of the two, and the
+``--check`` are the frame's, the same in every source. The FAS Open Data Services portal
+(https://apps.fas.usda.gov/opendatawebV2/) documents ESR, GATS and PSD alike, and what the three
+FAS sources read of it is the kit of the shared package, ``xippios.usda.fas.portal``'s
+``Portal``: the portal's pages, the cut of its two Swagger documents to one service's paths, the
+backend document that the classic Swagger UI names, the comparison of the two, and the
 paragraphs that say how. This script keeps what is ESR's own: the prefix ``/api/esr/``, the
 program page, the two ESR query URLs, their notes and the paragraph on them. It writes:
 
@@ -24,7 +24,7 @@ No key is needed or read. Run from the repository root::
 """
 
 from xippios.core.refresh import Page, Row, Snapshot, run
-from xippios.usda.fas import Portal
+from xippios.usda.fas.portal import Portal
 
 PORTAL = Portal("/api/esr/")
 """The portal as ESR's snapshot reads it: its pages first, and its hooks."""
