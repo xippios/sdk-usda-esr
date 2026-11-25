@@ -11,7 +11,14 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-from xippios.core import Answer, InvalidRequestError, NotFoundError, UnknownCode, parse
+from xippios.core import (
+    Answer,
+    InvalidRequestError,
+    NotFoundError,
+    PackagedList,
+    UnknownCode,
+    parse,
+)
 from xippios.core.testing import (
     fixture_path,
     load_fixture,
@@ -26,11 +33,11 @@ from xippios.usda.esr import (
     tasks,
 )
 from xippios.usda.esr import mcp as esr_mcp
-from xippios.usda.esr._client import BASE_URL
+from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import DataReleaseInfo
-from xippios.usda.esr.params import latest_market_year
+from xippios.usda.esr.params import PACKAGE, latest_market_year
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -65,6 +72,34 @@ def test_get_exports_has_a_paged_cap_that_keeps_the_newest_weeks() -> None:
     assert (cap.paged, cap.keep) == (True, "last")
     assert cap.note is not None
     assert "country_code" in cap.note
+
+
+WEEKS_IN_A_MARKET_YEAR = 55
+"""The most week endings that fall within a market year and the six days on either side of it,
+where a week that straddles two market years comes in each: 366 + 12 days hold at most 55
+Thursdays. The recordings hold 53 and 54."""
+
+
+def test_the_paged_exports_answer_stays_under_the_cache_bound() -> None:
+    """A paged continuation is the cache's answer only while the answer stays under the
+    client's ``cache_max_bytes`` (conventions §8; https://github.com/xippios/sdk-core/issues/608).
+    One call of ``get_exports`` fetches one market year of every destination: at most every
+    country of the packaged list, 211, by 55 week endings, each row at most as wide as the widest
+    recorded compact row, 303 bytes, so some 3.5 MB, under the 8 MiB bound. The widest answer
+    measured, wheat HRW 2024, was 319,532 bytes (``docs/upstream/OBSERVED.md``)."""
+    countries = len(PackagedList.load(PACKAGE, "countries").records)
+    widest = max(
+        len(json.dumps(row, separators=(",", ":"))) + 1
+        for wrapper in (COUNTRY, ALL)
+        for case in (
+            ("wheat_white_canada_2023", "wheat_white_canada_2024")
+            if wrapper == COUNTRY
+            else ("cottonseed_2024", "wheat_white_2027")
+        )
+        for row in json.loads(load_fixture(fixture_path(FIXTURES, wrapper, case)).response.body)
+    )
+    assert (countries, widest) == (211, 303), "the measurement as the docstring states it"
+    assert countries * WEEKS_IN_A_MARKET_YEAR * widest < config.cache_max_bytes == 8 * 2**20
 
 
 def test_get_release_dates_has_a_note_only_cap_naming_since() -> None:
