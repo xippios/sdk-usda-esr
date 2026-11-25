@@ -52,8 +52,7 @@ def test_get_exports_has_a_paged_cap_that_keeps_the_newest_weeks() -> None:
     continuation is the cache's answer and costs upstream nothing (conventions §8; sdk-core
     ADR-0061, decision 9), and the rows run oldest week first, so a cut answer shows the
     newest weeks (https://github.com/xippios/sdk-usda-esr/issues/28). The list tasks' caps are
-    checked in ``test_lists.py``, the weekly series' in
-    ``test_slices.py``."""
+    checked in ``test_lists.py``, the weekly series' in ``test_series.py``."""
     assert set(tasks.MCP_CAPS) == {
         "get_exports",
         "get_release_dates",

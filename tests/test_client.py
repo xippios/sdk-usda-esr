@@ -1,4 +1,4 @@
-"""The client's wiring and error mapping, and core's api.data.gov gateway wired to it.
+"""The client's wiring and error mapping, and the shared package's api.data.gov gateway on it.
 
 Recorded answers come from ``tests/fixtures`` (2026-10-25; the every-country form's 1900,
 2026-10-28). Cases they do not cover say "NOT RECORDED", of three kinds conventions §10 name:
@@ -6,8 +6,9 @@ api.data.gov's documented 429 (``OVER_RATE_LIMIT``, in the shape sdk-usda-psd re
 2026-10-23, since recording it would spend the key's shared hourly quota); ESR's recorded empty
 404 at its own URL with its content type changed; and a 400 in no shape upstream sends. The
 gateway and its quota policy are the shared package's (``xippios.usda.fas``'s ``Gateway``,
-sdk-core ADR-0032, sdk-core ADR-0037), whose tests hold its answers, the key's codes and core's
-retries of a 429; this module checks that the package installs them, that the policy reads a 429
+sdk-core ADR-0032, sdk-core ADR-0037), whose tests hold its answers, the key's codes, the
+policy's headers and window, a 429 classified on its own and core's retries of a 429; this
+module checks that the package installs them, that the policy reads a 429
 and the recorded quota headers through the package's client, and that ``classify`` keeps ESR's
 own answers after the gateway's.
 """
@@ -88,10 +89,9 @@ quota headers at zero (conventions §10, kind 2)."""
 
 
 def test_the_client_is_wired_for_the_gateway() -> None:
-    """One request per second, esr's classify, and the shared package's gateway: its key auth
-    and its one quota policy per process on api.data.gov's ``x-ratelimit-*`` headers, which
-    count the rolling hour, not a pace; one hour is the fallback wait (sdk-core ADR-0032,
-    sdk-core ADR-0037)."""
+    """One request per second, esr's classify, and the shared package's gateway installed: its
+    key auth and its one quota policy per process for the shared key, whose headers and window
+    the shared package's tests hold (sdk-core ADR-0032, sdk-core ADR-0037)."""
     assert (RATE_LIMIT.per_minute, RATE_LIMIT.capacity) == (60, 1)
     assert config.rate_limit is RATE_LIMIT
     assert config.classify is classify
@@ -102,11 +102,6 @@ def test_the_client_is_wired_for_the_gateway() -> None:
     assert gateway.policy is Gateway.policy, "one policy per process for the shared key"
     assert config.observe == Gateway.policy.observe, "installed: every answer reaches it"
     assert config.before_request == Gateway.policy.before_request
-    assert (Gateway.policy.limit_header, Gateway.policy.remaining_header) == (
-        "x-ratelimit-limit",
-        "x-ratelimit-remaining",
-    )
-    assert (Gateway.policy.window, Gateway.policy.source) == (3600.0, "api.data.gov")
     assert auth is gateway.auth
     assert (auth.location, auth.name) == ("header", "X-Api-Key")
     assert auth.env_var == API_KEY_ENV == "DATA_GOV_API_KEY"  # pragma: allowlist secret
@@ -212,7 +207,7 @@ async def test_market_year_1900_answers_404_with_an_empty_body(
     assert (response.status_code, response.content) == (404, b"")
     assert response.headers["content-type"].startswith("text/plain")
     error = classify(response)
-    assert isinstance(error, NoDataForYear), "core's class, through the gateway's data_path"
+    assert isinstance(error, NoDataForYear), "the shared package's, by data_path"
     assert isinstance(error, NotFoundError), "in the taxonomy, conventions §5"
     assert error.path == f"{EXPORTS}/1900"
     assert error.source == SOURCE
@@ -336,31 +331,6 @@ def test_a_400_without_esrs_message_falls_through_to_core() -> None:
     A body of no shape upstream sends (conventions §10, kind 5).
     """
     assert classify(synthesised(400, ["not", "an", "object"])) is None
-
-
-def test_a_429_is_a_rate_limit_error_with_its_retry_after() -> None:
-    """NOT RECORDED: api.data.gov's 429 with ``Retry-After`` and the quota at zero (conventions
-    §10, kind 2).
-    ``classify`` called on its own gives the exact wait: no client has observed it."""
-    error = classify(synthesised(429, OVER_RATE_LIMIT, QUOTA_SPENT))
-    assert isinstance(error, RateLimitError)
-    assert error.retry_after == 3151.0
-    assert "OVER_RATE_LIMIT: You have exceeded your rate limit" in error.message
-    assert "api.fas.usda.gov" not in error.message, "host-free (conventions §5)"
-    assert "expected back in 3151 s" in error.message, "no snapshot without the client"
-    assert "retry after" not in error.message, "core's adapters append the retry hint"
-    assert API_KEY_ENV in error.message
-    assert error.source == SOURCE
-
-
-def test_a_429_without_retry_after_falls_back_to_the_quota_window() -> None:
-    """NOT RECORDED: the 429 body without Retry-After or quota headers (conventions §10, kind
-    2)."""
-    error = classify(synthesised(429, OVER_RATE_LIMIT))
-    assert isinstance(error, RateLimitError)
-    assert error.retry_after == Gateway.policy.window == 3600.0
-    assert "an hourly quota per key" in error.message, "no limit known, none invented"
-    assert "expected back in 3600 s" in error.message
 
 
 @pytest.mark.anyio

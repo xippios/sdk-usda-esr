@@ -756,9 +756,9 @@ async def test_an_unreleased_market_year_over_mcp(replay_fixture: ReplayFixture)
 def test_the_weekly_series_cap_note_names_the_range() -> None:
     """A note of the task's own, the family's bounds kept (conventions §8, sdk-core ADR-0038;
     https://github.com/xippios/sdk-usda-esr/pull/10), as ``get_exports``' names ``country_code``.
-    The cap keeps the newest weeks and is not paged: a second run would send its yearly
-    requests again past the cache's lifetime (https://github.com/xippios/sdk-usda-esr/issues/28;
-    sdk-core ADR-0047)."""
+    The cap keeps the newest weeks and is not paged: with the cache a continuation would cost
+    upstream nothing, so the rule allows a paged cap, and nothing asks for one
+    (https://github.com/xippios/sdk-usda-esr/issues/28; sdk-core ADR-0047)."""
     cap = tasks.MCP_CAPS["get_weekly_series"]
     assert (cap.max_rows, cap.max_bytes) == (200, 65_536), "the family's bounds"
     assert (cap.paged, cap.keep) == (False, "last")
