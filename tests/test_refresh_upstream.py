@@ -16,14 +16,7 @@ from pathlib import Path
 from types import ModuleType
 
 from xippios.core.refresh import Page, Response, Row
-from xippios.usda.fas import (
-    BACKEND_FILE,
-    CLASSIC_UI_URL,
-    PORTAL_FILE,
-    PORTAL_SWAGGER_URL,
-    PORTAL_URL,
-    Portal,
-)
+from xippios.usda.fas.portal import Portal
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "refresh_upstream.py"
@@ -42,6 +35,8 @@ def load_script() -> ModuleType:
 script = load_script()
 
 
+PORTAL_FILE = "openapi/portal-document.json"
+"""The committed ESR part of the portal's document, the file of the kit's second page."""
 PORTAL = UPSTREAM / PORTAL_FILE
 
 
@@ -78,7 +73,7 @@ def portal_answer() -> Response:
     not an answer from USDA FAS. (conventions §10, kind 2; sdk-core ADR-0049, decision 10)
     """
     return answer(
-        PORTAL_SWAGGER_URL, 200, PORTAL.read_bytes().removesuffix(b"\n"), "application/json"
+        portal_page().url, 200, PORTAL.read_bytes().removesuffix(b"\n"), "application/json"
     )
 
 
@@ -117,23 +112,19 @@ def test_a_document_row_counts_the_paths_kept_and_dropped() -> None:
 
 
 def test_the_snapshot_declares_its_pages_in_order() -> None:
-    """The portal's three pages first, the kit's: its shell, its document and the classic
-    Swagger UI, whose page names the backend document (``linked``); then ESR's own: the
-    program page the CDN refuses, which goes to ``Not fetched``, and the two ESR query URLs,
-    recorded by their 404."""
+    """The kit's pages first, the portal's three, whose own tests hold them; then ESR's own:
+    the program page the CDN refuses, which goes to ``Not fetched``, and the two ESR query
+    URLs, recorded by their 404."""
     pages = script.SNAPSHOT.pages
-    assert [(page.url, page.file, page.status) for page in pages] == [
-        (PORTAL_URL, None, 200),
-        (PORTAL_SWAGGER_URL, PORTAL_FILE, 200),
-        (CLASSIC_UI_URL, None, 200),
+    assert pages[:3] == script.PORTAL.pages
+    assert [(page.url, page.file, page.status) for page in pages[3:]] == [
         (script.ESR_PROGRAM_URL, None, 403),
         *((url, None, 404) for url in script.ESRQUERY_URLS),
     ]
-    assert pages[:3] == script.PORTAL.pages
+    assert portal_page() in pages[:3], "the kit's document page writes the committed part"
     refused = pages[3]
     assert (refused.stable, refused.names) == (False, "Access Denied")
     assert script.SNAPSHOT.attribution == (), "neither document states a copyright line"
-    assert BACKEND_FILE == "openapi/backend-docs-v1.json", "the file the linked page writes"
 
 
 def test_an_esr_query_url_s_row_says_what_it_answered() -> None:
