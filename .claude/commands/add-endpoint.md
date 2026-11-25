@@ -32,8 +32,10 @@ lists what they check in an endpoint.
    verbatim id kept in the first line of its docstring and in the `endpoint=` it passes.
    Parameters as upstream names them, snake_cased; it calls
    `xippios.usda.esr._client.client`,
-   reads JSON through `get_answer`, the one reader, and returns models via
-   `xippios.core.parse(...)`. No defaults beyond upstream's own, no composition, no
+   reads JSON through `get_answer`, the one reader, and returns an `Answer`: the one
+   `get_answer` gives, its models parsed by `parse=`, or
+   `Answer(value, answer.retrieved_at)` for a value it derives from `answer.payload`
+   (conventions §4, §6). No defaults beyond upstream's own, no composition, no
    status-code checks: upstream's error shapes go into `classify` in `_client.py`, an error
    class of the package's own into `errors.py` (conventions §5, §6).
 
@@ -48,7 +50,8 @@ lists what they check in an endpoint.
 4. **Task function** in `src/xippios/usda/esr/tasks.py`, a task as conventions §2
    defines it: its operation's answer for the arguments given, the arguments that
    identify a record positional in the order of upstream's path and every filter
-   keyword-only. It composes wrappers and returns `Result[T]` with full `ResultMeta`
+   keyword-only. It composes wrappers and returns `Result[T]` with full `ResultMeta`, its
+   `retrieved_at` the one that its wrapper's `Answer` carries, the oldest of several
    (conventions §4). Then: `get_<thing> = sync(get_<thing>_async)`, add `"get_<thing>"`
    to `__all__`, and re-export it from `__init__.py`.
    A projection leaves out documented personal identifiers (conventions §3). A cap of its
