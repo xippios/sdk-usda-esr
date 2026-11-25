@@ -422,7 +422,7 @@ def test_the_gateways_not_found_propagates_unchanged(
     with pytest.raises(NotFoundError) as info:
         call()
     assert not isinstance(info.value, NoDataForYear)
-    assert str(info.value).startswith("api.data.gov has no route for /api/esr/exports/")
+    assert str(info.value).startswith("api.data.gov has no route for GET /api/esr/exports/")
     assert "ESR has no data for commodity" not in str(info.value)
 
 

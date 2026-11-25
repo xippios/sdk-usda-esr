@@ -532,7 +532,7 @@ def test_the_gateways_not_found_inside_the_range_stops_the_series(
     with pytest.raises(NotFoundError) as info:
         tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
     assert not isinstance(info.value, NoDataForYear)
-    assert str(info.value).startswith("api.data.gov has no route for /api/esr/exports/")
+    assert str(info.value).startswith("api.data.gov has no route for GET /api/esr/exports/")
     assert (gateway.call_count, newer.call_count) == (1, 0), "nothing after the error"
 
 
@@ -581,7 +581,7 @@ def test_the_gateways_not_found_propagates_unchanged(respx_mock: respx.MockRoute
     with pytest.raises(NotFoundError) as info:
         tasks.get_weekly_series(104, 1220, 2024, 2024)
     assert not isinstance(info.value, NoDataForYear)
-    assert str(info.value).startswith("api.data.gov has no route for /api/esr/exports/")
+    assert str(info.value).startswith("api.data.gov has no route for GET /api/esr/exports/")
 
 
 # 9990, UNKNOWN: a destination code like any other

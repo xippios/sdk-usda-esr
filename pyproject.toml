@@ -60,7 +60,7 @@ dev = [
 # The removal is a PR of its own, merged before the release PR; /release-prep and
 # publish.yml refuse a pinned release.
 xippios-core = { git = "https://github.com/xippios/sdk-core.git", rev = "4060d9615012b09487d87a51064c610de34be069" }  # pragma: allowlist secret (a git ref, not a key)
-xippios-usda-fas = { git = "https://github.com/xippios/sdk-usda-fas.git", rev = "fdb28c2a747b0597a8bcd0fa0d43e629a33b5e57" }  # pragma: allowlist secret (a git ref, not a key)
+xippios-usda-fas = { git = "https://github.com/xippios/sdk-usda-fas.git", rev = "f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb" }  # pragma: allowlist secret (a git ref, not a key)
 
 [build-system]
 requires = ["hatchling>=1.27"]
