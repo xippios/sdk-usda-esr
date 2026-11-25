@@ -4,6 +4,7 @@ import ast
 import importlib.util
 import inspect
 import json
+import re
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -150,6 +151,21 @@ def test_packaged_lists_equal_the_recorded_answers() -> None:
     """Fetched live on 2026-10-28, three days after the recordings; the records are the same."""
     for name, (_, wrapper, _) in SOURCES.items():
         assert _records(name) == _recorded(wrapper, "all"), name
+
+
+def test_the_reference_readme_dates_a_fetch_in_its_table_alone() -> None:
+    """Each list's fetch stands in the provenance table, whose rows the refresh script writes
+    from the packaged files, and nowhere else in ``reference/README.md``: a date written beside
+    the table by hand goes stale at the next refresh
+    (https://github.com/xippios/sdk-usda-esr/issues/77)."""
+    readme = SCRIPT.parents[1] / "src" / "xippios" / "usda" / "esr" / "reference" / "README.md"
+    lines = readme.read_text(encoding="utf-8").splitlines()
+    rows = {line.split("`")[1].removesuffix(".json"): line for line in lines if line[:3] == "| `"}
+    assert set(rows) == set(FETCHED)
+    for name, fetched in FETCHED.items():
+        assert f"| {fetched:%Y-%m-%dT%H:%M:%SZ} |" in rows[name], name
+    outside = [line for line in lines if not line.startswith("|")]
+    assert [line for line in outside if re.search(r"\b20\d\d-\d\d-\d\d\b", line)] == []
 
 
 def test_the_enum_matches_the_packaged_units() -> None:
