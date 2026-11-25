@@ -212,9 +212,10 @@ def test_a_weekly_series_of_one_market_year_is_its_weeks(
 def test_weekly_series_orders_what_upstream_sends_out_of_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The recorded records, reversed in memory (a function input, not a fixture file): the
-    slice orders them by week, oldest first, and changes none; across two market years
-    the week both carry keeps the older year's row first, whatever upstream's order."""
+    """The recorded records, reversed and handed on by a replaced wrapper: the series orders
+    them by week, oldest first, and changes none; across two market years the week both carry
+    keeps the older year's row first, whatever upstream's order. The records are an input of
+    the test, not an answer from ESR (conventions §10)."""
     answers = {
         2023: _recorded(COUNTRY, "wheat_white_canada_2023"),
         2024: _recorded(COUNTRY, "wheat_white_canada_2024"),
@@ -436,8 +437,9 @@ def test_a_calendar_year_commodity_in_january_is_refused(
 def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
     monkeypatch: pytest.MonkeyPatch, respx_mock: respx.MockRouter
 ) -> None:
-    """The recorded release list without wheat white, in memory (a function input, not a
-    fixture file): ``get_market_year``'s refusal, before any yearly request."""
+    """The recorded release list without wheat white, handed on by a replaced wrapper: the
+    series' refusal, before any yearly request. The records are an input of the test, not an
+    answer from ESR (conventions §10)."""
     body = json.loads(load_fixture(fixture_path(FIXTURES, RELEASES, "all")).response.body)
     recorded = parse(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"

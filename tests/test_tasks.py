@@ -200,9 +200,9 @@ def test_get_release_dates_since_keeps_what_was_released_strictly_later(
 
 
 def _no_releases(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """``api.get_data_release_info`` answering ``[]``, in memory (a function input, not a
-    fixture file: that operation was never observed to answer empty); the list counts the
-    calls."""
+    """``api.get_data_release_info`` replaced by one that answers ``[]``, which that operation
+    was never observed to answer; the list counts the calls. The empty answer is an input of
+    the test, not an answer from ESR (conventions §10)."""
     calls: list[int] = []
 
     async def empty() -> Answer[list[DataReleaseInfo]]:
@@ -329,8 +329,9 @@ def test_a_commodity_the_release_list_lacks_answers_the_empty_list(
 
 
 def test_one_commodity_dropped_from_the_release_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The recorded records without wheat white, in memory (a function input, not a fixture
-    file): wheat white answers the empty list, every other commodity its record."""
+    """The recorded records without wheat white, handed on by a replaced wrapper: wheat white
+    answers the empty list, every other commodity its record. The records are an input of the
+    test, not an answer from ESR (conventions §10)."""
     recorded = _recorded_releases()
 
     async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
