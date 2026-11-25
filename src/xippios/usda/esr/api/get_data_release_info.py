@@ -29,14 +29,14 @@ class ReleaseList(NamedTuple):
     task the text apart from the records, read from the decoded answer.
 
     Attributes:
-        records: One ``DataReleaseInfo`` per commodity, in upstream order.
-        printed: Each commodity's ``releaseTimeStamp`` exactly as upstream sent it, by its
-            ``commodityCode``, e.g. ``{104: "2026-10-22T08:30:42.67", ...}``; the first
-            record's where upstream sent a commodity twice.
+        records: One ``DataReleaseInfo`` per record upstream sends, one per commodity as
+            recorded, in upstream order.
+        printed: Each record's ``releaseTimeStamp`` exactly as upstream sent it, at the
+            record's place in ``records``, e.g. ``["2026-10-22T08:30:42.67", ...]``.
     """
 
     records: list[DataReleaseInfo]
-    printed: dict[int, str]
+    printed: list[str]
 
 
 async def get_data_release_info() -> Answer[ReleaseList]:
@@ -60,7 +60,5 @@ async def get_data_release_info() -> Answer[ReleaseList]:
     endpoint = "ESRData_GetDataReleaseInfo"
     answer = await client.get_answer("/api/esr/datareleasedates")
     records = parse(list[DataReleaseInfo], answer.payload, source=SOURCE, endpoint=endpoint)
-    printed: dict[int, str] = {}
-    for record, sent in zip(records, answer.payload, strict=True):
-        printed.setdefault(record.commodity_code, sent["releaseTimeStamp"])
+    printed: list[str] = [sent["releaseTimeStamp"] for sent in answer.payload]
     return Answer(ReleaseList(records, printed), answer.retrieved_at)

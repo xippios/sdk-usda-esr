@@ -255,9 +255,15 @@ def _calendar_year() -> int:
     return datetime.now(UTC).year
 
 
-def _newest_release(releases: list[DataReleaseInfo]) -> DataReleaseInfo | None:
-    """The record with the latest ``releaseTimeStamp``, the first of equals; ``None`` if empty."""
-    return max(releases, key=lambda release: release.release_time_stamp, default=None)
+def _newest(releases: list[DataReleaseInfo]) -> int | None:
+    """The place of the record with the latest ``releaseTimeStamp``, the first of equals.
+
+    A place, not a record, so that the task reads the newest record's text as upstream sent it
+    at the same place of the wrapper's ``printed``, a commodity that upstream sends twice
+    included; ``None`` for an empty list.
+    """
+    places = range(len(releases))
+    return max(places, key=lambda place: releases[place].release_time_stamp, default=None)
 
 
 def _absent(
@@ -416,8 +422,8 @@ async def get_release_dates_async(
         _since(since)  # refused before the request
     answer = await api.get_data_release_info()
     releases = answer.payload.records
-    newest = _newest_release(releases)
-    published_at = None if newest is None else newest.release_time_stamp
+    newest = _newest(releases)
+    published_at = None if newest is None else releases[newest].release_time_stamp
     selected = [
         release
         for release in newer_than(
@@ -431,7 +437,7 @@ async def get_release_dates_async(
         retrieved_at=answer.retrieved_at,
         published_at=published_at,
         published_at_naive=published_at is not None,
-        vintage=None if newest is None else answer.payload.printed[newest.commodity_code],
+        vintage=None if newest is None else answer.payload.printed[newest],
         request={"commodity_code": commodity_code, "since": since},
     )
     return Result(data=selected, meta=meta)
