@@ -183,7 +183,10 @@ white to Canada 2024). Its cap is paged and keeps the last rows (sdk-core ADR-00
 https://github.com/xippios/sdk-usda-esr/issues/28): the answer runs oldest week first, so a cut
 answer shows the newest weeks, and the tool's ``offset`` continues to older ones, each
 continuation running the task again, which the cache answers within its lifetime, so a
-continuation costs upstream nothing (conventions §8; sdk-core ADR-0061, decision 9).
+continuation costs upstream nothing (conventions §8; sdk-core ADR-0061, decision 9). The cache
+holds an answer under the client's ``cache_max_bytes``, 8 MiB, and one call fetches at most the
+211 packaged countries by 55 week endings at some 300 bytes a row, about 3.5 MB, so the cap
+stays paged (https://github.com/xippios/sdk-core/issues/608).
 ``get_release_dates``, 44 rows, fits the default and keeps the family's bounds, but it has
 filters, so its entry carries a note naming ``since`` and ``commodity_code``, as
 ``list_commodities``' names ``search``.
