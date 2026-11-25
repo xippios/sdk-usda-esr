@@ -25,10 +25,8 @@ changed: the signal to run `/refresh-reference-data`.
 | `regions.json` | `GET https://api.fas.usda.gov/api/esr/regions` (`ESRData_GetRegions`) | 2026-10-28T19:19:53Z |
 | `unitsOfMeasure.json` | `GET https://api.fas.usda.gov/api/esr/unitsOfMeasure` (`ESRData_GetUnitsOfMeasure`) | 2026-10-28T19:19:53Z |
 
-The files were last written by `scripts/refresh_reference.py` against the live API on
-2026-10-28, one keyed call per list, each `fetched` the UTC time of its fetch to the
-second, which is the list tasks' `meta.retrieved_at`. Every record is unchanged from the
-first files, written on 2026-10-25 at about 20:39 UTC, ten minutes after the same four
-lists were recorded under `tests/fixtures/<wrapper>/all.json`; the records are equal to
-the recorded ones, which `tests/test_params.py` checks. The 2026-10-25 files carried the
-bare date the script then wrote, which `PackagedList.load` read as 00:00 UTC of that day.
+`scripts/refresh_reference.py` writes the files, one keyed call per list, and the rows of
+the table above: each file's `fetched`, the UTC time of its fetch to the second, is its
+row's Fetched and the list tasks' `meta.retrieved_at`, so the time of a fetch stands in
+the table alone. The records equal the answers recorded under
+`tests/fixtures/<wrapper>/all.json`, which `tests/test_params.py` checks.
