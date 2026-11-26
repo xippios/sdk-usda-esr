@@ -97,6 +97,7 @@ from xippios.core import (
     ResultMeta,
     fetch_periods,
     matches,
+    names_codes,
     newer_than,
     sync,
 )
@@ -113,6 +114,7 @@ from xippios.usda.esr.models import (
     UnitOfMeasure,
 )
 from xippios.usda.esr.params import (
+    COUNTRIES,
     PACKAGE,
     validate_commodity_code,
     validate_country_code,
@@ -264,6 +266,7 @@ def _absent(
     )
 
 
+@names_codes(country_code=COUNTRIES)
 async def get_exports_async(
     commodity_code: int, market_year: int, country_code: int | None = None
 ) -> Result[list[CommodityData]]:
@@ -460,6 +463,7 @@ def _series_range(start_year: int, end_year: int) -> None:
     )
 
 
+@names_codes(country_code=COUNTRIES)
 async def get_weekly_series_async(
     commodity_code: int, country_code: int, start_year: int, end_year: int
 ) -> Result[list[CommodityData]]:
