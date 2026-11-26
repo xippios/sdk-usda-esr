@@ -51,7 +51,8 @@ destination at once, one row per destination and week; the MCP server returns at
 200 rows per call, so pass a country there. Quantities are `Decimal` in Python and JSON
 numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`). The arguments that
 identify a record come first, in the order of upstream's path, and every filter is passed by
-name: `country_code`, `start_year`, `end_year`, `since`, `region_id` and `search`.
+name: `country_code` of `get_exports`, `start_year` and `end_year` of `get_weekly_series`,
+`commodity_code` and `since` of `get_release_dates`, `region_id` and `search`.
 
 ESR answers a market year it has not released with an empty list, as it answers a year
 without exports, so `get_exports` raises `NotFoundError` for a market year past the
