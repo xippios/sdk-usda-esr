@@ -7,24 +7,26 @@ parsed into ``models.Commodity``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Commodity
 
 __all__ = ["get_commodities"]
 
 
-async def get_commodities() -> list[Commodity]:
+async def get_commodities() -> Answer[list[Commodity]]:
     """Call ``ESRData_GetCommodities``.
 
     Returns:
-        Every ESR commodity, in upstream order, one ``Commodity`` per record, e.g.
+        The ``Answer``, when it was retrieved and, as its payload, every ESR commodity, in upstream
+            order, one ``Commodity`` per record, e.g.
             ``Commodity(commodity_code=104, commodity_name="Wheat - White", unit_id=1)``
 
     Raises:
         AuthError: api.data.gov refused the key in ``DATA_GOV_API_KEY``.
         RateLimitError: api.data.gov's hourly quota for the key is spent.
     """
-    raw = await client.get_json("/api/esr/commodities")
-    return parse(list[Commodity], raw, source=SOURCE, endpoint="ESRData_GetCommodities")
+    return await client.get_answer(
+        "/api/esr/commodities", parse=list[Commodity], endpoint="ESRData_GetCommodities"
+    )

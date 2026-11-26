@@ -18,15 +18,17 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "xippios-core~=0.4.0",
+  "xippios-core~=0.5.0",
+  "xippios-usda-fas~=0.1.0",
 ]
 
 [project.optional-dependencies]
-mcp = ["xippios-core[mcp]~=0.4.0"]
-http = ["xippios-core[http]~=0.4.0"]
-testing = ["xippios-core[testing]~=0.4.0"]
+mcp = ["xippios-core[mcp]~=0.5.0"]
+http = ["xippios-core[http]~=0.5.0"]
+testing = ["xippios-core[testing]~=0.5.0"]
 
 [project.scripts]
+# The servers' entry points, the template's; a script of the package's own goes after them.
 xippios-usda-esr-mcp = "xippios.usda.esr.mcp:run"
 
 [project.urls]
@@ -64,7 +66,15 @@ include = ["/src", "/docs", "/README.md", "/CHANGELOG.md", "/LICENSE"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["docs", ".claude"]
+# The ADR index script and the two release scripts are the organization's one version each,
+# carried byte for byte, so ruff leaves them alone; mypy still checks them.
+extend-exclude = [
+  "docs",
+  ".claude",
+  "scripts/adr_index.py",
+  "scripts/changelog_assemble.py",
+  "scripts/release_prepare.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "D", "ANN", "PTH", "PT", "T20", "C4"]
@@ -79,7 +89,7 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = ["xippios.usda.esr"]
-known-third-party = ["xippios.core"]
+known-third-party = ["xippios.core", "xippios.usda.fas"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "ANN"]
@@ -102,6 +112,3 @@ addopts = "-ra --strict-markers --import-mode=importlib"
 testpaths = ["tests"]
 # record_property, in a live test say, warns under xunit2 when a run writes --junitxml.
 junit_family = "xunit1"
-# Core's plugin sets it to the placeholder key in every test not marked live
-# (sdk-core ADR-0035).
-xippios_placeholder_key_envs = ["DATA_GOV_API_KEY"]

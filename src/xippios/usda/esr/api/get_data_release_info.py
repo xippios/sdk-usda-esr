@@ -10,24 +10,27 @@ one (``models.DataReleaseInfo``): one per commodity, 44 records. Error shapes ar
 once in ``xippios.usda.esr._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import DataReleaseInfo
 
 __all__ = ["get_data_release_info"]
 
 
-async def get_data_release_info() -> list[DataReleaseInfo]:
+async def get_data_release_info() -> Answer[list[DataReleaseInfo]]:
     """Call ``ESRData_GetDataReleaseInfo``.
 
     Returns:
-        One ``DataReleaseInfo`` per commodity, in upstream order: its current market year
-        and the time of its last release.
+        The ``Answer``, when it was retrieved and, as its payload, one ``DataReleaseInfo`` per
+            commodity, in upstream order: its current market year and the time of its last release.
 
     Raises:
         AuthError: api.data.gov refused the key in ``DATA_GOV_API_KEY``.
         RateLimitError: api.data.gov's hourly quota for the key is spent.
     """
-    raw = await client.get_json("/api/esr/datareleasedates")
-    return parse(list[DataReleaseInfo], raw, source=SOURCE, endpoint="ESRData_GetDataReleaseInfo")
+    return await client.get_answer(
+        "/api/esr/datareleasedates",
+        parse=list[DataReleaseInfo],
+        endpoint="ESRData_GetDataReleaseInfo",
+    )

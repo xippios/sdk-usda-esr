@@ -1,37 +1,40 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function, thirteen keyed calls in all: ``get_exports`` for
-wheat white to Canada and for soybeans to Mexico, market year 2024;
-``get_release_dates``, once whole and once with ``since``, and ``get_market_year`` for
-wheat white; the slices, ``get_latest_week`` for wheat HRW and ``get_top_destinations``
-for soybeans, one call each, and ``get_weekly_series`` for wheat white to Canada, market
-years 2023 to 2024, two calls, one per market year, and no release-list call, since the
-range ends before the current calendar year (a range ending this year or later adds
-one). The codes are taken from the packaged lists by their upstream names, so a renamed
-or recoded commodity or country fails here first. The four list tasks answer from the
-package without a call, so their test fetches the list through its endpoint wrapper, one
-call each, and checks that the packaged records equal it: the freshness check
-``reference/README.md`` promises. A difference fails the test naming what is gone and
-what is new; ``/refresh-reference-data`` then refreshes the package. Next to them, the
-template's reachability check, ``test_upstream_answers``, sends no key: a plain request
-to ``BASE_URL`` that spends no quota call.
+One live smoke test per task function: ``get_exports`` for wheat white to Canada and for
+soybeans to Mexico, market year 2024; ``get_release_dates`` whole, with ``since`` and for
+wheat white by ``commodity_code``; and ``get_weekly_series`` for wheat white to Canada,
+market years 2023 to 2024, one call per market year, and no release-list call, since the
+range ends before the current calendar year (a range ending this year or later adds one).
+The codes are taken from the packaged lists by their upstream names, so a renamed or recoded
+commodity or country fails here first. Core's nightly comparison of the packaged lists runs
+here too, one keyed call for each list of ``LIVE_LISTS`` (sdk-core ADR-0055), the signal to
+run ``/refresh-reference-data``. Core's testing plugin prints the run's requests as
+``requests sent by the live run: <n>``, the count in the log of ``live.yml`` that
+``/release-prep`` cites; core's response cache answers a second read of a path within its
+lifetime, so the run sends fewer requests than its calls.
 """
 
 from datetime import date, datetime
-from typing import Any
 
-import httpx
 import pytest
 from xippios.core import PackagedList
-from xippios.core.data_gov import Gateway
+from xippios.core.testing.live import *  # noqa: F403
+from xippios.usda.fas import Gateway
 
 from xippios.usda.esr import api, tasks
-from xippios.usda.esr._client import BASE_URL, config
 from xippios.usda.esr.enums import UnitId
-from xippios.usda.esr.models import ExportField
-from xippios.usda.esr.params import PACKAGE
+from xippios.usda.esr.params import COMMODITIES, COUNTRIES, PACKAGE, REGIONS, UNITS
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
+
+
+LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
+    "commodities": (COMMODITIES, api.get_commodities),
+    "countries": (COUNTRIES, api.get_countries),
+    "regions": (REGIONS, api.get_regions),
+    "unitsOfMeasure": (UNITS, api.get_units_of_measure),
+}
+NO_LIVE_LIST: dict[str, str] = {}  # every packaged list is compared
 
 
 def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
@@ -42,25 +45,9 @@ def _code(list_name: str, code_field: str, name_field: str, name: str) -> int:
 
 
 WHEAT_WHITE = _code("commodities", "commodityCode", "commodityName", "Wheat - White")
-WHEAT_HRW = _code("commodities", "commodityCode", "commodityName", "Wheat - HRW")
 SOYBEANS = _code("commodities", "commodityCode", "commodityName", "Soybeans")
 CANADA = _code("countries", "countryCode", "countryDescription", "CANADA")
 MEXICO = _code("countries", "countryCode", "countryDescription", "MEXICO")
-
-
-async def test_upstream_answers() -> None:
-    """The base URL answers without a server error.
-
-    A plain request, not the package's client, so no key goes out and it spends no keyed
-    call; a keyed gateway's answer to it (a 403 or a 404, say) still shows the host is up.
-    """
-    async with httpx.AsyncClient(
-        headers={"User-Agent": config.user_agent},
-        timeout=config.timeouts.to_httpx(),
-        follow_redirects=True,
-    ) as http:
-        response = await http.get(BASE_URL)
-    assert response.status_code < 500
 
 
 async def test_get_exports_for_one_country_live() -> None:
@@ -116,52 +103,16 @@ async def test_get_release_dates_since_live() -> None:
     assert result.meta.vintage == latest.release_time_stamp_text
 
 
-async def test_get_market_year_live() -> None:
-    result = await tasks.get_market_year_async(WHEAT_WHITE)
-    year = result.data
+async def test_get_release_dates_of_one_commodity_live() -> None:
+    result = await tasks.get_release_dates_async(commodity_code=WHEAT_WHITE)
+    (year,) = result.data
     assert year.commodity_code == WHEAT_WHITE
     assert year.market_year >= 2027, "wheat's 2027 began on 2026-06-01"
     assert year.market_year_start < year.market_year_end
     assert year.market_year == year.market_year_end.year, "named by its end year"
     assert datetime.fromisoformat(year.release_time_stamp_text) == year.release_time_stamp
-    assert result.meta.vintage == year.release_time_stamp_text, "upstream's text"
-    assert result.meta.published_at == year.release_time_stamp
+    assert result.meta.request == {"commodity_code": WHEAT_WHITE}
     assert result.meta.published_at_naive is True
-
-
-async def test_get_latest_week_live() -> None:
-    result = await tasks.get_latest_week_async(WHEAT_HRW, 2024)
-    assert result.data
-    weeks = {r.week_ending_date for r in result.data}
-    assert len(weeks) == 1, "one week"
-    (week,) = weeks
-    assert date(2024, 5, 1) < week < date(2024, 6, 14), "wheat's market year 2024 ends in May"
-    destinations = [r.country_code for r in result.data]
-    assert len(set(destinations)) == len(destinations), "one row per destination"
-    assert {r.commodity_code for r in result.data} == {WHEAT_HRW}
-    assert result.meta.endpoint == "ESRData_GetAllCountriesData"
-    assert result.meta.vintage == week.isoformat()
-    assert result.meta.published_at is None
-
-
-async def test_get_top_destinations_live() -> None:
-    result = await tasks.get_top_destinations_async(
-        SOYBEANS, 2024, ExportField.ACCUMULATED_EXPORTS, 5
-    )
-    assert len(result.data) == 5
-    values = [r.accumulated_exports for r in result.data]
-    assert values == sorted(values, reverse=True), "largest first"
-    weeks = {r.week_ending_date for r in result.data}
-    assert len(weeks) == 1, "one week"
-    (week,) = weeks
-    assert date(2024, 8, 1) < week < date(2024, 9, 14), "soybeans' 2024 ends in August 2024"
-    assert result.meta.request == {
-        "commodity_code": SOYBEANS,
-        "market_year": 2024,
-        "field": "accumulatedExports",
-        "n": 5,
-    }
-    assert result.meta.vintage == week.isoformat()
 
 
 async def test_get_weekly_series_live() -> None:
@@ -183,29 +134,3 @@ async def test_get_weekly_series_live() -> None:
     }
     assert result.meta.vintage == weeks[-1].isoformat()
     assert result.meta.published_at is None
-
-
-LISTS = [
-    # task, the operation its list came from, its wrapper (conventions §2)
-    ("list_commodities", "ESRData_GetCommodities", "get_commodities"),
-    ("list_countries", "ESRData_GetCountries", "get_countries"),
-    ("list_regions", "ESRData_GetRegions", "get_regions"),
-    ("list_units_of_measure", "ESRData_GetUnitsOfMeasure", "get_units_of_measure"),
-]
-
-
-@pytest.mark.parametrize(("task", "endpoint", "wrapper"), LISTS, ids=[task for task, *_ in LISTS])
-async def test_packaged_list_equals_the_live_list(task: str, endpoint: str, wrapper: str) -> None:
-    packaged = await getattr(tasks, f"{task}_async")()
-    live: list[Any] = await getattr(api, wrapper)()
-    stale = [record for record in packaged.data if record not in live]
-    new = [record for record in live if record not in packaged.data]
-    behind = bool(stale or new)
-    assert not behind, (
-        f"{task} is behind upstream (packaged {packaged.meta.retrieved_at:%Y-%m-%d}): "
-        f"{len(stale)} packaged records upstream no longer sends, {len(new)} upstream records "
-        "the package lacks; "
-        f"first of each: {stale[:5]}, {new[:5]}. Refresh with /refresh-reference-data."
-    )
-    assert packaged.data == live, f"{task}: the same records in another order"
-    assert packaged.meta.endpoint == endpoint

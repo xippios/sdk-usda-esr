@@ -14,16 +14,16 @@ integers as upstream sends them. `unitsOfMeasure`, a list of integer ids, makes
 `enums.UnitId`; the commodity, country and region codes stay tables. The `list_*` tasks
 answer from these files without an upstream call, and `get_exports` checks its codes
 against them. The nightly live tests compare each packaged list with the live one
-(`test_packaged_list_equals_the_live_list` in `tests/test_live.py`, one keyed call per
-list) and name the records that are gone and those that are new: the signal to run
-`/refresh-reference-data`.
+(core's `test_packaged_list_is_current`, each list declared in `LIVE_LISTS` of
+`tests/test_live.py`, one keyed call per list) and name the codes that are gone, new or
+changed: the signal to run `/refresh-reference-data`.
 
-| File | Origin | Fetched (UTC) | Records |
-| --- | --- | --- | --- |
-| `commodities.json` | `GET https://api.fas.usda.gov/api/esr/commodities` (`ESRData_GetCommodities`) | 2026-10-28T19:19:51Z | 44 |
-| `countries.json` | `GET https://api.fas.usda.gov/api/esr/countries` (`ESRData_GetCountries`) | 2026-10-28T19:19:52Z | 211 |
-| `regions.json` | `GET https://api.fas.usda.gov/api/esr/regions` (`ESRData_GetRegions`) | 2026-10-28T19:19:53Z | 12 |
-| `unitsOfMeasure.json` | `GET https://api.fas.usda.gov/api/esr/unitsOfMeasure` (`ESRData_GetUnitsOfMeasure`) | 2026-10-28T19:19:53Z | 5 |
+| File | Origin | Fetched |
+| --- | --- | --- |
+| `commodities.json` | `GET https://api.fas.usda.gov/api/esr/commodities` (`ESRData_GetCommodities`) | 2026-10-28T19:19:51Z |
+| `countries.json` | `GET https://api.fas.usda.gov/api/esr/countries` (`ESRData_GetCountries`) | 2026-10-28T19:19:52Z |
+| `regions.json` | `GET https://api.fas.usda.gov/api/esr/regions` (`ESRData_GetRegions`) | 2026-10-28T19:19:53Z |
+| `unitsOfMeasure.json` | `GET https://api.fas.usda.gov/api/esr/unitsOfMeasure` (`ESRData_GetUnitsOfMeasure`) | 2026-10-28T19:19:53Z |
 
 The files were last written by `scripts/refresh_reference.py` against the live API on
 2026-10-28, one keyed call per list, each `fetched` the UTC time of its fetch to the

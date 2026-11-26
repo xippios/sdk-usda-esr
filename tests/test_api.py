@@ -34,7 +34,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 async def test_get_commodities(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_commodities", "all")
-    commodities = await api.get_commodities()
+    commodities = (await api.get_commodities()).payload
     assert len(commodities) == 44
     assert commodities[0] == Commodity(commodity_code=101, commodity_name="Wheat - HRW", unit_id=1)
     by_code = {c.commodity_code: c for c in commodities}
@@ -51,7 +51,7 @@ async def test_get_commodities(replay_fixture: Callable[[str, str], respx.Route]
 
 async def test_get_countries(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_countries", "all")
-    countries = await api.get_countries()
+    countries = (await api.get_countries()).payload
     assert len(countries) == 211
     by_code = {c.country_code: c for c in countries}
     assert by_code[1220] == Country(
@@ -71,7 +71,7 @@ async def test_get_countries(replay_fixture: Callable[[str, str], respx.Route]) 
 
 async def test_get_regions(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_regions", "all")
-    regions = await api.get_regions()
+    regions = (await api.get_regions()).payload
     assert len(regions) == 12
     assert regions[0] == Region(region_id=10, region_name="AFRICA")
     assert {r.region_id: r.region_name for r in regions}[99] == "UNKNOWN"
@@ -84,13 +84,13 @@ async def test_every_country_names_a_listed_region(
 ) -> None:
     replay_fixture("get_countries", "all")
     replay_fixture("get_regions", "all")
-    regions = {r.region_id for r in await api.get_regions()}
-    assert {c.region_id for c in await api.get_countries()} == regions
+    regions = {r.region_id for r in (await api.get_regions()).payload}
+    assert {c.region_id for c in (await api.get_countries()).payload} == regions
 
 
 async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_units_of_measure", "all")
-    units = await api.get_units_of_measure()
+    units = (await api.get_units_of_measure()).payload
     assert units == [
         UnitOfMeasure(unit_id=1, unit_names="Metric Tons"),
         UnitOfMeasure(unit_id=2, unit_names="Running Bales"),
@@ -103,7 +103,7 @@ async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.R
 
 async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_data_release_info", "all")
-    releases = await api.get_data_release_info()
+    releases = (await api.get_data_release_info()).payload
     assert len(releases) == 44
     wheat = next(r for r in releases if r.commodity_code == 104)
     # Compared field by field: a record's equality includes the release text it keeps, which
@@ -135,13 +135,13 @@ async def test_the_release_list_names_every_commodity(
 ) -> None:
     replay_fixture("get_data_release_info", "all")
     replay_fixture("get_commodities", "all")
-    released = {r.commodity_code for r in await api.get_data_release_info()}
-    assert released == {c.commodity_code for c in await api.get_commodities()}
+    released = {r.commodity_code for r in (await api.get_data_release_info()).payload}
+    assert released == {c.commodity_code for c in (await api.get_commodities()).payload}
 
 
 async def test_get_country_data(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_country_data", "wheat_white_canada_2024")
-    records = await api.get_country_data(104, 1220, 2024)
+    records = (await api.get_country_data(104, 1220, 2024)).payload
     assert len(records) == 54
     assert records[0] == CommodityData(
         commodity_code=104,
@@ -169,7 +169,7 @@ async def test_get_all_countries_data(replay_fixture: Callable[[str, str], respx
     """``allCountries``: one record per destination and week, no paging. Cottonseed 2024:
     498 records for 11 destinations, 139,119 bytes of JSON."""
     route = replay_fixture("get_all_countries_data", "cottonseed_2024")
-    records = await api.get_all_countries_data(1201, 2024)
+    records = (await api.get_all_countries_data(1201, 2024)).payload
     assert len(records) == 498
     destinations = {r.country_code for r in records}
     assert len(destinations) == 11
@@ -189,7 +189,7 @@ async def test_valid_codes_without_exports_are_an_empty_list(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     route = replay_fixture("get_all_countries_data", "rye_2024")
-    assert await api.get_all_countries_data(501, 2024) == []
+    assert (await api.get_all_countries_data(501, 2024)).payload == []
     assert route.call_count == 1
 
 
@@ -197,7 +197,7 @@ async def test_quantities_are_whole_numbers_as_recorded(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
     replay_fixture("get_all_countries_data", "cottonseed_2024")
-    records = await api.get_all_countries_data(1201, 2024)
+    records = (await api.get_all_countries_data(1201, 2024)).payload
     quantities = [
         value
         for record in records
@@ -211,7 +211,9 @@ async def test_quantities_are_whole_numbers_as_recorded(
 def test_the_release_text_round_trips_and_is_not_serialised() -> None:
     """``releaseTimeStamp`` as upstream prints it, two fractional digits, kept beside the parsed
     value for ``get_release_dates``' ``meta.vintage``; no dump carries it, so the adapters' rows
-    keep their five fields (https://github.com/xippios/sdk-usda-esr/pull/7)."""
+    keep their five fields (https://github.com/xippios/sdk-usda-esr/pull/7).
+    The record is an input of the test, not an answer from ESR.
+    """
     fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
     body = json.loads(fixture.response.body)
     releases = parse(
@@ -287,8 +289,8 @@ def test_records_serialise_snake_case_with_numbers_and_iso_dates() -> None:
     dumped = record.model_dump(mode="json")
     assert dumped["week_ending_date"] == "2024-06-06"
     assert dumped["accumulated_exports"] == 16217
-    assert isinstance(dumped["accumulated_exports"], float), (
-        "a JSON number (sdk-core ADR-0031, decision 1)"
+    assert isinstance(dumped["accumulated_exports"], int), (
+        "a JSON number, an integer where the Decimal has no fractional digits (sdk-core#478)"
     )
     assert dumped["current_my_net_sales"] == -5
     assert set(dumped) == set(CommodityData.model_fields)

@@ -11,15 +11,22 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from xippios.core import InvalidRequestError, PackagedList, UnknownCode, parse
+from xippios.core import InvalidRequestError, PackagedList, UnknownCode, UpstreamModel, parse
 from xippios.core.http import status_for
+from xippios.core.refresh import Lists
 from xippios.core.testing import load_fixture
+from xippios.usda.fas import REMAINING_HEADER
 
-from xippios.usda.esr import enums
+from xippios.usda.esr import api, enums
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Commodity, CommodityData, Country, Region, UnitOfMeasure
 from xippios.usda.esr.params import (
+    COMMODITIES,
+    COUNTRIES,
     PACKAGE,
     PACKAGED_LISTS,
+    REGIONS,
+    UNITS,
     latest_market_year,
     validate_commodity_code,
     validate_country_code,
@@ -28,7 +35,7 @@ from xippios.usda.esr.params import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "refresh_reference.py"
-SOURCES = {
+SOURCES: dict[str, tuple[str, str, type[UpstreamModel]]] = {
     # packaged list: the operation it came from, its wrapper (the fixture directory), model
     "commodities": ("ESRData_GetCommodities", "get_commodities", Commodity),
     "countries": ("ESRData_GetCountries", "get_countries", Country),
@@ -89,17 +96,24 @@ def test_every_packaged_list_loads_and_parses() -> None:
 
 
 def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
-    """The script writes a list's ``endpoint`` from the operation its entry names, not from
-    the wrapper's name (conventions 1.22 §2), so a refresh cannot drift from the verbatim
-    ``operationId``: the entry's operation is the packaged file's ``endpoint``, the one
-    ``endpoint=`` literal its wrapper passes and the first line of the wrapper's docstring;
-    the wrapper names the list's fixture directory (conventions §10)."""
+    """The script declares one ``Lists`` of core's frame, one ``Listed`` per packaged list
+    (conventions §3; https://github.com/xippios/sdk-usda-esr/issues/34), and the frame writes
+    a list's ``endpoint`` from the operation its ``Listed`` names, not from the wrapper's name
+    (conventions 1.22 §2), so a refresh cannot drift from the verbatim ``operationId``: the
+    declared operation is the packaged file's ``endpoint``, the one ``endpoint=`` literal its
+    wrapper passes and the first line of the wrapper's docstring; the wrapper names the list's
+    fixture directory (conventions §10). ``unitsOfMeasure`` alone makes an enum, and the quota
+    left is read from the gateway's header, the shared package's ``REMAINING_HEADER``."""
     script = _refresh_script()
-    assert script.LISTS == {}, "ESR publishes no value list"
-    entries: dict[str, tuple[str, Callable[[], object]]] = {
-        **{name: (operation, fetch) for name, (operation, fetch) in script.TABLES.items()},
-        **{name: (operation, fetch) for name, (operation, fetch, _, _) in script.ID_LISTS.items()},
+    lists = script.LISTS
+    assert isinstance(lists, Lists)
+    assert (lists.package, set(lists.packaged)) == (PACKAGE, set(PACKAGED_LISTS))
+    assert lists.client is client
+    assert lists.quota_header == REMAINING_HEADER == "x-ratelimit-remaining"
+    entries: dict[str, tuple[str | None, Callable[[], object]]] = {
+        listed.name: (listed.endpoint, listed.fetch) for listed in lists.lists
     }
+    assert [listed.name for listed in lists.lists if listed.enum is not None] == ["unitsOfMeasure"]
     assert set(entries) == set(PACKAGED_LISTS) == set(SOURCES)
     for name, (operation, fetch) in entries.items():
         assert (operation, fetch.__name__) == SOURCES[name][:2], name
@@ -107,6 +121,29 @@ def test_the_refresh_script_names_each_lists_upstream_operation() -> None:
         assert operation == PackagedList.load(PACKAGE, name).endpoint, name
         assert _endpoint_literals(fetch) == [operation], name
         assert (fetch.__doc__ or "").splitlines()[0] == f"Call ``{operation}``.", name
+
+
+def test_each_list_is_fetched_by_its_wrapper_itself() -> None:
+    """Core's reference frame and its nightly comparison take a wrapper's ``Answer`` and read
+    its payload (conventions §3, §10): each ``Listed`` of the script and each entry of
+    ``LIVE_LISTS`` in ``tests/test_live.py`` fetches by the ``api/`` wrapper itself, the same
+    one for a list, and declares the packaged list that ``params`` checks with."""
+    lists = {listed.name: listed.fetch for listed in _refresh_script().LISTS.lists}
+    spec = importlib.util.spec_from_file_location(
+        "live_lists", Path(__file__).parent / "test_live.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    live = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(live)
+    declared = {"commodities": COMMODITIES, "countries": COUNTRIES, "regions": REGIONS}
+    declared["unitsOfMeasure"] = UNITS
+    assert set(lists) == set(live.LIVE_LISTS) == set(SOURCES)
+    for name, (_, wrapper, _) in SOURCES.items():
+        assert lists[name] is getattr(api, wrapper), name
+        codes, fetch = live.LIVE_LISTS[name]
+        assert fetch is getattr(api, wrapper), name
+        assert codes is declared[name], name
 
 
 def test_packaged_lists_equal_the_recorded_answers() -> None:
@@ -129,6 +166,7 @@ def test_the_enum_matches_the_packaged_units() -> None:
 
 
 def test_enum_members_compare_equal_to_upstream_ints() -> None:
+    """The record is an input of the test, not an answer from ESR."""
     record = UnitOfMeasure.model_validate({"unitId": 2, "unitNames": "Running Bales"})
     assert record.unit_id == enums.UnitId.RUNNING_BALES
     assert enums.UnitId(1) is enums.UnitId.METRIC_TONS
@@ -156,6 +194,7 @@ def test_every_recorded_destination_is_in_the_packaged_list() -> None:
 
 
 def test_a_unit_the_list_lacks_still_parses() -> None:
+    """The record is an input of the test, not an answer from ESR."""
     record = CommodityData.model_validate(
         {
             "commodityCode": 104,
@@ -193,10 +232,10 @@ def test_the_recorded_unknown_commodity_is_refused_naming_the_nearest() -> None:
     assert error.source == "usda-esr"
     assert error.message == (
         "999 is not a commodity_code in the packaged commodities list (fetched 2026-10-28). "
-        "Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers unknown codes with an "
-        "empty result, so the package refuses them. If upstream added it since, the packaged "
-        "list is out of date."
-    ), "core 0.4.0's tail names no maintainer's command (sdk-core#111)"
+        "Nothing was sent. Did you mean 1001 (Flaxseed), 902 (Soybean Oil)? ESR answers "
+        "unknown codes with an empty result, so the package refuses them. If upstream added it "
+        "since, the packaged list is out of date."
+    ), "core's sentence that nothing was sent, after the first (sdk-core#481)"
 
 
 def test_a_stray_digit_leads_to_the_code_by_its_digits() -> None:
@@ -224,7 +263,10 @@ def test_swapped_digits_lead_to_the_country() -> None:
 
 
 def test_a_name_instead_of_a_code_is_refused_naming_codes_by_name() -> None:
-    with pytest.raises(InvalidRequestError, match="must be an integer code") as commodity:
+    """A text for an integer code is refused in core's wording (sdk-core ADR-0045,
+    decision 4, amended 2026-11-22), naming the codes whose upstream name holds it: the
+    package's own strategy, which reads digits, names none for a text."""
+    with pytest.raises(InvalidRequestError, match="is not an integer code") as commodity:
         validate_commodity_code("wheat")  # type: ignore[arg-type]
     assert not isinstance(commodity.value, UnknownCode)
     assert "By name: 101 (Wheat - HRW), 102 (Wheat - SRW), 103 (Wheat - HRS)." in str(
@@ -236,10 +278,35 @@ def test_a_name_instead_of_a_code_is_refused_naming_codes_by_name() -> None:
 
 @pytest.mark.parametrize("value", ["104", True, False, 104.0, None])
 def test_codes_that_are_not_integers_are_refused(value: object) -> None:
-    with pytest.raises(InvalidRequestError, match="commodity_code must be an integer code") as info:
+    """Core's wording: the value, the list's kind of code and the list with its fetch date,
+    that nothing was sent, and for a text of digits the integer to pass (sdk-core ADR-0045,
+    decision 4; https://github.com/xippios/sdk-usda-esr/issues/27)."""
+    with pytest.raises(InvalidRequestError) as info:
         validate_commodity_code(value)  # type: ignore[arg-type]
+    assert not isinstance(info.value, UnknownCode)
+    assert str(info.value).startswith(
+        f"{value!r} is not an integer code: commodity_code takes the integer codes of the "
+        "packaged commodities list (fetched 2026-10-28), such as 101 (Wheat - HRW). Nothing "
+        "was sent."
+    )
+    assert str(info.value).endswith(
+        " ESR answers unknown codes with an empty result, so the package refuses them."
+    ), "the reason closes it, as UnknownCode's"
     if value == "104":
-        assert "Pass it as the integer 104." in str(info.value)
+        assert " Pass it as the integer 104. ESR answers " in str(info.value)
+
+
+def test_a_text_for_a_country_code_names_the_integer_to_pass() -> None:
+    with pytest.raises(InvalidRequestError) as info:
+        validate_country_code("1220")  # type: ignore[arg-type]
+    assert str(info.value).startswith(
+        "'1220' is not an integer code: country_code takes the integer codes of the packaged "
+        "countries list (fetched 2026-10-28), such as "
+    )
+    assert str(info.value).endswith(
+        " Pass it as the integer 1220. ESR answers unknown codes with an empty result, so the "
+        "package refuses them."
+    )
 
 
 def test_the_latest_market_year_is_this_year_plus_two() -> None:
@@ -274,6 +341,7 @@ def test_a_future_market_year_is_refused_as_future() -> None:
         validate_market_year(2099)
     assert "answers a future one with an empty result" in info.value.message
     assert "four-digit" not in info.value.message
+    assert ", got 2099. Nothing was sent. ESR names" in info.value.message, "§5's sentence"
 
 
 def test_a_refusal_names_the_parameter_the_year_came_in() -> None:
@@ -301,5 +369,5 @@ def test_a_market_year_that_is_not_four_digits_is_refused_as_such(year: int) -> 
     one, and ``True`` and ``2024.0`` are not integers."""
     with pytest.raises(InvalidRequestError, match="must be a four-digit year") as info:
         validate_market_year(year)
-    assert f"got {year!r}" in info.value.message
+    assert f"got {year!r}. Nothing was sent. ESR names a market year" in info.value.message
     assert "future" not in info.value.message

@@ -27,9 +27,11 @@ after `copier update` brings a new version of the script, run it from the reposi
 and commit both files with the change:
 
 ```bash
-python3 scripts/adr_index.py            # writes docs/adr.md and docs/adr.json
-python3 scripts/adr_index.py --check    # writes nothing; exits 1 when either is stale
+python3 -I scripts/adr_index.py            # writes docs/adr.md and docs/adr.json
+python3 -I scripts/adr_index.py --check    # writes nothing; exits 1 when either is stale
 ```
 
 The script needs the standard library alone. It exits 1 and writes nothing on a record whose
-first line does not read as above, or whose number another record takes.
+first line does not read as above, or whose number another record takes. `docs/adr.md` lists
+the records in force first and the superseded ones after them, and each line opens with its
+record's anchor, so `docs/adr.md#0001` opens the index at ADR-0001.

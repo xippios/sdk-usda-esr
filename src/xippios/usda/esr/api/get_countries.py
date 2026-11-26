@@ -7,25 +7,26 @@ parsed into ``models.Country``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Country
 
 __all__ = ["get_countries"]
 
 
-async def get_countries() -> list[Country]:
+async def get_countries() -> Answer[list[Country]]:
     """Call ``ESRData_GetCountries``.
 
     Returns:
-        Every ESR country, in upstream order, one ``Country`` per record, names verbatim
-        with upstream's padding, e.g. ``Country(country_code=1220, country_name="CANADA  ",
-        ...)``.
+        The ``Answer``, when it was retrieved and, as its payload, every ESR country, in upstream
+            order, one ``Country`` per record, names verbatim with upstream's padding, e.g.
+            ``Country(country_code=1220, country_name="CANADA  ", ...)``.
 
     Raises:
         AuthError: api.data.gov refused the key in ``DATA_GOV_API_KEY``.
         RateLimitError: api.data.gov's hourly quota for the key is spent.
     """
-    raw = await client.get_json("/api/esr/countries")
-    return parse(list[Country], raw, source=SOURCE, endpoint="ESRData_GetCountries")
+    return await client.get_answer(
+        "/api/esr/countries", parse=list[Country], endpoint="ESRData_GetCountries"
+    )

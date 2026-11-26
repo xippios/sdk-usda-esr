@@ -8,24 +8,26 @@ parsed into ``models.Region``. Error shapes are mapped once in
 ``xippios.usda.esr._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esr._client import SOURCE, client
+from xippios.usda.esr._client import client
 from xippios.usda.esr.models import Region
 
 __all__ = ["get_regions"]
 
 
-async def get_regions() -> list[Region]:
+async def get_regions() -> Answer[list[Region]]:
     """Call ``ESRData_GetRegions``.
 
     Returns:
-        Every ESR region, in upstream order, one ``Region`` per record, e.g.
+        The ``Answer``, when it was retrieved and, as its payload, every ESR region, in upstream
+            order, one ``Region`` per record, e.g.
             ``Region(region_id=11, region_name="WESTERN HEMISPHERE")``
 
     Raises:
         AuthError: api.data.gov refused the key in ``DATA_GOV_API_KEY``.
         RateLimitError: api.data.gov's hourly quota for the key is spent.
     """
-    raw = await client.get_json("/api/esr/regions")
-    return parse(list[Region], raw, source=SOURCE, endpoint="ESRData_GetRegions")
+    return await client.get_answer(
+        "/api/esr/regions", parse=list[Region], endpoint="ESRData_GetRegions"
+    )

@@ -6,6 +6,12 @@ each note its evidence: the probe that showed it, its date, its operation and it
 recording under ``tests/fixtures/``, or its request where the probe kept no answer. A note
 here is a ``###`` section, and its last paragraph, ``Probe:``, names them. ``CLAUDE.md`` and
 ``params.py`` keep the package's rules and point here.
+
+Core's family check holds three rules of the file from core 0.4.1 on (sdk-core ADR-0044):
+the row of ``FETCHED.md``, the label and date that open each note's last paragraph, and the
+files its code spans cite, and the whole of ``FETCHED.md`` from the first run of the ported
+snapshot script that fetches. The tests here hold what it does not read: each probe's
+operation, recording or request, and the dates of its recordings.
 """
 
 import json
@@ -16,7 +22,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "xippios" / "usda" / "esr"
 UPSTREAM = ROOT / "docs" / "upstream"
 OBSERVED = UPSTREAM / "OBSERVED.md"
-HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 DATE = re.compile(r"\b20\d\d-\d\d-\d\d\b")
 CITED = re.compile(r"`((?:tests|docs|src)/[^`\s]+\.[a-z]+)`")
 REQUEST = re.compile(r"`GET (/api/esr/[^`\s]+)`")
@@ -57,21 +62,14 @@ def operations() -> dict[str, re.Pattern[str]]:
     return found
 
 
-def test_fetched_md_lists_observed_md_in_a_row_of_its_own() -> None:
-    fetched = (UPSTREAM / "FETCHED.md").read_text(encoding="utf-8")
-    assert f"| OBSERVED.md | - | - | - | - | - | - | - | {HAND} |" in fetched.splitlines()
-    assert "Nothing here was edited by hand but `OBSERVED.md`" in " ".join(fetched.split())
-
-
 def test_every_note_ends_with_its_probe() -> None:
-    """The date, an operation of the snapshot, and a recording or a request."""
+    """An operation of the snapshot, and a recording or a request; the family check holds
+    the label and the date."""
     known = operations()
     found = notes()
     assert found
     for heading, paragraphs in found.items():
         probe = paragraphs[-1]
-        assert probe.startswith("Probe: "), heading
-        assert DATE.search(probe), heading
         named = OPERATION.findall(probe)
         assert named, heading
         assert set(named) <= set(known), heading
@@ -104,12 +102,6 @@ def test_every_request_is_one_of_the_snapshots_operations() -> None:
     assert paths
     patterns = operations().values()
     assert [path for path in paths if not any(p.fullmatch(path) for p in patterns)] == []
-
-
-def test_every_file_the_notes_cite_exists() -> None:
-    cited = CITED.findall(text())
-    assert cited
-    assert [path for path in cited if not (ROOT / path).is_file()] == []
 
 
 def test_the_rules_point_to_the_notes() -> None:

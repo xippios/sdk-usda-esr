@@ -2,9 +2,9 @@
 # pull request that changes a file under it. The paths below steer how the repository is
 # built, checked and worked on: `.github/`, its workflows among them, `CLAUDE.md` and
 # `.claude/`, the instructions and commands for Claude Code, `pyproject.toml`, its manifest,
-# and `.copier-answers.yml`, the answers it was generated from. sdk-template renders the
-# file from its `human` answer, and `copier update` renders it again, so a change goes to
-# the answer or to the template, never to this copy.
+# and `.copier-answers.yml`, the answers it was generated from. sdk-template copies the
+# file as it stands, and `copier update` copies it again, so a change goes to the template,
+# never to this copy.
 /.github/** @jdidaskalu
 /CLAUDE.md @jdidaskalu
 /.claude/** @jdidaskalu
