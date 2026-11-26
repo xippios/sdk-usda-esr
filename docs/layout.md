@@ -33,6 +33,8 @@ tests/
   test_refresh_upstream.py  the snapshot script's own pages, notes and paragraph on the
                    kit of the FAS portal, offline
   test_observed.py docs/upstream/OBSERVED.md as committed: each note's probe, its files
+  test_readme.py   README.md's scope against the snapshot: each documented parameter a
+                   task takes or the README names, and each format besides JSON named
 docs/
   upstream/        also OBSERVED.md, the notes by hand on what ESR does but never documents,
                    and openapi/, the ESR parts of the portal's and the backend's documents
