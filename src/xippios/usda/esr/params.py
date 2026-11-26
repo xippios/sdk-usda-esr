@@ -10,8 +10,10 @@ one (sdk-core ADR-0041, decision 5). Each list a check or a name reads is declar
 ``PackagedList.codes`` (sdk-core ADR-0045): ``COMMODITIES``, ``COUNTRIES`` and ``REGIONS``,
 whose ``check`` refuses a code the list lacks with core's ``UnknownCode``, naming the nearest
 codes, ``_closest``: by number through core's ``nearest``, then by ESR's own pass on the
-digits (https://github.com/xippios/sdk-usda-esr/issues/27); ``COUNTRIES`` and ``UNITS`` name the
-codes of an exports record, the ``NamedBy`` of ``models.CommodityData`` (sdk-core ADR-0067).
+digits (https://github.com/xippios/sdk-usda-esr/issues/27). The lists name the codes of the
+records, the ``NamedBy`` of ``models`` (sdk-core ADR-0067, decision 6): ``COMMODITIES``,
+``COUNTRIES`` and ``UNITS`` those of an exports record, ``COMMODITIES`` a release record's,
+``REGIONS`` a country's region and ``UNITS`` a commodity's unit.
 Each refusal before a request says that nothing was sent, core's and the package's own
 (conventions §5).
 

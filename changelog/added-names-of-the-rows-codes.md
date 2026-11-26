@@ -5,4 +5,5 @@
   the one asked for, `list_commodities` its units and `list_countries` its regions and the one
   asked for. A row's code that the packaged list lacks is left out of the names and said in
   `meta.notes`, so no answer is withheld for it.
-  (https://github.com/xippios/sdk-core/issues/478, https://github.com/xippios/sdk-usda-esr/issues/30)
+  (sdk-core ADR-0067, https://github.com/xippios/sdk-usda-esr/issues/30,
+  https://github.com/xippios/sdk-usda-esr/issues/85)

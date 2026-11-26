@@ -5,4 +5,5 @@
   response cache answers within its lifetime. Its refusal, as `get_weekly_series`' of a range
   past that year and either task's of a commodity that the release list lacks, says that the
   release list was read and no exports were requested.
-  (https://github.com/xippios/sdk-usda-esr/issues/21, https://github.com/xippios/sdk-usda-esr/issues/60)
+  (sdk-core ADR-0054, https://github.com/xippios/sdk-usda-esr/issues/21,
+  https://github.com/xippios/sdk-usda-esr/issues/84)
