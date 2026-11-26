@@ -238,7 +238,8 @@ def test_weekly_series_orders_what_upstream_sends_out_of_order(
 def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture) -> None:
     """ESR's ``[]`` for one destination: the recorded body of ``year_2099`` (HTTP 200,
     ``[]``) served at a valid year's URL (``url=``), moved, not written. Nothing is
-    filled, and an empty answer has no vintage.
+    filled, an empty answer has no vintage, and it names the country asked for
+    (https://github.com/xippios/sdk-usda-esr/issues/30).
     Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
     """
     route = replay_fixture(COUNTRY, "year_2099", url=_country_url(2025))
@@ -252,6 +253,9 @@ def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture
         "start_year": 2025,
         "end_year": 2025,
     }
+    assert result.meta.names == {"country_code": {"1220": "CANADA"}}, (
+        "the country asked for, though no row names it (conventions §4)"
+    )
     assert result.meta.endpoint == OPERATIONS[COUNTRY]
 
 

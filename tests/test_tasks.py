@@ -20,6 +20,7 @@ from xippios.core import (
     parse,
 )
 from xippios.core.testing import (
+    ReplayFixture,
     fixture_path,
     load_fixture,
     mcp_call,
@@ -165,6 +166,25 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     assert result.meta.published_at is None
 
 
+def test_an_empty_answer_for_one_country_names_the_country(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """An answer without rows for one destination names the country asked for, as every
+    answer names the country it stands for (conventions §4;
+    https://github.com/xippios/sdk-usda-esr/issues/30). The recorded body of ``year_2099``
+    (HTTP 200, ``[]``) served at 2024's URL of the same pair, which upstream answers alike for
+    a year without exports.
+    Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
+    """
+    route = replay_fixture(
+        COUNTRY, "year_2099", url=f"{EXPORTS}/104/countryCode/1220/marketYear/2024"
+    )
+    result = tasks.get_exports(WHEAT_WHITE, 2024, CANADA)
+    assert route.call_count == 1
+    assert result.data == []
+    assert result.meta.names == {"country_code": {"1220": "CANADA"}}
+
+
 def test_valid_codes_without_exports_are_an_empty_result(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
@@ -175,6 +195,7 @@ def test_valid_codes_without_exports_are_an_empty_result(
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
     assert result.meta.request == {"commodity_code": 501, "market_year": 2024}
+    assert result.meta.names == {}, "every country at once and no rows: no code to name"
     assert route.call_count == 1
 
 
