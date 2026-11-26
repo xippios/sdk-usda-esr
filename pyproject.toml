@@ -50,18 +50,6 @@ dev = [
   "detect-secrets>=1.5",
 ]
 
-[tool.uv.sources]
-# Development only: xippios-core from git, for a core change that is not released yet.
-# While the pin is set, uv takes core from it and ignores the version bound above.
-# Before a release, remove the pin and raise core_version to the release that carries
-# the pinned change: X.Y.Z with Z the patch that shipped it, or X.Y.0 when the minor
-# itself did; still one minor. Then uv lock:
-#   uvx --from 'copier>=9.19' copier update --defaults --vcs-ref=:current: -d core_git_ref= -d core_version=X.Y.Z
-# The removal is a PR of its own, merged before the release PR; /release-prep and
-# publish.yml refuse a pinned release.
-xippios-core = { git = "https://github.com/xippios/sdk-core.git", rev = "4060d9615012b09487d87a51064c610de34be069" }  # pragma: allowlist secret (a git ref, not a key)
-xippios-usda-fas = { git = "https://github.com/xippios/sdk-usda-fas.git", rev = "f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb" }  # pragma: allowlist secret (a git ref, not a key)
-
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"

@@ -1,8 +1,8 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.4.1-78-g3e75893
+_commit: v0.5.0
 _src_path: https://github.com/xippios/sdk-template.git
 api_key_env: DATA_GOV_API_KEY
-core_git_ref: 4060d9615012b09487d87a51064c610de34be069
+core_git_ref: ''
 core_version: 0.5.0
 has_files: false
 has_reference_data: true

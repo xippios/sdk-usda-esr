@@ -211,7 +211,7 @@ async def test_market_year_1900_answers_404_with_an_empty_body(
     assert isinstance(error, NotFoundError), "in the taxonomy, conventions §5"
     assert error.path == f"{EXPORTS}/1900"
     assert error.source == SOURCE
-    assert f"no data for {EXPORTS}/1900 (HTTP 404 with an empty body)" in error.message
+    assert f"no data for GET {EXPORTS}/1900 (HTTP 404 with an empty body)" in error.message
     route = replay_fixture(COUNTRY, "year_1900")
     with pytest.raises(NoDataForYear, match="empty body"):
         await api.get_country_data(104, 1220, 1900)

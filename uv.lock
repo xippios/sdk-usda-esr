@@ -1405,10 +1405,14 @@ wheels = [
 [[package]]
 name = "xippios-core"
 version = "0.5.0"
-source = { git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069#4060d9615012b09487d87a51064c610de34be069" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/2e/3558ab4a8797125e6e38a2b5aaec7a87c99804770a31c51fda32278cffbf/xippios_core-0.5.0.tar.gz", hash = "sha256:1fcf19d1e06d257bfc300d145e33ea77dc7d7980ed2859d0fbea592ddfb02884", size = 992440, upload-time = "2026-11-25T18:31:04.597Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/51/71ace202ce5bb078ab96d0b68838b911949e0a5457a77488d25f2a7a41db/xippios_core-0.5.0-py3-none-any.whl", hash = "sha256:0aba40c76a21b8cb60fb2c973339fbd75ed20011dc619816d05dd9accd01811a", size = 290139, upload-time = "2026-11-25T18:31:03.107Z" },
 ]
 
 [package.optional-dependencies]
@@ -1459,11 +1463,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "xippios-core", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
-    { name = "xippios-core", extras = ["http"], marker = "extra == 'http'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
-    { name = "xippios-core", extras = ["mcp"], marker = "extra == 'mcp'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
-    { name = "xippios-core", extras = ["testing"], marker = "extra == 'testing'", git = "https://github.com/xippios/sdk-core.git?rev=4060d9615012b09487d87a51064c610de34be069" },
-    { name = "xippios-usda-fas", git = "https://github.com/xippios/sdk-usda-fas.git?rev=f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb" },
+    { name = "xippios-core", specifier = "~=0.5.0" },
+    { name = "xippios-core", extras = ["http"], marker = "extra == 'http'", specifier = "~=0.5.0" },
+    { name = "xippios-core", extras = ["mcp"], marker = "extra == 'mcp'", specifier = "~=0.5.0" },
+    { name = "xippios-core", extras = ["testing"], marker = "extra == 'testing'", specifier = "~=0.5.0" },
+    { name = "xippios-usda-fas", specifier = "~=0.1.0" },
 ]
 provides-extras = ["mcp", "http", "testing"]
 
@@ -1481,7 +1485,11 @@ dev = [
 [[package]]
 name = "xippios-usda-fas"
 version = "0.1.0"
-source = { git = "https://github.com/xippios/sdk-usda-fas.git?rev=f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb#f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "xippios-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/13/bb/e0e76447c2d56d8f27f6ad41400f661ee35c52cfce131f6bd39868b64013/xippios_usda_fas-0.1.0.tar.gz", hash = "sha256:189d6325fb39e138e9d126f4dd3b4102ba8af41a2206ab139726a85979178f07", size = 25581, upload-time = "2026-11-26T08:29:58.619Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/14/e1100a004daa45504b0d8ecb11491812c53425c9239d4a8705f339b6c789/xippios_usda_fas-0.1.0-py3-none-any.whl", hash = "sha256:4d4a53a4b16e560793fd87131eef8990b4d9c2cbeb534eda6cb710a6d32acc90", size = 23279, upload-time = "2026-11-26T08:29:57.232Z" },
 ]
