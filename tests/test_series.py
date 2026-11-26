@@ -386,10 +386,10 @@ def test_a_range_ending_before_this_year_reads_no_release_list(
 
 RANGE_REFUSED = (
     "ESR has not released market year 2028 of commodity 104 yet: its latest released market "
-    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). ESR "
-    "answers a market year it has not released with an empty list, the same answer as a year "
-    "without exports, so the range 2024 to 2028 is refused rather than returned without it; "
-    "ask for market years up to 2027."
+    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). The "
+    "release list was read and no exports were requested. ESR answers a market year it has not "
+    "released with an empty list, the same answer as a year without exports, so the range 2024 "
+    "to 2028 is refused rather than returned without it; ask for market years up to 2027."
 )
 """Probed 2026-10-28, one keyed call, not kept: wheat white to Canada, market year 2028,
 answered HTTP 200 with ``[]``, the answer of a released year without exports."""
@@ -903,3 +903,6 @@ async def test_the_series_tool_states_the_most_one_call_spends() -> None:
     description = " ".join((tools["usda_esr_get_weekly_series"].description or "").split())
     assert "at most 11 requests, 44 attempts with retries" in description
     assert "meta.notes" in description, "the note on the market years is named"
+    assert "since the records state no release: ``get_release_dates`` gives it" in description, (
+        "why the vintage is empty, and where the release is (sdk-usda-esr#67; conventions §4)"
+    )

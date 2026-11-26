@@ -894,10 +894,11 @@ def test_retrieved_at_is_the_answers_time_a_cache_hit_included(
 
 EXPORTS_REFUSED = (
     "ESR has not released market year 2028 of commodity 104 yet: its latest released market "
-    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). ESR "
-    "answers a market year it has not released with an empty list, the same answer as a year "
-    "without exports, so market year 2028 is refused rather than answered as a year without "
-    "exports; ask for market year 2027 or an earlier one."
+    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). The "
+    "release list was read and no exports were requested. ESR answers a market year it has not "
+    "released with an empty list, the same answer as a year without exports, so market year "
+    "2028 is refused rather than answered as a year without exports; ask for market year 2027 "
+    "or an earlier one."
 )
 """Probed 2026-10-28, one keyed call, not kept: wheat white to Canada, market year 2028,
 answered HTTP 200 with ``[]``, the answer of a released year without exports
