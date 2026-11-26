@@ -77,7 +77,7 @@ COUNTRIES: PackagedCodes = PackagedList.load(PACKAGE, "countries").codes(
 )
 """The packaged destination countries by ``countryCode``, each named by its
 ``countryDescription``, padded upstream: a refusal and ``meta.names`` show it with its runs of
-white space collapsed, ``"CANADA"`` (sdk-core ADR-0056)."""
+white space collapsed, ``"CANADA"`` (sdk-core ADR-0067, decision 2)."""
 
 REGIONS: PackagedCodes = PackagedList.load(PACKAGE, "regions").codes(
     "regionId", "regionName", source=SOURCE
@@ -106,7 +106,7 @@ def _closest(value: int | str, codes: Mapping[int, str]) -> list[tuple[int, str]
     The pass by number is core's ``nearest``, the strategy this package carried until
     sdk-core 0.4.0 took it in (https://github.com/xippios/sdk-core/issues/107); the pass by
     digits stays ESR's own, which neither ``nearest`` nor ``closest`` (for string codes)
-    covers (sdk-core ADR-0023, decision 4).
+    covers (sdk-core ADR-0059, decision 5).
 
     The commodity ``999`` leads to ``1001`` (Flaxseed) and ``902`` (Soybean Oil), the
     nearest by number; ``1040``, a stray digit, also to ``104`` (Wheat - White), found by
