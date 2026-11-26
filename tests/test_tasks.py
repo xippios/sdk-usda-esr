@@ -447,8 +447,9 @@ def _recorded_releases() -> list[DataReleaseInfo]:
 
 
 def _without_wheat_white() -> ReleaseList:
-    """The recorded release list without wheat white's record, as the wrapper hands it on, in
-    memory (a function input, not a fixture file)."""
+    """The recorded release list without wheat white's record, as the wrapper hands it on, for
+    a replaced wrapper to answer. The release list is an input of the test, not an answer from
+    ESR (conventions §10)."""
     records = [r for r in _recorded_releases() if r.commodity_code != WHEAT_WHITE]
     return ReleaseList(records, [RELEASED] * len(records))
 
@@ -976,9 +977,10 @@ def test_get_exports_reads_the_release_list_from_the_calendar_year_on(
 def test_get_exports_of_a_commodity_the_release_list_lacks(
     monkeypatch: pytest.MonkeyPatch, respx_mock: respx.MockRouter
 ) -> None:
-    """The recorded release list without wheat white, in memory (a function input, not a
-    fixture file): a market year from the calendar year on cannot be told released, so it is
-    refused, as the weekly series refuses its range, before any exports request."""
+    """The recorded release list without wheat white, handed on by a replaced wrapper: a market
+    year from the calendar year on cannot be told released, so it is refused, as the weekly
+    series refuses its range, before any exports request. The release list is an input of the
+    test, not an answer from ESR (conventions §10)."""
 
     async def without_wheat_white() -> Answer[ReleaseList]:
         return Answer(_without_wheat_white(), datetime.now(UTC))
