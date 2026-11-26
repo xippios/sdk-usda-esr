@@ -471,7 +471,9 @@ async def _check_released(
     from the current calendar year on (``_calendar_year``), and refuses with ``NotFoundError``
     naming the commodity's current market year (conventions §4, §5; sdk-core ADR-0041,
     decisions 6 and 7; https://github.com/xippios/sdk-usda-esr/issues/21). An earlier year
-    reads no list. The read is one request, which core's cache answers within its lifetime.
+    reads no list. The read is one request, which core's cache answers within its lifetime,
+    and the refusal after it says what was sent: the list, and no exports (conventions §5;
+    sdk-core ADR-0054, amendment 2026-11-22).
 
     Args:
         commodity_code: The commodity whose record the release list holds, e.g. ``104``.
@@ -487,9 +489,9 @@ async def _check_released(
         raise NotFoundError(
             f"ESR has not released market year {market_year} of commodity {commodity_code} "
             f"yet: its latest released market year is {latest}, the current one in ESR's "
-            "release list (ESRData_GetDataReleaseInfo). ESR answers a market year it has not "
-            "released with an empty list, the same answer as a year without exports, so "
-            f"{refused(latest)}.",
+            "release list (ESRData_GetDataReleaseInfo). The release list was read and no "
+            "exports were requested. ESR answers a market year it has not released with an "
+            f"empty list, the same answer as a year without exports, so {refused(latest)}.",
             source=SOURCE,
         )
 
@@ -551,17 +553,17 @@ async def get_weekly_series_async(
 ) -> Result[list[CommodityData]]:
     """One destination's weekly US export sales of a commodity over market years, oldest first.
 
-    One request to ``ESRData_GetCountryData``, the one ``get_exports`` makes with a country,
-    per market year from ``start_year`` to ``end_year``, both included, at most 10 market
-    years. When ``end_year`` is the current calendar year or later, the release list comes
-    first, one request more, and a range past the commodity's current market year raises
-    ``NotFoundError`` naming the latest released one. One call sends at most 11 requests, 44
-    attempts with retries. The records are ordered by ``week_ending_date`` and otherwise
-    unchanged; a week that straddles two market years comes once for each, the older year's
-    row first. ``meta.notes`` names each market year with its count of rows, in their order,
-    and each passed over, one ESR holds no data for (1900). Any other error stops the call and
-    returns nothing. ``meta.vintage`` and ``meta.published_at`` stay empty, as for
-    ``get_exports``.
+    One request to ``ESRData_GetCountryData`` per market year from ``start_year`` to
+    ``end_year``, both included, at most 10 market years. When ``end_year`` is the current
+    calendar year or later, the release list comes first, one request more, and a range past
+    the commodity's current market year raises ``NotFoundError`` naming the latest released
+    one. One call sends at most 11 requests, 44 attempts with retries. The records are ordered
+    by ``week_ending_date`` and otherwise unchanged; a week that straddles two market years
+    comes once for each, the older year's row first. ``meta.notes`` names each market year with
+    its count of rows, in their order, and each passed over, one ESR holds no data for (1900).
+    Any other error stops the call and returns nothing. ``meta.vintage`` and
+    ``meta.published_at`` stay empty, since the records state no release:
+    ``get_release_dates`` gives it.
 
     Args:
         commodity_code: ESR commodity code, an integer, e.g. ``104`` (Wheat - White),

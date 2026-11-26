@@ -2,5 +2,6 @@
   commodity's current market year, where it answered the empty list that ESR gives a year
   without exports, so the empty list now means no exports alone. For a market year from the
   current calendar year on it reads the release list first, one request more, which core's
-  response cache answers within its lifetime. (https://github.com/xippios/sdk-usda-esr/issues/21,
-  https://github.com/xippios/sdk-usda-esr/issues/60)
+  response cache answers within its lifetime. Its refusal, as `get_weekly_series`' of a range
+  past that year, says that the release list was read and no exports were requested.
+  (https://github.com/xippios/sdk-usda-esr/issues/21, https://github.com/xippios/sdk-usda-esr/issues/60)
