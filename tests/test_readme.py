@@ -45,19 +45,48 @@ def snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
+def documented() -> list[str]:
+    """Every parameter that an operation of the snapshot documents, by upstream's name."""
+    return sorted(
+        {
+            parameter["name"]
+            for operation in operations()
+            for parameter in operation.get("parameters", [])
+        }
+    )
+
+
+def unnamed(taken: set[str]) -> list[str]:
+    """The documented parameters that no task takes in ``taken`` and the README does not
+    name as one a caller cannot set."""
+    not_taken = [name for name in documented() if snake(name) not in taken]
+    text = readme()
+    return [name for name in not_taken if f"`{name}`" not in text]
+
+
 def test_every_documented_parameter_is_a_task_s_argument_or_named() -> None:
     """A parameter that the snapshot documents is an argument of a task, by its snake_case
     name, or the README names it by upstream's name as one a caller cannot set."""
-    taken = arguments()
-    documented = {
-        parameter["name"]
-        for operation in operations()
-        for parameter in operation.get("parameters", [])
-    }
-    assert documented, "the exports operations take path parameters"
-    not_taken = [name for name in sorted(documented) if snake(name) not in taken]
-    text = readme()
-    assert [name for name in not_taken if f"`{name}`" not in text] == []
+    assert documented(), "the exports operations take path parameters"
+    assert unnamed(arguments()) == []
+
+
+def test_a_parameter_that_no_task_takes_is_held_to_the_readme_s_word() -> None:
+    """Were ``country_code`` no argument of a task, ``countryCode`` would be a documented
+    parameter that a caller cannot set, and the README, which names it among those the tasks
+    take, would not say so: the check finds it."""
+    assert unnamed(arguments() - {"country_code"}) == ["countryCode"]
+
+
+def test_the_scope_stands_under_its_heading_after_the_introduction() -> None:
+    """``## Scope`` is the README's first section, before ``## Install``: what the package
+    wraps comes first in the family's order of a README (conventions §13), and the README's
+    ``## Scope`` is where a documented parameter that a caller cannot set is named
+    (conventions §2)."""
+    headings = [
+        line for line in (ROOT / "README.md").read_text("utf-8").splitlines() if line[:3] == "## "
+    ]
+    assert headings[:2] == ["## Scope", "## Install"]
 
 
 def test_every_documented_format_but_json_is_named() -> None:
