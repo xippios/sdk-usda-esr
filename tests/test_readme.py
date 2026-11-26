@@ -1,10 +1,11 @@
 """``README.md``'s scope against the snapshot in ``docs/upstream/openapi/``.
 
-The README says in one paragraph what of ESR the package wraps and what it leaves out, and
-names each choice that the snapshot documents and a caller of the package cannot make
-(https://github.com/xippios/sdk-usda-esr/issues/62, part 8). The tests read the choices from
+The README's ``## Scope`` says what of ESR the package wraps and what it leaves out, and
+names, in a sentence on what a caller cannot set or make, each choice that the snapshot
+documents and a caller of the package cannot make (conventions §2;
+https://github.com/xippios/sdk-usda-esr/issues/62, part 8). The tests read the choices from
 the portal's document, so a refresh that documents a new one fails here until a task takes it
-or the README names it.
+or that sentence names it.
 """
 
 import inspect
@@ -27,8 +28,17 @@ def operations() -> list[dict[str, Any]]:
     return [operation for methods in document["paths"].values() for operation in methods.values()]
 
 
-def readme() -> str:
-    return " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+def readme() -> list[str]:
+    return (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+
+
+def cannot() -> list[str]:
+    """The sentences of the README's ``## Scope`` that say what a caller cannot set or make."""
+    lines = readme()
+    start = lines.index("## Scope") + 1
+    end = next(i for i in range(start, len(lines)) if lines[i].startswith("## "))
+    text = " ".join(" ".join(lines[start:end]).split())
+    return [sentence for sentence in re.split(r"(?<=\.) ", text) if "cannot" in sentence]
 
 
 def arguments() -> set[str]:
@@ -57,11 +67,11 @@ def documented() -> list[str]:
 
 
 def unnamed(taken: set[str]) -> list[str]:
-    """The documented parameters that no task takes in ``taken`` and the README does not
-    name as one a caller cannot set."""
+    """The documented parameters that no task takes in ``taken`` and no sentence of the
+    README's ``## Scope`` on what a caller cannot set names."""
     not_taken = [name for name in documented() if snake(name) not in taken]
-    text = readme()
-    return [name for name in not_taken if f"`{name}`" not in text]
+    named = " ".join(cannot())
+    return [name for name in not_taken if f"`{name}`" not in named]
 
 
 def test_every_documented_parameter_is_a_task_s_argument_or_named() -> None:
@@ -83,15 +93,14 @@ def test_the_scope_stands_under_its_heading_after_the_introduction() -> None:
     wraps comes first in the family's order of a README (conventions §13), and the README's
     ``## Scope`` is where a documented parameter that a caller cannot set is named
     (conventions §2)."""
-    headings = [
-        line for line in (ROOT / "README.md").read_text("utf-8").splitlines() if line[:3] == "## "
-    ]
+    headings = [line for line in readme() if line[:3] == "## "]
     assert headings[:2] == ["## Scope", "## Install"]
 
 
 def test_every_documented_format_but_json_is_named() -> None:
     """Each format that an operation produces besides JSON, which the package reads, is one
-    a caller cannot ask for, and the README names it: ESR documents XML."""
+    a caller cannot ask for, and the README's sentence on what a caller cannot make names it:
+    ESR documents XML."""
     formats = {
         media.split("/")[1].upper()
         for operation in operations()
@@ -99,5 +108,5 @@ def test_every_documented_format_but_json_is_named() -> None:
         if media not in JSON_TYPES
     }
     assert formats == {"XML"}
-    text = readme()
-    assert [name for name in sorted(formats) if name not in text] == []
+    named = " ".join(cannot())
+    assert [name for name in sorted(formats) if name not in named] == []
