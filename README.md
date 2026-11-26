@@ -14,7 +14,8 @@ or to every country, the release list, and the four lists of codes, which the pa
 and refreshes before each release. ESR documents path parameters alone, `commodityCode`,
 `countryCode` and `marketYear`, and the tasks take every one. The documentation lists XML
 beside JSON among the forms that each operation produces; the package asks for JSON, so XML
-is the one documented choice that a caller cannot make. What the package adds is one destination's series over market
+is the one documented choice that a caller cannot make
+(https://github.com/xippios/sdk-usda-esr/issues/82). What the package adds is one destination's series over market
 years and filters that select records of the release list and of the packaged lists. It
 ranks no destination, selects no week for the caller and derives no figure from the
 records: a caller reads every record as ESR sends it from `get_exports`.
