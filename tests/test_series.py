@@ -40,6 +40,7 @@ from xippios.usda.fas import NoDataForYear
 import xippios.usda.esr as package
 from xippios.usda.esr import api, models, tasks
 from xippios.usda.esr._client import BASE_URL
+from xippios.usda.esr.api.get_data_release_info import ReleaseList
 from xippios.usda.esr.mcp import server
 from xippios.usda.esr.models import CommodityData, DataReleaseInfo
 from xippios.usda.esr.params import latest_market_year
@@ -130,7 +131,7 @@ def test_get_weekly_series_spans_market_years_oldest_first(
     rows put together by week, each unchanged; the week both carry keeps 2023's row first."""
     older = replay_fixture(COUNTRY, "wheat_white_canada_2023")
     newer = replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert sent_urls(older) == [_country_url(2023)]
     assert sent_urls(newer) == [_country_url(2024)]
     recorded_2023 = _recorded(COUNTRY, "wheat_white_canada_2023")
@@ -153,7 +154,15 @@ def test_get_weekly_series_spans_market_years_oldest_first(
         "start_year": 2023,
         "end_year": 2024,
     }
-    assert result.meta.vintage == "2024-06-06", "the last week"
+    assert result.meta.vintage is None, (
+        "ESR states no release for the records answered; a week computed from them is none"
+    )
+    assert result.meta.notes == [
+        "Market years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows."
+    ], (
+        "each market year with its rows, in their order: the first 53 rows are 2023's, so the "
+        "two rows of the week ending 2023-06-01 are told apart (sdk-usda-esr#23)"
+    )
     assert result.meta.names == {
         "country_code": {"1220": "CANADA"},
         "unit_id": {"1": "Metric Tons"},
@@ -178,7 +187,7 @@ def test_the_requests_go_out_oldest_first(respx_mock: respx.MockRouter) -> None:
             httpx.Response(a.status, headers=a.headers, content=a.content) for a in answers
         ]
     )
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert sent_urls(route) == [_country_url(2023), _country_url(2024)], "oldest first"
     assert len(result.data) == 53 + 54
 
@@ -188,7 +197,7 @@ def test_a_weekly_series_of_one_market_year_is_its_weeks(
 ) -> None:
     """2024 to 2024, a range of one: one request, the 54 weeks 0.1.0 answered for 2024."""
     route = replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2024)
     assert sent_urls(route) == [_country_url(2024)], "one request"
     recorded = _recorded(COUNTRY, "wheat_white_canada_2024")
     weeks = [r.week_ending_date for r in recorded]
@@ -205,7 +214,8 @@ def test_a_weekly_series_of_one_market_year_is_its_weeks(
         "start_year": 2024,
         "end_year": 2024,
     }
-    assert result.meta.vintage == "2024-06-06"
+    assert result.meta.vintage is None
+    assert result.meta.notes == ["Market years in the order of the rows: 2024 with 54 rows."]
     assert result.meta.published_at is None
 
 
@@ -225,11 +235,14 @@ def test_weekly_series_orders_what_upstream_sends_out_of_order(
         return Answer(answers[market_year][::-1], datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_country_data", reversed_answer)
-    one = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2024)
+    one = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2024)
     assert one.data == answers[2024]
-    assert one.meta.vintage == "2024-06-06"
-    both = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    assert one.meta.vintage is None
+    both = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert both.data == answers[2023] + answers[2024]
+    assert both.meta.notes == [
+        "Market years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows."
+    ], "the order of the rows, whatever upstream's"
 
 
 # empty answers, absent market years, the gateway's 404
@@ -243,10 +256,11 @@ def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture
     Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
     """
     route = replay_fixture(COUNTRY, "year_2099", url=_country_url(2025))
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2025, 2025)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2025, end_year=2025)
     assert sent_urls(route) == [_country_url(2025)]
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert result.meta.notes == ["Market years in the order of the rows: 2025 with 0 rows."]
     assert result.meta.request == {
         "commodity_code": 104,
         "country_code": 1220,
@@ -270,11 +284,14 @@ def test_a_released_year_without_exports_adds_no_rows(replay_fixture: ReplayFixt
     releases = replay_fixture(RELEASES, "all")
     empty = replay_fixture(COUNTRY, "year_2099", url=_country_url(2023))
     newer = replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert (empty.call_count, newer.call_count) == (1, 1)
     assert sent_urls(releases) == []
     assert result.data == _recorded(COUNTRY, "wheat_white_canada_2024")
-    assert result.meta.vintage == "2024-06-06"
+    assert result.meta.vintage is None
+    assert result.meta.notes == [
+        "Market years in the order of the rows: 2023 with 0 rows, 2024 with 54 rows."
+    ], "a released year without exports is answered, with no rows"
 
 
 # a range past the current calendar year: the release list first
@@ -297,7 +314,7 @@ def test_a_range_into_next_year_reads_the_release_list_first(
             **{_country_url(year): (COUNTRY, "year_2099") for year in (2025, 2026, 2027)},
         },
     )
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2027)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2027)
     assert sent_urls(route) == [
         RELEASE_DATES,
         _country_url(2024),
@@ -331,7 +348,7 @@ def test_a_range_ending_this_year_reads_the_release_list_first(
             _country_url(2026): (COUNTRY, "year_2099"),
         },
     )
-    tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2026)
+    tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2026)
     assert sent_urls(route) == [
         RELEASE_DATES,
         _country_url(2024),
@@ -356,9 +373,9 @@ def test_a_range_ending_before_this_year_reads_no_release_list(
             _country_url(2025): (COUNTRY, "year_2099"),
         },
     )
-    historical = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    historical = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert len(historical.data) == 53 + 54
-    tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2025)
+    tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2025)
     assert sent_urls(route) == [
         _country_url(2023),
         _country_url(2024),
@@ -369,10 +386,10 @@ def test_a_range_ending_before_this_year_reads_no_release_list(
 
 RANGE_REFUSED = (
     "ESR has not released market year 2028 of commodity 104 yet: its latest released market "
-    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). ESR "
-    "answers a market year it has not released with an empty list, the same answer as a year "
-    "without exports, so the range 2024 to 2028 is refused rather than returned without it; "
-    "ask for market years up to 2027."
+    "year is 2027, the current one in ESR's release list (ESRData_GetDataReleaseInfo). The "
+    "release list was read and no exports were requested. ESR answers a market year it has not "
+    "released with an empty list, the same answer as a year without exports, so the range 2024 "
+    "to 2028 is refused rather than returned without it; ask for market years up to 2027."
 )
 """Probed 2026-10-28, one keyed call, not kept: wheat white to Canada, market year 2028,
 answered HTTP 200 with ``[]``, the answer of a released year without exports."""
@@ -387,13 +404,13 @@ def test_a_range_past_the_current_market_year_is_refused(
     7), after the one release-list request and before any yearly one, nothing partial."""
     releases = replay_fixture(RELEASES, "all")
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2028)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2028)
     assert str(info.value) == RANGE_REFUSED
     assert not isinstance(info.value, (InvalidRequestError, NoDataForYear))
     assert sent_urls(releases) == [RELEASE_DATES]
     assert len(respx_mock.calls) == 1, "no yearly request"
     with pytest.raises(NotFoundError, match="its latest released market year is 2027"):
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2028, 2028)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2028, end_year=2028)
 
 
 @pytest.mark.usefixtures("in_2026")
@@ -404,7 +421,7 @@ def test_a_calendar_year_commodity_is_refused_past_this_year(
     market year is 2026, so 2025 to 2027 is refused naming 2026."""
     releases = replay_fixture(RELEASES, "all")
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(1701, CANADA, 2025, 2027)
+        tasks.get_weekly_series(1701, CANADA, start_year=2025, end_year=2027)
     assert str(info.value).startswith(
         "ESR has not released market year 2027 of commodity 1701 yet: its latest released "
         "market year is 2026, "
@@ -427,7 +444,7 @@ def test_a_calendar_year_commodity_in_january_is_refused(
     monkeypatch.setattr(tasks, "_calendar_year", lambda: 2027)
     releases = replay_fixture(RELEASES, "all")
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(1701, CANADA, 2026, 2027)
+        tasks.get_weekly_series(1701, CANADA, start_year=2026, end_year=2027)
     assert str(info.value).startswith(
         "ESR has not released market year 2027 of commodity 1701 yet: its latest released "
         "market year is 2026, "
@@ -449,12 +466,15 @@ def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
     )
 
-    async def without_wheat_white() -> Answer[list[DataReleaseInfo]]:
-        return Answer([r for r in recorded if r.commodity_code != WHEAT_WHITE], datetime.now(UTC))
+    records = [r for r in recorded if r.commodity_code != WHEAT_WHITE]
+    printed = [r["releaseTimeStamp"] for r in body if r["commodityCode"] != WHEAT_WHITE]
+
+    async def without_wheat_white() -> Answer[ReleaseList]:
+        return Answer(ReleaseList(records, printed), datetime.now(UTC))
 
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2027)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2027)
     assert str(info.value) == (
         "ESR lists no market year for commodity 104: GET /api/esr/datareleasedates "
         "(ESRData_GetDataReleaseInfo) answered without a record for it, although the packaged "
@@ -475,10 +495,14 @@ def test_a_market_year_esr_lacks_inside_the_range_is_skipped(
     assert (absent.response.status, absent.response.content) == (404, b"")
     missing = replay_fixture(COUNTRY, "year_1900", url=_country_url(2023))
     newer = replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert (missing.call_count, newer.call_count) == (1, 1)
     assert result.data == _recorded(COUNTRY, "wheat_white_canada_2024")
-    assert result.meta.vintage == "2024-06-06"
+    assert result.meta.vintage is None
+    assert result.meta.notes == [
+        "Market years in the order of the rows: 2024 with 54 rows; passed over, without data "
+        "in ESR: 2023."
+    ], "the year passed over is named, since no row states it (sdk-usda-esr#23)"
     assert result.meta.request["start_year"] == 2023
 
 
@@ -489,10 +513,11 @@ def test_a_range_esr_lacks_entirely_is_an_empty_list(replay_fixture: ReplayFixtu
     Each recording served at another URL is NOT RECORDED there (conventions §10, kind 3).
     """
     route = replay_fixture(COUNTRY, "year_1900")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 1900, 1900)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=1900, end_year=1900)
     assert sent_urls(route) == [_country_url(1900)]
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert result.meta.notes == ["Market years passed over, without data in ESR: 1900."]
     assert result.meta.request == {
         "commodity_code": 104,
         "country_code": 1220,
@@ -501,17 +526,18 @@ def test_a_range_esr_lacks_entirely_is_an_empty_list(replay_fixture: ReplayFixtu
     }
     first = replay_fixture(COUNTRY, "year_1900", url=_country_url(2023))
     second = replay_fixture(COUNTRY, "year_1900", url=_country_url(2024))
-    both = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    both = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert (first.call_count, second.call_count) == (1, 1)
     assert both.data == []
     assert both.meta.vintage is None
+    assert both.meta.notes == ["Market years passed over, without data in ESR: 2023, 2024."]
 
 
 def test_get_exports_still_names_a_market_year_esr_lacks(replay_fixture: ReplayFixture) -> None:
     """The single-year task keeps raising for ESR's empty 404; only the series skips it."""
     route = replay_fixture(COUNTRY, "year_1900")
     with pytest.raises(NoDataForYear) as info:
-        tasks.get_exports(WHEAT_WHITE, 1900, CANADA)
+        tasks.get_exports(WHEAT_WHITE, 1900, country_code=CANADA)
     assert str(info.value) == (
         "ESR has no data for commodity 104, country 1220, market year 1900: GET "
         "/api/esr/exports/commodityCode/104/countryCode/1220/marketYear/1900 answered HTTP 404 "
@@ -536,7 +562,7 @@ def test_the_gateways_not_found_inside_the_range_stops_the_series(
         )
     )
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert not isinstance(info.value, NoDataForYear)
     assert str(info.value).startswith("api.data.gov has no route for GET /api/esr/exports/")
     assert (gateway.call_count, newer.call_count) == (1, 0), "nothing after the error"
@@ -550,7 +576,7 @@ def test_a_refusal_inside_the_range_stops_the_series(replay_fixture: ReplayFixtu
     later = replay_fixture(COUNTRY, "wheat_white_canada_2024")
     refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2023))
     with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert (refused.call_count, later.call_count) == (1, 0)
     assert "The series stopped" not in str(info.value), "nothing was fetched before it"
 
@@ -566,7 +592,7 @@ def test_a_refusal_after_the_first_market_year_names_the_years_fetched(
     earlier = replay_fixture(COUNTRY, "wheat_white_canada_2023")
     refused = replay_fixture("get_commodities", "invalid_key", url=_country_url(2024))
     with pytest.raises(AuthError, match="API_KEY_INVALID") as info:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert (earlier.call_count, refused.call_count) == (1, 1)
     assert str(info.value).endswith(
         " The series stopped at 2024 after 1 period answered, 2023, and returns nothing."
@@ -585,7 +611,7 @@ def test_the_gateways_not_found_propagates_unchanged(respx_mock: respx.MockRoute
         )
     )
     with pytest.raises(NotFoundError) as info:
-        tasks.get_weekly_series(104, 1220, 2024, 2024)
+        tasks.get_weekly_series(104, 1220, start_year=2024, end_year=2024)
     assert not isinstance(info.value, NoDataForYear)
     assert str(info.value).startswith("api.data.gov has no route for GET /api/esr/exports/")
 
@@ -602,15 +628,21 @@ def test_list_countries_names_the_unknown_destination() -> None:
     )
 
 
+@pytest.mark.usefixtures("in_2026")
 def test_every_country_of_wheat_white_2027(
     replay_fixture: Callable[[str, str], respx.Route],
 ) -> None:
+    """Wheat white's current market year in 2026: the release list is read first, and the
+    answer holds 9990 like any destination."""
+    releases = replay_fixture(RELEASES, "all")
     replay_fixture(ALL, "wheat_white_2027")
     result = tasks.get_exports(WHEAT_WHITE, 2027)
+    assert sent_urls(releases) == [RELEASE_DATES]
     assert len(result.data) == 385
     assert len({r.country_code for r in result.data}) == 22
     assert UNKNOWN in {r.country_code for r in result.data}
-    assert result.meta.vintage == "2026-10-15"
+    assert max(r.week_ending_date for r in result.data) == date(2026, 10, 15)
+    assert result.meta.vintage is None
 
 
 # validation, before any request
@@ -619,17 +651,17 @@ def test_every_country_of_wheat_white_2027(
 def test_the_series_checks_its_arguments_before_any_request(respx_mock: respx.MockRouter) -> None:
     """respx is active with no routes mounted, so any upstream call would fail loudly."""
     with pytest.raises(UnknownCode, match=r"9990 \(UNKNOWN\)"):
-        tasks.get_weekly_series(WHEAT_WHITE, 9999, 2024, 2024)
+        tasks.get_weekly_series(WHEAT_WHITE, 9999, start_year=2024, end_year=2024)
     with pytest.raises(UnknownCode, match="commodity_code"):
-        tasks.get_weekly_series(999, CANADA, 2024, 2024)
+        tasks.get_weekly_series(999, CANADA, start_year=2024, end_year=2024)
     with pytest.raises(InvalidRequestError, match="is not an integer code"):
-        tasks.get_weekly_series(WHEAT_WHITE, "1220", 2024, 2024)  # type: ignore[arg-type]
+        tasks.get_weekly_series(WHEAT_WHITE, "1220", start_year=2024, end_year=2024)  # type: ignore[arg-type]
     with pytest.raises(InvalidRequestError, match=r"^start_year must be a four-digit year"):
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 24, 2024)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=24, end_year=2024)
     with pytest.raises(InvalidRequestError, match=r"^end_year must be a four-digit year"):
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 24)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=24)
     with pytest.raises(InvalidRequestError, match=r"^market_year must be a four-digit year"):
-        tasks.get_exports(WHEAT_WHITE, 24, CANADA)
+        tasks.get_exports(WHEAT_WHITE, 24, country_code=CANADA)
     assert not respx_mock.calls
 
 
@@ -639,7 +671,7 @@ def test_the_weekly_series_checks_its_range_before_any_request(
     """respx is active with no routes mounted: a backwards range, one over the ceiling and
     a year after ``latest_market_year()`` are refused without a request."""
     with pytest.raises(InvalidRequestError) as backwards:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, 2023)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=2023)
     assert str(backwards.value) == (
         "start_year 2024 is after end_year 2023. Nothing was sent. Pass the earlier market "
         "year first, e.g. start_year=2022, end_year=2024."
@@ -647,7 +679,7 @@ def test_the_weekly_series_checks_its_range_before_any_request(
     assert (tasks.SERIES.most, tasks.SERIES.value, tasks.SERIES.unit) == (10, 10, "market years")
     assert (tasks.SERIES.mcp, tasks.SERIES.option) == (None, None), "the same over MCP"
     with pytest.raises(InvalidRequestError) as eleven:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2015, 2025)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2015, end_year=2025)
     assert str(eleven.value) == (
         "2015 to 2025 is 11 market years; one call fetches at most 10 market years. Nothing "
         "was sent. Narrow the range, e.g. start_year=2016, end_year=2025, or split it into "
@@ -655,10 +687,10 @@ def test_the_weekly_series_checks_its_range_before_any_request(
     ), "core's Ceiling with the task's advice (sdk-usda-esr#29; sdk-core ADR-0054)"
     future = latest_market_year() + 1
     with pytest.raises(InvalidRequestError, match="answers a future one") as end:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2024, future)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2024, end_year=future)
     assert str(end.value).startswith(f"end_year must be no later than {future - 1}, ")
     with pytest.raises(InvalidRequestError, match="answers a future one") as start:
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, future, future)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=future, end_year=future)
     assert str(start.value).startswith(f"start_year must be no later than {future - 1}, ")
     assert not respx_mock.calls
 
@@ -681,11 +713,11 @@ def test_the_ceiling_counts_market_years_ends_included(
     """With the ceiling lowered to 2, 2023 to 2024 is served and 2023 to 2025 refused before
     any request; the real ceiling is 10, and ten years would need ten recordings."""
     with pytest.raises(InvalidRequestError, match="2023 to 2025 is 3 market years"):
-        tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2025)
+        tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2025)
     assert not respx_mock.calls
     replay_fixture(COUNTRY, "wheat_white_canada_2023")
     replay_fixture(COUNTRY, "wheat_white_canada_2024")
-    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024)
+    result = tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024)
     assert len(result.data) == 107
     assert len(respx_mock.calls) == 2
 
@@ -705,7 +737,9 @@ async def test_a_series_of_one_market_year_is_whole_over_mcp(
     )
     assert len(series["data"]) == 54
     assert "note" not in series, "54 weeks fit the default cap"
-    assert series["data"][-1]["week_ending_date"] == series["meta"]["vintage"] == "2024-06-06"
+    assert series["data"][-1]["week_ending_date"] == "2024-06-06"
+    assert series["meta"]["vintage"] is None
+    assert series["meta"]["notes"] == ["Market years in the order of the rows: 2024 with 54 rows."]
 
 
 @pytest.mark.anyio
@@ -730,7 +764,10 @@ async def test_weekly_series_tool_end_to_end(replay_fixture: ReplayFixture) -> N
     ), "the boundary week once per market year"
     assert payload["meta"]["request"] == arguments
     assert payload["meta"]["endpoint"] == OPERATIONS[COUNTRY]
-    assert payload["meta"]["vintage"] == "2024-06-06"
+    assert payload["meta"]["vintage"] is None
+    assert payload["meta"]["notes"] == [
+        "Market years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows."
+    ]
     assert payload["meta"]["published_at"] is None
     refused = await mcp_call_text(
         server, "usda_esr_get_weekly_series", {**arguments, "start_year": 2015, "end_year": 2025}
@@ -770,8 +807,9 @@ def test_the_weekly_series_cap_note_names_the_range() -> None:
     assert (cap.paged, cap.keep) == (False, "last")
     assert cap.note == (
         "narrow start_year and end_year, e.g. 2023 and 2024: each market year is up to 54 "
-        "rows, so three fit, and the newest weeks are shown"
-    )
+        "rows, so three fit, and the newest weeks are shown; one call sends at most 11 "
+        "requests, 44 attempts with retries"
+    ), "the most that one call spends, retries counted (conventions §8; sdk-core ADR-0061)"
 
 
 def test_the_series_note_is_what_an_agent_reads_when_the_range_outgrows_the_cap(
@@ -783,14 +821,19 @@ def test_the_series_note_is_what_an_agent_reads_when_the_range_outgrows_the_cap(
     replay_fixture(COUNTRY, "wheat_white_canada_2023")
     replay_fixture(COUNTRY, "wheat_white_canada_2024")
     cap = dataclasses.replace(tasks.MCP_CAPS["get_weekly_series"], max_rows=100)
-    payload = json.loads(cap_result(tasks.get_weekly_series(WHEAT_WHITE, CANADA, 2023, 2024), cap))
+    payload = json.loads(
+        cap_result(
+            tasks.get_weekly_series(WHEAT_WHITE, CANADA, start_year=2023, end_year=2024), cap
+        )
+    )
     assert len(payload["data"]) == 100
     assert payload["data"][0]["week_ending_date"] == "2022-07-21", "the eighth week first"
     assert payload["data"][-1]["week_ending_date"] == "2024-06-06", "the newest week kept"
     assert payload["note"] == (
         "showing rows 8 to 107 of 107 (cap: 100 rows or 65536 bytes); narrow start_year and "
         "end_year, e.g. 2023 and 2024: each market year is up to 54 rows, so three fit, and "
-        "the newest weeks are shown"
+        "the newest weeks are shown; one call sends at most 11 requests, 44 attempts with "
+        "retries"
     )
 
 
@@ -817,7 +860,10 @@ def test_weekly_series_over_http(replay_fixture: ReplayFixture) -> None:
     assert len(body["data"]) == 107
     assert body["data"][0]["week_ending_date"] == "2022-06-02"
     assert body["meta"]["request"] == params
-    assert body["meta"]["vintage"] == "2024-06-06"
+    assert body["meta"]["vintage"] is None
+    assert body["meta"]["notes"] == [
+        "Market years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows."
+    ]
     refused = http.get("/usda-esr/get_weekly_series", params={**params, "start_year": 2014})
     assert refused.status_code == 422, "InvalidRequestError is 422"
     assert "at most 10 market years" in refused.text
@@ -846,3 +892,17 @@ def test_an_unreleased_market_year_over_http(replay_fixture: ReplayFixture) -> N
     assert refused.json()["title"] == "NotFoundError"
     assert "its latest released market year is 2027" in refused.text
     assert sent_urls(releases) == [RELEASE_DATES]
+
+
+@pytest.mark.anyio
+async def test_the_series_tool_states_the_most_one_call_spends() -> None:
+    """Ten market years and the release list are 11 requests, and core's four attempts for
+    each make 44: the description an agent reads says so (conventions §8; sdk-core ADR-0061,
+    decision 8; way P4 of https://github.com/xippios/sdk-usda-esr/issues/62)."""
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    description = " ".join((tools["usda_esr_get_weekly_series"].description or "").split())
+    assert "at most 11 requests, 44 attempts with retries" in description
+    assert "meta.notes" in description, "the note on the market years is named"
+    assert "since the records state no release: ``get_release_dates`` gives it" in description, (
+        "why the vintage is empty, and where the release is (sdk-usda-esr#67; conventions §4)"
+    )

@@ -103,18 +103,22 @@ async def test_get_units_of_measure(replay_fixture: Callable[[str, str], respx.R
 
 async def test_get_data_release_info(replay_fixture: Callable[[str, str], respx.Route]) -> None:
     route = replay_fixture("get_data_release_info", "all")
-    releases = (await api.get_data_release_info()).payload
+    answer = await api.get_data_release_info()
+    releases = answer.payload.records
     assert len(releases) == 44
+    assert answer.payload.printed == ["2026-10-22T08:30:42.67"] * 44, (
+        "each releaseTimeStamp as upstream sent it, in the records' order, beside no record"
+    )
     wheat = next(r for r in releases if r.commodity_code == 104)
-    # Compared field by field: a record's equality includes the release text it keeps, which
-    # one built from a datetime gives as isoformat() (pydantic compares private attributes).
-    assert wheat.model_dump() == {
-        "commodity_code": 104,
-        "market_year_start": date(2026, 6, 1),
-        "market_year_end": date(2027, 5, 31),
-        "market_year": 2027,
-        "release_time_stamp": datetime(2026, 10, 22, 8, 30, 42, 670000),
-    }
+    # The record equals one built from its values: no text of the time stands beside it
+    # (https://github.com/xippios/sdk-usda-esr/issues/69).
+    assert wheat == DataReleaseInfo(
+        commodity_code=104,
+        market_year_start=date(2026, 6, 1),
+        market_year_end=date(2027, 5, 31),
+        market_year=2027,
+        release_time_stamp=datetime(2026, 10, 22, 8, 30, 42, 670000),
+    )
     assert type(wheat) is DataReleaseInfo
     assert wheat.release_time_stamp.tzinfo is None, "no zone invented"
     assert {r.release_time_stamp for r in releases} == {datetime(2026, 10, 22, 8, 30, 42, 670000)}
@@ -135,7 +139,7 @@ async def test_the_release_list_names_every_commodity(
 ) -> None:
     replay_fixture("get_data_release_info", "all")
     replay_fixture("get_commodities", "all")
-    released = {r.commodity_code for r in (await api.get_data_release_info()).payload}
+    released = {r.commodity_code for r in (await api.get_data_release_info()).payload.records}
     assert released == {c.commodity_code for c in (await api.get_commodities()).payload}
 
 
@@ -208,10 +212,12 @@ async def test_quantities_are_whole_numbers_as_recorded(
     assert all(value == value.to_integral_value() for value in quantities)
 
 
-def test_the_release_text_round_trips_and_is_not_serialised() -> None:
-    """``releaseTimeStamp`` as upstream prints it, two fractional digits, kept beside the parsed
-    value for ``get_release_dates``' ``meta.vintage``; no dump carries it, so the adapters' rows
-    keep their five fields (https://github.com/xippios/sdk-usda-esr/pull/7).
+def test_the_release_time_is_one_parsed_field_without_a_text_beside_it() -> None:
+    """``releaseTimeStamp`` reads into the naive ``datetime`` that keeps every digit upstream
+    sends, ``"2026-10-22T08:30:42.67"`` as 670,000 microseconds, and the record keeps no text
+    of it: no private attribute, no validator of its own, no property; a dump, a copy and a
+    revalidation are the five fields alone (https://github.com/xippios/sdk-usda-esr/issues/60,
+    part 3; https://github.com/xippios/sdk-usda-esr/issues/69).
     The record is an input of the test, not an answer from ESR.
     """
     fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
@@ -219,51 +225,17 @@ def test_the_release_text_round_trips_and_is_not_serialised() -> None:
     releases = parse(
         list[DataReleaseInfo], body, source="usda-esr", endpoint="ESRData_GetDataReleaseInfo"
     )
-    assert [r.release_time_stamp_text for r in releases] == [
-        record["releaseTimeStamp"] for record in body
-    ]
-    assert {r.release_time_stamp_text for r in releases} == {"2026-10-22T08:30:42.67"}
-    for dumped in (releases[0].model_dump(), releases[0].model_dump(mode="json")):
+    assert {record["releaseTimeStamp"] for record in body} == {"2026-10-22T08:30:42.67"}
+    assert {r.release_time_stamp for r in releases} == {datetime(2026, 10, 22, 8, 30, 42, 670000)}
+    assert all(r.release_time_stamp.tzinfo is None for r in releases), "upstream states no zone"
+    assert DataReleaseInfo.__private_attributes__ == {}, "no text kept beside the time"
+    assert not hasattr(releases[0], "release_time_stamp_text")
+    record = releases[0]
+    for dumped in (record.model_dump(), record.model_dump(mode="json")):
         assert set(dumped) == set(DataReleaseInfo.model_fields), "the five fields only"
-    assert releases[0].model_dump(mode="json")["release_time_stamp"] == (
-        "2026-10-22T08:30:42.670000"
-    ), "the field itself serialises as before"
-    by_name = DataReleaseInfo.model_validate(
-        {
-            "commodity_code": 104,
-            "market_year_start": "2026-06-01T00:00:00",
-            "market_year_end": "2027-05-31T00:00:00",
-            "market_year": 2027,
-            "release_time_stamp": "2026-10-22T08:30:42.67",
-        }
-    )
-    assert by_name.release_time_stamp_text == "2026-10-22T08:30:42.67", "by name too"
-
-
-def test_the_release_text_through_a_copy_a_dump_and_a_revalidation() -> None:
-    """Pinned as pydantic treats the private text: ``model_copy`` keeps it, even with a new
-    time; a round trip through ``model_dump()`` or ``dump_upstream()`` has only the
-    datetime to go on, so it carries the ``isoformat()`` text and compares unequal;
-    ``model_validate`` of an existing instance returns it with its text unchanged."""
-    fixture = load_fixture(fixture_path(FIXTURES, "get_data_release_info", "all"))
-    record = parse(
-        list[DataReleaseInfo],
-        json.loads(fixture.response.body),
-        source="usda-esr",
-        endpoint="ESRData_GetDataReleaseInfo",
-    )[0]
-    assert record.release_time_stamp_text == "2026-10-22T08:30:42.67"
-    copied = record.model_copy(update={"release_time_stamp": datetime(2026, 10, 29, 8, 30)})
-    assert copied.release_time_stamp == datetime(2026, 10, 29, 8, 30)
-    assert copied.release_time_stamp_text == "2026-10-22T08:30:42.67", "the old text kept"
+    assert record.model_dump(mode="json")["release_time_stamp"] == "2026-10-22T08:30:42.670000"
     for dumped in (record.model_dump(), record.dump_upstream()):
-        again = DataReleaseInfo.model_validate(dumped)
-        assert again.release_time_stamp_text == "2026-10-22T08:30:42.670000", "isoformat()"
-        assert again != record, "the private text differs, and pydantic compares it"
-        assert again.model_dump() == record.model_dump(), "the values alone are equal"
-    revalidated = DataReleaseInfo.model_validate(record)
-    assert revalidated.release_time_stamp_text == "2026-10-22T08:30:42.67"
-    assert revalidated == record
+        assert DataReleaseInfo.model_validate(dumped) == record, "the time alone round-trips"
 
 
 def test_records_serialise_snake_case_with_numbers_and_iso_dates() -> None:

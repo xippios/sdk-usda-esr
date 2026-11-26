@@ -25,11 +25,10 @@ Set `DATA_GOV_API_KEY` in the environment. Nothing is read from files.
 ```python
 from xippios.usda.esr import get_exports, get_release_dates
 
-result = get_exports(104, 2024, 1220)  # wheat white, market year 2024, to Canada
+result = get_exports(104, 2024, country_code=1220)  # wheat white, market year 2024, to Canada
 week = result.data[-1]
 week.week_ending_date, week.accumulated_exports, week.unit_id  # 2024-06-06, Decimal('16217'), 1
-result.meta.vintage  # "2024-06-06": the latest week ending date in the answer
-result.meta.published_at  # None: get_release_dates tells when ESR released the data
+result.meta.vintage, result.meta.published_at  # None, None: the exports state no release
 result.meta.retrieved_at, result.meta.request
 
 releases = get_release_dates()  # one record per commodity
@@ -50,7 +49,16 @@ it ends in and different per commodity (wheat 2024 is June 2023 to May 2024; cor
 soybeans run September to August, cotton August to July). Leave out the country for every
 destination at once, one row per destination and week; the MCP server returns at most
 200 rows per call, so pass a country there. Quantities are `Decimal` in Python and JSON
-numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`).
+numbers over MCP and HTTP, in the unit `unit_id` names (`enums.UnitId`). The arguments that
+identify a record come first, in the order of upstream's path, and every filter is passed by
+name: `country_code` of `get_exports`, `start_year` and `end_year` of `get_weekly_series`,
+`commodity_code` and `since` of `get_release_dates`, `region_id` and `search`.
+
+ESR answers a market year it has not released with an empty list, as it answers a year
+without exports, so `get_exports` raises `NotFoundError` for a market year past the
+commodity's current one, naming it (`get_release_dates` names it too; wheat: 2027 in October
+2026). For a market year from the current calendar year on it reads the release list first,
+one request more: one call sends at most 2 requests. An empty list means no exports.
 
 `get_weekly_series` makes the request `get_exports` makes for one country once per market
 year from `start_year` to `end_year`, at most 10 market years per call, and only orders the
@@ -59,18 +67,18 @@ records:
 ```python
 from xippios.usda.esr import get_weekly_series
 
-series = get_weekly_series(104, 1220, 2023, 2024)  # wheat white to Canada, two requests
-len(series.data), series.meta.vintage  # 107 (53 + 54 weeks), "2024-06-06"
+series = get_weekly_series(104, 1220, start_year=2023, end_year=2024)  # two requests
+len(series.data)  # 107: 53 + 54 weeks of wheat white to Canada
+series.meta.notes  # ["Market years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows."]
 ```
 
 A week that straddles two market years comes once for each, the older one's row first:
-the week ending 2023-06-01 closes wheat's 2023 and opens its 2024. A market year ESR holds
-no data for is skipped, so `get_weekly_series(104, 1220, 1900, 1900)` is an empty list.
-ESR answers a market year it has not released with an empty list, as it answers a year
-without exports, so a range past the commodity's current market year raises
-`NotFoundError` naming the latest released one (`get_release_dates` names it; wheat: 2027
-in October 2026); a range ending in the current calendar year or later reads the release
-list first, one request more.
+the week ending 2023-06-01 closes wheat's 2023 and opens its 2024, and the note's counts say
+which rows are whose. A market year ESR holds no data for is skipped and named in the note,
+so `get_weekly_series(104, 1220, start_year=1900, end_year=1900)` is an empty list. A range
+past the commodity's current market year raises `NotFoundError` naming the latest released
+one, as `get_exports` does; a range ending in the current calendar year or later reads the
+release list first, one request more, so one call sends at most 11 requests.
 
 The `list_*` tasks look codes up in the packaged lists, without a call:
 
@@ -115,12 +123,12 @@ destination, and its note says to narrow `start_year` and `end_year`.
 
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
-| `ESRData_GetCountryData` (`exports/commodityCode/{commodityCode}/countryCode/{countryCode}/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year, country_code)` | `usda_esr_get_exports` | alpha |
+| `ESRData_GetCountryData` (`exports/commodityCode/{commodityCode}/countryCode/{countryCode}/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year, *, country_code)` | `usda_esr_get_exports` | alpha; a market year past the commodity's current one is refused |
 | `ESRData_GetAllCountriesData` (`exports/commodityCode/{commodityCode}/allCountries/marketYear/{marketYear}`) | `get_exports(commodity_code, market_year)` | `usda_esr_get_exports` | alpha |
-| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, start_year, end_year)` | `usda_esr_get_weekly_series` | alpha; a range of market years, one request per market year, at most 10; a range past the commodity's current market year is refused |
-| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(since=None, commodity_code=None)` | `usda_esr_get_release_dates` | alpha; `since` keeps the commodities released after an earlier call's `meta.vintage`, `commodity_code` one commodity's record |
-| `ESRData_GetCommodities` (`commodities`) | `list_commodities(search)` | `usda_esr_list_commodities` | packaged; `list_*` task |
-| `ESRData_GetCountries` (`countries`) | `list_countries(region_id, search)` | `usda_esr_list_countries` | packaged; `list_*` task |
+| `ESRData_GetCountryData` | `get_weekly_series(commodity_code, country_code, *, start_year, end_year)` | `usda_esr_get_weekly_series` | alpha; a range of market years, one request per market year, at most 10; a range past the commodity's current market year is refused |
+| `ESRData_GetDataReleaseInfo` (`datareleasedates`) | `get_release_dates(*, commodity_code=None, since=None)` | `usda_esr_get_release_dates` | alpha; `since` keeps the commodities released after an earlier call's `meta.vintage`, `commodity_code` one commodity's record |
+| `ESRData_GetCommodities` (`commodities`) | `list_commodities(*, search=None)` | `usda_esr_list_commodities` | packaged; `list_*` task |
+| `ESRData_GetCountries` (`countries`) | `list_countries(*, region_id=None, search=None)` | `usda_esr_list_countries` | packaged; `list_*` task |
 | `ESRData_GetRegions` (`regions`) | `list_regions()` | `usda_esr_list_regions` | packaged; `list_*` task |
 | `ESRData_GetUnitsOfMeasure` (`unitsOfMeasure`) | `list_units_of_measure()` | `usda_esr_list_units_of_measure` | packaged, `enums.UnitId`; `list_*` task |
 
