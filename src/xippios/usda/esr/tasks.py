@@ -122,8 +122,10 @@ from xippios.usda.esr.models import (
     UnitOfMeasure,
 )
 from xippios.usda.esr.params import (
+    COMMODITIES,
     COUNTRIES,
     PACKAGE,
+    REGIONS,
     validate_commodity_code,
     validate_country_code,
     validate_market_year,
@@ -283,7 +285,7 @@ def _absent(
     )
 
 
-@names_codes(country_code=COUNTRIES)
+@names_codes(commodity_code=COMMODITIES, country_code=COUNTRIES)
 async def get_exports_async(
     commodity_code: int, market_year: int, *, country_code: int | None = None
 ) -> Result[list[CommodityData]]:
@@ -384,6 +386,7 @@ def _since(since: object) -> datetime:
     )
 
 
+@names_codes(commodity_code=COMMODITIES)
 async def get_release_dates_async(
     *, commodity_code: int | None = None, since: str | None = None
 ) -> Result[list[DataReleaseInfo]]:
@@ -553,7 +556,7 @@ def _series_range(start_year: int, end_year: int) -> None:
     )
 
 
-@names_codes(country_code=COUNTRIES)
+@names_codes(commodity_code=COMMODITIES, country_code=COUNTRIES)
 async def get_weekly_series_async(
     commodity_code: int, country_code: int, *, start_year: int, end_year: int
 ) -> Result[list[CommodityData]]:
@@ -656,6 +659,7 @@ async def list_commodities_async(*, search: str | None = None) -> Result[list[Co
     return Result(data=selected, meta=packaged.meta(SOURCE, request={"search": search}))
 
 
+@names_codes(region_id=REGIONS)
 async def list_countries_async(
     *, region_id: int | None = None, search: str | None = None
 ) -> Result[list[Country]]:

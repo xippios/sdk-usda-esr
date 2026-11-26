@@ -19,11 +19,13 @@ model's docstring; every field is an assumption from that fixture. No ESR record
 personal identifier. Codes and ids are integers, as the snapshot types the path parameters
 (``int32``) and as every recorded record carries them; ``unit_id`` stays a plain ``int``,
 not ``enums.UnitId``, so that a unit ESR adds before the packaged lists are refreshed does
-not fail an answer, and ``UnitId`` members compare equal to it. A record's country and unit
-codes declare the packaged list that names them, ``NamedBy`` (sdk-core ADR-0067), so every
-answer that holds the record names each code of its rows in ``meta.names``, and a code the
-list lacks is said in ``meta.notes`` rather than refused
-(https://github.com/xippios/sdk-usda-esr/issues/30).
+not fail an answer, and ``UnitId`` members compare equal to it. A record's commodity,
+country, region and unit codes declare the packaged list that names them, ``NamedBy`` (sdk-core
+ADR-0067, decision 6), so every answer that holds the record names each code of its rows in
+``meta.names``, and a code the list lacks is said in ``meta.notes`` rather than refused
+(https://github.com/xippios/sdk-usda-esr/issues/30,
+https://github.com/xippios/sdk-usda-esr/issues/85). A list's own code, whose name stands on
+its record beside it, takes no mark.
 """
 
 from datetime import date, datetime
@@ -33,7 +35,7 @@ from typing import Annotated
 from pydantic import Field
 from xippios.core import NamedBy, UpstreamModel
 
-from xippios.usda.esr.params import COUNTRIES, UNITS
+from xippios.usda.esr.params import COMMODITIES, COUNTRIES, REGIONS, UNITS
 
 __all__ = [
     "Commodity",
@@ -86,7 +88,7 @@ class Country(UpstreamModel):
     country_code: int = Field(validation_alias="countryCode")
     country_name: str = Field(validation_alias="countryName")
     country_description: str = Field(validation_alias="countryDescription")
-    region_id: int = Field(validation_alias="regionId")
+    region_id: Annotated[int, NamedBy(REGIONS)] = Field(validation_alias="regionId")
     genc_code: str | None = Field(validation_alias="gencCode")
 
 
@@ -157,7 +159,7 @@ class DataReleaseInfo(UpstreamModel):
             export data, naive, e.g. ``datetime(2026, 10, 22, 8, 30, 42, 670000)``.
     """
 
-    commodity_code: int = Field(validation_alias="commodityCode")
+    commodity_code: Annotated[int, NamedBy(COMMODITIES)] = Field(validation_alias="commodityCode")
     market_year_start: date = Field(validation_alias="marketYearStart")
     market_year_end: date = Field(validation_alias="marketYearEnd")
     market_year: int = Field(validation_alias="marketYear")
@@ -203,7 +205,7 @@ class CommodityData(UpstreamModel):
             parsed to ``date`` as in ``DataReleaseInfo``.
     """
 
-    commodity_code: int = Field(validation_alias="commodityCode")
+    commodity_code: Annotated[int, NamedBy(COMMODITIES)] = Field(validation_alias="commodityCode")
     country_code: Annotated[int, NamedBy(COUNTRIES)] = Field(validation_alias="countryCode")
     weekly_exports: Decimal = Field(validation_alias="weeklyExports")
     accumulated_exports: Decimal = Field(validation_alias="accumulatedExports")
