@@ -5,9 +5,10 @@ MCP server, on api.data.gov's gateway at ``BASE_URL`` with ``Accept: application
 It keeps a pace of its own, ``RATE_LIMIT``, since the snapshot documents none, and keeps
 upstream's answers in core's response cache, ``MemoryCache`` at core's default lifetime of
 300 s for every path, since the package only reads public data (conventions §6; sdk-core
-ADR-0061, decision 11): the release list that ``get_weekly_series`` reads before its yearly
-requests is one request per lifetime, and a continuation of a cut ``get_exports`` answer is
-the cache's. The gateway is the shared package's, ``xippios.usda.fas``'s ``Gateway``
+ADR-0061, decision 11): the release list that ``get_exports`` and ``get_weekly_series`` read
+for a market year from the current calendar year on is one request per lifetime, and a
+continuation of a cut ``get_exports`` answer is the cache's. The gateway is the shared
+package's, ``xippios.usda.fas``'s ``Gateway``
 (sdk-core ADR-0032, decision 5; sdk-core ADR-0065, decision 1): ``gateway.auth`` sends the key
 from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header; ``Gateway.policy``, the one
 ``QuotaPolicy`` per process for that key, keeps api.data.gov's hourly quota from every answer

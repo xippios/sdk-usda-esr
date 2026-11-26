@@ -1,7 +1,7 @@
 """Task-shaped functions for USDA FAS Export Sales Reporting.
 
-The public API (sdk-core ADR-0001, layer 2). A task composes endpoint wrappers from ``api/``,
-resolves pagination and reference lookups, and returns ``Result[T]`` with full
+The public API (sdk-core ADR-0001, layer 2). A task composes endpoint wrappers from ``api/``
+and the packaged lists under ``reference/``, and returns ``Result[T]`` with full
 ``ResultMeta``. Write the async version, derive the sync one with ``xippios.core.sync``,
 and list the sync name in ``__all__``: the MCP server and the HTTP router register what
 is named there minus ``BULK_TASKS``.
@@ -52,8 +52,8 @@ boundary of a source package has a lookup by a key that the caller names (conven
 where ``get_market_year`` was a task of its own (https://github.com/xippios/sdk-usda-esr/pull/9);
 a commodity the packaged list names and the release list lacks answers the empty list.
 
-A ranking, a selection of the newest week and the other slices are no task of a source package
-(conventions §14): a caller reads those records from ``get_exports``. ``get_weekly_series``
+A ranking and a selection of the newest week are no task of a source package (conventions
+§14): a caller reads those records from ``get_exports``. ``get_weekly_series``
 (https://github.com/xippios/sdk-usda-esr/pull/5) puts together and orders the records of the
 request ``get_exports`` makes for one country (sdk-core ADR-0028): no record is changed,
 nothing is derived, converted, filled or excluded, and nothing is compared with another source.

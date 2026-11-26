@@ -52,7 +52,7 @@ COUNTRY = "get_country_data"
 ALL = "get_all_countries_data"
 OPERATIONS = {COUNTRY: "ESRData_GetCountryData", ALL: "ESRData_GetAllCountriesData"}
 """Each wrapper, the name of its fixture directory, to its verbatim ``operationId``, the
-``meta.endpoint`` of the slices that call it (conventions §2, §10)."""
+``meta.endpoint`` of the tasks that call it (conventions §2, §10)."""
 EXPORTS = f"{BASE_URL}/api/esr/exports/commodityCode"
 
 
