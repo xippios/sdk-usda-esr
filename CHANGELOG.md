@@ -4,6 +4,138 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
 
+## [0.4.0] - 2026-11-26
+
+### Added
+
+- `get_weekly_series` names its market years in `meta.notes`, each answered one with its count
+  of rows in the order of the rows and each passed over for having no data in ESR: `Market
+  years in the order of the rows: 2023 with 53 rows, 2024 with 54 rows.` The counts tell
+  apart the two rows of a week that straddles two market years, since a record states none.
+  (https://github.com/xippios/sdk-core/issues/478, https://github.com/xippios/sdk-usda-esr/issues/23)
+- The answers are kept in core's response cache for 300 s, every path alike, an expired answer
+  dropped and the bodies held under a bound of bytes, so a second read of the release list, of
+  an exports answer or of a market year of the series within that time sends no request.
+  (https://github.com/xippios/sdk-core/issues/479,
+  https://github.com/xippios/sdk-usda-esr/issues/65)
+- The MCP tool `usda_esr_get_exports` takes `offset`, the rows already shown: a cut answer's
+  note ends with `continue with offset=<n>`, and each continuation runs the task again, which
+  core's response cache answers, showing the next older weeks, while the last page's note
+  names its rows alone. (sdk-core ADR-0047, https://github.com/xippios/sdk-usda-esr/issues/28)
+- The answers of `get_exports` and `get_weekly_series` name the commodity and the country asked
+  for and the commodities, countries and units of their rows in `meta.names`,
+  `{"commodity_code": {"104": "Wheat - White"}, "country_code": {"1220": "CANADA"}, "unit_id":
+  {"1": "Metric Tons"}}`, by the packaged lists, `get_release_dates` names its commodities and
+  the one asked for, `list_commodities` its units and `list_countries` its regions and the one
+  asked for. A row's code that the packaged list lacks is left out of the names and said in
+  `meta.notes`, so no answer is withheld for it.
+  (sdk-core ADR-0067, https://github.com/xippios/sdk-usda-esr/issues/30,
+  https://github.com/xippios/sdk-usda-esr/issues/85)
+
+### Changed
+
+- The README's `## Scope` states what of ESR the package wraps and what it leaves out: all
+  seven operations of the snapshot, read as JSON, with every path parameter an argument of a
+  task, and XML the one documented choice that a caller cannot make.
+  (https://github.com/xippios/sdk-usda-esr/issues/62)
+- The descriptions and the cap notes of the MCP tools `usda_esr_get_exports` and
+  `usda_esr_get_weekly_series` state the most that one call sends, retries counted: 2
+  requests in 8 attempts, and 11 requests in 44 attempts. (https://github.com/xippios/sdk-core/issues/474,
+  https://github.com/xippios/sdk-usda-esr/issues/62)
+- `meta.retrieved_at` of `get_exports`, `get_release_dates` and `get_weekly_series` is the
+  client's time of the answer, the time its entry was stored where core's cache answers it and
+  the oldest of the market years that `get_weekly_series` puts together, where it read the time
+  the answer's metadata was made. (https://github.com/xippios/sdk-core/issues/479)
+- The descriptions of `usda_esr_get_exports`, `usda_esr_get_release_dates` and
+  `usda_esr_get_weekly_series` are their tasks' docstrings before `Args:`, each under 1,000
+  characters, and the text of each argument stands in the tool's input schema: the examples
+  of a range's requests stand under `end_year`, and the measures of upstream's answers in
+  `docs/upstream/OBSERVED.md`. (https://github.com/xippios/sdk-core/issues/485)
+- A cut answer of the MCP tools `usda_esr_get_exports` and `usda_esr_get_weekly_series`
+  shows the newest weeks, oldest first, where it showed the oldest, and its note names the
+  rows shown, `showing rows 299 to 498 of 498`. The note of `usda_esr_get_weekly_series` says
+  that the newest weeks are shown where it said the oldest come first.
+  (sdk-core ADR-0047, https://github.com/xippios/sdk-usda-esr/issues/28)
+- A code that is not an integer is refused in xippios-core's wording, which names the integer
+  codes of the packaged list with its fetch date, says that nothing was sent and, for a text of
+  digits, names the integer to pass, followed by the reason ESR's codes are checked, its class
+  `InvalidRequestError` kept. `list_countries(region_id=...)` refuses a region the packaged
+  regions list lacks with `UnknownCode`, naming the closest ids, where it answered an empty
+  list. (sdk-core ADR-0045, https://github.com/xippios/sdk-usda-esr/issues/27)
+- Every refusal of a call as given says `Nothing was sent.` after its first sentence: an
+  unknown code, a market year that is not four digits or lies in the future, a `since` that
+  is not a release time, a range of market years that runs backwards, and the MCP adapter's
+  refusal of an argument. The refusals' classes are unchanged.
+  (https://github.com/xippios/sdk-core/issues/481)
+- The refusal before a request into api.data.gov's spent quota, which the package shares with
+  every source that reads `DATA_GOV_API_KEY`, says `quota spent (` with the gateway's name as
+  its source and no longer names the key's variable. The gateway now comes from
+  `xippios-usda-fas`. (https://github.com/xippios/sdk-core/issues/485,
+  https://github.com/xippios/sdk-usda-esr/issues/66)
+- `get_weekly_series` refuses a range over its ceiling of 10 market years in xippios-core's
+  wording, which names the range and the ceiling and says that nothing was sent, followed by
+  the range to ask for as before, its class `InvalidRequestError` kept. A request after the
+  first market year that fails raises its error, its class kept, naming the market years
+  answered before it and that the series returns nothing. (sdk-core ADR-0054,
+  https://github.com/xippios/sdk-usda-esr/issues/29)
+- A quantity without fractional digits is a JSON integer in the answers over MCP and HTTP,
+  `16217` where it read `16217.0`. It stays a `Decimal` in Python.
+  (https://github.com/xippios/sdk-core/issues/478)
+
+### Breaking
+
+- The endpoint wrappers under `api/` return core's `Answer`, the parsed answer as its
+  `payload` beside the time it was retrieved as its `retrieved_at`, where they returned the
+  parsed answer itself, so a caller of `api.get_commodities()` or another wrapper reads its
+  `.payload`. That of `api.get_data_release_info()` is the `ReleaseList`.
+  (https://github.com/xippios/sdk-core/issues/479)
+- `get_exports` and `get_weekly_series` leave `meta.vintage` empty, where it held the newest
+  `week_ending_date` of the rows, since an exports answer states no release of its own. The
+  newest week is the last row's `week_ending_date`, and `get_release_dates` gives the
+  commodity's last release. (https://github.com/xippios/sdk-core/issues/474,
+  https://github.com/xippios/sdk-usda-esr/issues/67)
+- `get_exports` raises `NotFoundError` for a market year that ESR has not released, naming the
+  commodity's current market year, where it answered the empty list that ESR gives a year
+  without exports, so the empty list now means no exports alone. For a market year from the
+  current calendar year on it reads the release list first, one request more, which core's
+  response cache answers within its lifetime. Its refusal, as `get_weekly_series`' of a range
+  past that year and either task's of a commodity that the release list lacks, says that the
+  release list was read and no exports were requested.
+  (sdk-core ADR-0054, https://github.com/xippios/sdk-usda-esr/issues/21,
+  https://github.com/xippios/sdk-usda-esr/issues/84)
+- The arguments that identify a record stay positional in the order of upstream's path, and
+  every filter and every argument of the package's own is keyword-only:
+  `get_exports(104, 2024, country_code=1220)`, `get_weekly_series(104, 1220, start_year=2023,
+  end_year=2024)`, `get_release_dates(since=...)`, `list_countries(region_id=11)` and
+  `list_commodities(search="wheat")`, where 0.3.0 took the same values by position. Over MCP
+  and HTTP nothing changes, since a tool and a route take their arguments by name.
+  (https://github.com/xippios/sdk-usda-esr/issues/60, https://github.com/xippios/sdk-usda-esr/issues/68)
+- `DataReleaseInfo.release_time_stamp_text` leaves: `release_time_stamp` is the one reading of
+  `releaseTimeStamp`, a naive `datetime` that keeps upstream's fraction of a second, and a
+  record equals one built from its values. `meta.vintage` of `get_release_dates` still holds
+  the newest release as upstream sent it, `"2026-10-22T08:30:42.67"`, which the wrapper
+  `api.get_data_release_info` now answers beside the records, as a `ReleaseList`.
+  (https://github.com/xippios/sdk-usda-esr/issues/60, https://github.com/xippios/sdk-usda-esr/issues/69)
+- `NoDataForYear`, which `get_exports` raises for a market year that ESR holds no data for, is
+  `xippios.usda.fas.NoDataForYear`, since xippios-core 0.5.0 holds no
+  `xippios.core.data_gov`, so an import of it by that module fails. It is still a
+  `NotFoundError`, which `except NotFoundError` catches as before.
+  (https://github.com/xippios/sdk-core/issues/485, https://github.com/xippios/sdk-usda-esr/issues/66)
+- The package depends on `xippios-core~=0.5.0`, its extras likewise, and on
+  `xippios-usda-fas~=0.1.0`, is updated to sdk-template v0.5.0 and applies conventions 1.30.
+  (https://github.com/xippios/sdk-usda-esr/issues/62)
+- `get_market_year` leaves, with its MCP tool and its route, and `get_release_dates` takes
+  `commodity_code`, which keeps that commodity's record, its current market year, after the
+  one request: `get_release_dates(commodity_code=104).data` in place of
+  `get_market_year(104).data`, a list of one record, empty where the release list lacks the
+  commodity, where `get_market_year` raised `NotFoundError`.
+  (https://github.com/xippios/sdk-core/issues/474, https://github.com/xippios/sdk-usda-esr/issues/64)
+- `get_top_destinations` and `get_latest_week` leave, with their MCP tools, their routes and
+  `models.ExportField`, by the boundary of a source package: a task that ranks or picks the
+  newest week for the caller is not the package's. A caller reads the same records from
+  `get_exports` and ranks or picks them itself. (https://github.com/xippios/sdk-core/issues/474,
+  https://github.com/xippios/sdk-usda-esr/issues/63)
+
 ## [0.3.0] - 2026-11-21
 
 ### Added
