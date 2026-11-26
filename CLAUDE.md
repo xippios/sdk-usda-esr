@@ -42,7 +42,10 @@ operation and the recording under `tests/fixtures/` or the request. This section
 the package does with it; `_client.classify` maps ESR's own answers once.
 
 - Codes are `int`, as the snapshot types the path parameters and as the wire carries them
-  (https://github.com/xippios/sdk-usda-esr/pull/3): `get_exports(104, 2024, 1220)`.
+  (https://github.com/xippios/sdk-usda-esr/pull/3). The arguments that identify a record are
+  positional in the order of upstream's path, and every optional filter and every argument
+  of the package's own is keyword-only (https://github.com/xippios/sdk-usda-esr/issues/60,
+  part 1): `get_exports(104, 2024, country_code=1220)`.
 - Record shapes of the four lists, the exports records and the release list are in
   `models.py`, each naming its fixture: the eight quantities as `Decimal` (net sales can be
   negative), `weekEndingDate` as `date`, the countries' names padded as upstream sends them.
@@ -56,38 +59,52 @@ the package does with it; `_client.classify` maps ESR's own answers once.
   makes one request per market year, at most 10 per call (`tasks.SERIES`, core's `Ceiling`) in
   Python, over HTTP and over MCP alike, and over MCP keeps the same cap, about three market
   years, the newest weeks shown, with a note of its own that names `start_year` and `end_year`
-  (https://github.com/xippios/sdk-usda-esr/pull/10).
+  (https://github.com/xippios/sdk-usda-esr/pull/10). The docstring and the cap's note of each
+  of the two state the most that one call sends, with core's four attempts for each request:
+  2 requests and 8 attempts for `get_exports`, 11 and 44 for `get_weekly_series`, the release
+  list counted; a change of the requests a task sends changes both.
 - Destination `9990` (UNKNOWN) comes in `allCountries` as a row like any country's: the
   tasks keep it like any other code.
 - Empty means empty, not an error: `params` refuses unknown codes (`UnknownCode`, naming the
   nearest codes) and market years after the current UTC year plus two before the call. A
-  market year ESR has not released cannot be told from one without exports, so
-  `get_weekly_series` reads the release list for a range that ends in the current UTC year or
-  later and refuses one past the commodity's current market year with `NotFoundError` naming
-  the latest released one (https://github.com/xippios/sdk-usda-esr/pull/10; conventions §4;
-  sdk-core ADR-0041, decisions 6 and 7). The current year counts too: a market year named by
-  it may have begun without a week released, as a calendar-year commodity's does in January.
+  market year ESR has not released cannot be told from one without exports, so `get_exports`
+  and `get_weekly_series` read the release list for a market year from the current UTC year
+  on, the series for its `end_year`, and refuse one past the commodity's current market year
+  with `NotFoundError` naming the latest released one, both through `tasks._check_released`
+  (https://github.com/xippios/sdk-usda-esr/pull/10,
+  https://github.com/xippios/sdk-usda-esr/issues/21; conventions §4; sdk-core ADR-0041,
+  decisions 6 and 7). The read is one request, which core's cache answers within its
+  lifetime. The current year counts too: a market year named by it may have begun without a
+  week released, as a calendar-year commodity's does in January.
 - ESR's empty 404 for a market year it holds no data for (1900) is mapped by the gateway to
   the shared package's `xippios.usda.fas.NoDataForYear`, a `NotFoundError` (only that answer
-  on an exports path, `_client.DATA_PATH`). `get_weekly_series` skips such a year inside its
-  range, as sdk-usda-psd's `get_time_series` does, and a released year answering `[]`
-  adds no rows (https://github.com/xippios/sdk-usda-esr/pull/10). Where ESR's data begins
-  is not established, so no lower bound beyond four digits is set
+  on an exports path, `_client.DATA_PATH`). `get_exports` raises it again, naming what was
+  asked for. `get_weekly_series` skips such a year inside its range, as sdk-usda-psd's
+  `get_time_series` does, and a released year answering `[]` adds no rows
+  (https://github.com/xippios/sdk-usda-esr/pull/10); its `meta.notes` names each market year
+  answered with its count of rows, in the order of the rows, and each passed over, since no
+  record states its market year (https://github.com/xippios/sdk-usda-esr/issues/23). Where
+  ESR's data begins is not established, so no lower bound beyond four digits is set
   (`params.EARLIEST_MARKET_YEAR`).
 - ESR's 400 for a path value that is not an integer is mapped to `InvalidRequestError`;
   never sent, since parameters are `int`.
 - api.data.gov's 403 for an invalid key is mapped by the gateway to `AuthError` naming the
   code and `DATA_GOV_API_KEY`.
-- `meta.vintage` of `get_exports` is the latest `weekEndingDate` among the records as
-  an ISO date (`"2024-06-06"` for wheat white to Canada 2024), `None` for an empty
-  answer, and its `meta.published_at` stays `None`: it makes no second call
-  (https://github.com/xippios/sdk-usda-esr/pull/3). `get_release_dates`'
+- `meta.vintage` and `meta.published_at` of `get_exports` and `get_weekly_series` stay
+  `None`: the exports records state no release, and `vintage` is set only from an
+  identifier that upstream states for the data answered, which a week computed from the
+  records is not (conventions §4; https://github.com/xippios/sdk-usda-esr/issues/67). Each
+  docstring says so and names `get_release_dates` for the release. `get_release_dates`'
   `meta.published_at` is the newest `releaseTimeStamp` as upstream gives it, naive,
   with `meta.published_at_naive` set, since the snapshot states no zone and none is
-  invented; its `meta.vintage` is that record's `releaseTimeStamp` text as upstream
-  prints it (`"2026-10-22T08:30:42.67"`, two fractional digits), kept beside the
-  parsed value as `DataReleaseInfo.release_time_stamp_text`, which no adapter
-  serialises; both `None` for an empty answer
+  invented; its `meta.vintage` is that record's `releaseTimeStamp` exactly as upstream
+  sent it (`"2026-10-22T08:30:42.67"`). `DataReleaseInfo` keeps the time as its one parsed
+  field, a naive `datetime` with every digit upstream sends, and no text beside it
+  (https://github.com/xippios/sdk-usda-esr/issues/60, part 3), so the wrapper
+  `api.get_data_release_info` reads each record's text from the decoded answer and hands
+  the texts to the task beside the records, in its `ReleaseList`, a list in the order of
+  the records, and the task reads the newest record's text at its place
+  (`tasks._newest`); both `None` for an empty answer
   (https://github.com/xippios/sdk-usda-esr/pull/7; sdk-core ADR-0041, decision 2).
 
 ## Layout
