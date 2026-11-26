@@ -6,13 +6,15 @@ Typed Python client, MCP server and FastAPI routes for
 upstream documentation; every response carries its metadata (source, endpoint,
 retrieved_at, request).
 
+## Scope
+
 Of ESR's API the package wraps all seven operations that its documentation lists
 (`docs/upstream/`): the weekly exports of one commodity in one market year, to one country
 or to every country, the release list, and the four lists of codes, which the package ships
 and refreshes before each release. ESR documents path parameters alone, `commodityCode`,
-`countryCode` and `marketYear`, and the tasks take every one. Each operation also answers
-in XML, with the same records; the package reads JSON, so XML is the one documented choice
-that a caller cannot make. What the package adds is one destination's series over market
+`countryCode` and `marketYear`, and the tasks take every one. The documentation lists XML
+beside JSON among the forms that each operation produces; the package asks for JSON, so XML
+is the one documented choice that a caller cannot make. What the package adds is one destination's series over market
 years and filters that select records of the release list and of the packaged lists. It
 ranks no destination, selects no week for the caller and derives no figure from the
 records: a caller reads every record as ESR sends it from `get_exports`.
