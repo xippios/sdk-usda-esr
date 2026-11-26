@@ -70,7 +70,7 @@ def portal_answer() -> Response:
     test time without its final newline, in the shape upstream answered the whole document,
     the text ``json.dumps(indent=2, ensure_ascii=False)`` reproduces. The tests assert what
     the script makes of it, never that upstream sends it. The answer is an input of the test,
-    not an answer from USDA FAS. (conventions §10; sdk-core ADR-0049, decision 10)
+    not an answer from USDA FAS. (conventions §10; sdk-core ADR-0064, decision 9)
     """
     return answer(
         portal_page().url, 200, PORTAL.read_bytes().removesuffix(b"\n"), "application/json"

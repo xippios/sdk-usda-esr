@@ -110,3 +110,14 @@ def test_every_documented_format_but_json_is_named() -> None:
     assert formats == {"XML"}
     named = " ".join(cannot())
     assert [name for name in sorted(formats) if name not in named] == []
+
+
+def test_each_choice_a_caller_cannot_make_cites_its_public_issue() -> None:
+    """A documented choice that a caller cannot make stands while the README's ``## Scope``
+    names it with its public issue (conventions §2; sdk-core ADR-0060, decision 8), so each
+    sentence of the scope on what a caller cannot set or make cites an issue of this
+    repository: XML's is https://github.com/xippios/sdk-usda-esr/issues/82."""
+    issue = re.compile(r"https://github\.com/xippios/sdk-usda-esr/issues/\d+")
+    sentences = cannot()
+    assert sentences, "the scope says what a caller cannot set or make"
+    assert [sentence for sentence in sentences if not issue.search(sentence)] == []

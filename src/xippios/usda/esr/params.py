@@ -10,8 +10,10 @@ one (sdk-core ADR-0041, decision 5). Each list a check or a name reads is declar
 ``PackagedList.codes`` (sdk-core ADR-0045): ``COMMODITIES``, ``COUNTRIES`` and ``REGIONS``,
 whose ``check`` refuses a code the list lacks with core's ``UnknownCode``, naming the nearest
 codes, ``_closest``: by number through core's ``nearest``, then by ESR's own pass on the
-digits (https://github.com/xippios/sdk-usda-esr/issues/27); ``COUNTRIES`` and ``UNITS`` name the
-codes of an exports record, the ``NamedBy`` of ``models.CommodityData`` (sdk-core ADR-0067).
+digits (https://github.com/xippios/sdk-usda-esr/issues/27). The lists name the codes of the
+records, the ``NamedBy`` of ``models`` (sdk-core ADR-0067, decision 6): ``COMMODITIES``,
+``COUNTRIES`` and ``UNITS`` those of an exports record, ``COMMODITIES`` a release record's,
+``REGIONS`` a country's region and ``UNITS`` a commodity's unit.
 Each refusal before a request says that nothing was sent, core's and the package's own
 (conventions §5).
 
@@ -77,7 +79,7 @@ COUNTRIES: PackagedCodes = PackagedList.load(PACKAGE, "countries").codes(
 )
 """The packaged destination countries by ``countryCode``, each named by its
 ``countryDescription``, padded upstream: a refusal and ``meta.names`` show it with its runs of
-white space collapsed, ``"CANADA"`` (sdk-core ADR-0056)."""
+white space collapsed, ``"CANADA"`` (sdk-core ADR-0067, decision 2)."""
 
 REGIONS: PackagedCodes = PackagedList.load(PACKAGE, "regions").codes(
     "regionId", "regionName", source=SOURCE
@@ -106,7 +108,7 @@ def _closest(value: int | str, codes: Mapping[int, str]) -> list[tuple[int, str]
     The pass by number is core's ``nearest``, the strategy this package carried until
     sdk-core 0.4.0 took it in (https://github.com/xippios/sdk-core/issues/107); the pass by
     digits stays ESR's own, which neither ``nearest`` nor ``closest`` (for string codes)
-    covers (sdk-core ADR-0023, decision 4).
+    covers (sdk-core ADR-0059, decision 5).
 
     The commodity ``999`` leads to ``1001`` (Flaxseed) and ``902`` (Soybean Oil), the
     nearest by number; ``1040``, a stray digit, also to ``104`` (Wheat - White), found by

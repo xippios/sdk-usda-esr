@@ -1,17 +1,20 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task function: ``get_exports`` for wheat white to Canada and for
-soybeans to Mexico, market year 2024; ``get_release_dates`` whole, with ``since`` and for
-wheat white by ``commodity_code``; and ``get_weekly_series`` for wheat white to Canada,
+Each task that sends a request has a live smoke test: ``get_exports`` for wheat white to Canada
+and for soybeans to Mexico, market year 2024; ``get_release_dates`` whole, with ``since`` and
+for wheat white by ``commodity_code``; and ``get_weekly_series`` for wheat white to Canada,
 market years 2023 to 2024, one call per market year, and no release-list call, since the
 range ends before the current calendar year (a range ending this year or later adds one).
-The codes are taken from the packaged lists by their upstream names, so a renamed or recoded
-commodity or country fails here first. Core's nightly comparison of the packaged lists runs
-here too, one keyed call for each list of ``LIVE_LISTS`` (sdk-core ADR-0055), the signal to
-run ``/refresh-reference-data``. Core's testing plugin prints the run's requests as
-``requests sent by the live run: <n>``, the count in the log of ``live.yml`` that
-``/release-prep`` cites; core's response cache answers a second read of a path within its
-lifetime, so the run sends fewer requests than its calls.
+The four list tasks, ``list_commodities``, ``list_countries``, ``list_regions`` and
+``list_units_of_measure``, answer from the packaged lists and send no request, so no live test
+calls them: their data is held against upstream by core's nightly comparison of the packaged
+lists, which fetches each list of ``LIVE_LISTS`` through its wrapper, one keyed call each
+(sdk-core ADR-0055), the signal to run ``/refresh-reference-data``. The codes are taken from
+the packaged lists by their upstream names, so a renamed or recoded commodity or country fails
+here first. Core's testing plugin prints the run's requests as ``requests sent by the live
+run: <n>``, the count in the log of ``live.yml`` that ``/release-prep`` cites; core's response
+cache answers a second read of a path within its lifetime, so the run sends fewer requests
+than its calls.
 """
 
 from datetime import date, datetime
