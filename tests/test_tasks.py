@@ -205,9 +205,10 @@ def test_get_exports_for_one_country(replay_fixture: Callable[[str, str], respx.
         "ESR states no release for the records answered; a week computed from them is none"
     )
     assert result.meta.names == {
+        "commodity_code": {"104": "Wheat - White"},
         "country_code": {"1220": "CANADA"},
         "unit_id": {"1": "Metric Tons"},
-    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30)"
+    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30, #85)"
     assert result.meta.notes == []
     assert result.meta.published_at is None
     assert result.meta.total is None
@@ -224,7 +225,8 @@ def test_get_exports_for_every_country(replay_fixture: Callable[[str, str], resp
     )
     assert len(result.data) == 498
     assert len({r.country_code for r in result.data}) == 11
-    assert set(result.meta.names) == {"country_code", "unit_id"}
+    assert set(result.meta.names) == {"commodity_code", "country_code", "unit_id"}
+    assert result.meta.names["commodity_code"] == {"1201": "Cottonseed"}, "named (#85)"
     assert result.meta.names["country_code"]["5880"] == "JAPAN", "every destination named"
     assert len(result.meta.names["country_code"]) == 11
     assert result.meta.vintage is None, "left empty, as for one country"
@@ -247,7 +249,10 @@ def test_an_empty_answer_for_one_country_names_the_country(
     result = tasks.get_exports(WHEAT_WHITE, 2024, country_code=CANADA)
     assert route.call_count == 1
     assert result.data == []
-    assert result.meta.names == {"country_code": {"1220": "CANADA"}}
+    assert result.meta.names == {
+        "commodity_code": {"104": "Wheat - White"},
+        "country_code": {"1220": "CANADA"},
+    }, "the commodity and the country asked for, though no row names them (#85)"
 
 
 def test_valid_codes_without_exports_are_an_empty_result(
@@ -260,7 +265,9 @@ def test_valid_codes_without_exports_are_an_empty_result(
     assert result.data == []
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
     assert result.meta.request == {"commodity_code": 501, "market_year": 2024}
-    assert result.meta.names == {}, "every country at once and no rows: no code to name"
+    assert result.meta.names == {"commodity_code": {"501": "Rye"}}, (
+        "every country at once and no rows: the commodity asked for alone is named (#85)"
+    )
     assert route.call_count == 1
 
 
@@ -290,6 +297,10 @@ def test_get_release_dates(replay_fixture: Callable[[str, str], respx.Route]) ->
         date(2026, 6, 1),
         date(2027, 5, 31),
     )
+    assert set(result.meta.names) == {"commodity_code"}, "the release records' codes named (#85)"
+    assert len(result.meta.names["commodity_code"]) == 44, "every commodity of the answer"
+    assert result.meta.names["commodity_code"]["104"] == "Wheat - White"
+    assert result.meta.notes == [], "the packaged list names every commodity released"
 
 
 def test_get_release_dates_since_keeps_what_was_released_strictly_later(
@@ -478,6 +489,7 @@ def test_get_release_dates_of_one_commodity(
     assert result.meta.source == "usda-esr"
     assert result.meta.endpoint == "ESRData_GetDataReleaseInfo"
     assert result.meta.request == {"commodity_code": 104}
+    assert result.meta.names == {"commodity_code": {"104": "Wheat - White"}}, "named (#85)"
     assert result.meta.vintage == RELEASED, "the newest record's text as upstream prints it"
     assert result.meta.published_at == wheat.release_time_stamp
     assert result.meta.published_at.tzinfo is None
@@ -653,6 +665,7 @@ async def test_mcp_tool_call_end_to_end(replay_fixture: Callable[[str, str], res
         "a Decimal without fractional digits is a JSON integer (sdk-core#478)"
     )
     assert payload["meta"]["names"]["country_code"] == {"1220": "CANADA"}
+    assert payload["meta"]["names"]["commodity_code"] == {"104": "Wheat - White"}
     assert payload["meta"]["endpoint"] == "ESRData_GetCountryData"
     assert payload["meta"]["request"] == {
         "commodity_code": 104,
@@ -760,6 +773,7 @@ async def test_release_dates_of_one_commodity_over_mcp(
     assert "note" not in payload
     assert payload["meta"]["endpoint"] == "ESRData_GetDataReleaseInfo"
     assert payload["meta"]["request"] == {"commodity_code": 104}
+    assert payload["meta"]["names"] == {"commodity_code": {"104": "Wheat - White"}}
     assert payload["meta"]["vintage"] == RELEASED
     assert payload["meta"]["published_at"] == "2026-10-22T08:30:42.670000", "no zone added"
     assert payload["meta"]["published_at_naive"] is True

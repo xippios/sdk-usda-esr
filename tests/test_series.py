@@ -164,9 +164,10 @@ def test_get_weekly_series_spans_market_years_oldest_first(
         "two rows of the week ending 2023-06-01 are told apart (sdk-usda-esr#23)"
     )
     assert result.meta.names == {
+        "commodity_code": {"104": "Wheat - White"},
         "country_code": {"1220": "CANADA"},
         "unit_id": {"1": "Metric Tons"},
-    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30)"
+    }, "the codes of the rows, named by the record's model (sdk-usda-esr#30, #85)"
     assert result.meta.published_at is None
     assert result.meta.total is None
 
@@ -267,9 +268,10 @@ def test_an_empty_weekly_series_is_an_empty_result(replay_fixture: ReplayFixture
         "start_year": 2025,
         "end_year": 2025,
     }
-    assert result.meta.names == {"country_code": {"1220": "CANADA"}}, (
-        "the country asked for, though no row names it (conventions §4)"
-    )
+    assert result.meta.names == {
+        "commodity_code": {"104": "Wheat - White"},
+        "country_code": {"1220": "CANADA"},
+    }, "the commodity and the country asked for, though no row names them (conventions §4)"
     assert result.meta.endpoint == OPERATIONS[COUNTRY]
 
 

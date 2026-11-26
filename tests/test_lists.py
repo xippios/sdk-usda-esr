@@ -209,6 +209,15 @@ def test_list_countries_by_region(respx_mock: respx.MockRouter) -> None:
     assert [c.country_code for c in western.data[:3]] == [1010, 1220, 1610], "upstream order"
     assert western.data == [c for c in every if c.region_id == 11]
     assert western.meta.request == {"region_id": 11}
+    assert western.meta.names == {"region_id": {"11": "WESTERN HEMISPHERE"}}, (
+        "a country's region named by the packaged regions (#85)"
+    )
+    assert len(tasks.list_countries().meta.names["region_id"]) == 12, "every region has a country"
+    none = tasks.list_countries(region_id=11, search="atlantis")
+    assert none.data == []
+    assert none.meta.names == {"region_id": {"11": "WESTERN HEMISPHERE"}}, (
+        "the region asked for, though no row names it (conventions §4)"
+    )
     eastern = tasks.list_countries(region_id=3).data
     assert [c.country_code for c in eastern] == [4290, 4350]  # GDR, Czechoslovakia
     european_union = [c.country_code for c in tasks.list_countries(region_id=1).data]
