@@ -980,8 +980,10 @@ def test_get_exports_of_a_commodity_the_release_list_lacks(
 ) -> None:
     """The recorded release list without wheat white, handed on by a replaced wrapper: a market
     year from the calendar year on cannot be told released, so it is refused, as the weekly
-    series refuses its range, before any exports request. The release list is an input of the
-    test, not an answer from ESR (conventions §10)."""
+    series refuses its range, before any exports request, and the refusal says what was sent,
+    as the refusal of an unreleased year does (conventions §5; sdk-core ADR-0054, amendment
+    2026-11-22; https://github.com/xippios/sdk-usda-esr/issues/84). The release list is an
+    input of the test, not an answer from ESR (conventions §10)."""
 
     async def without_wheat_white() -> Answer[ReleaseList]:
         return Answer(_without_wheat_white(), datetime.now(UTC))
@@ -989,7 +991,11 @@ def test_get_exports_of_a_commodity_the_release_list_lacks(
     monkeypatch.setattr(api, "get_data_release_info", without_wheat_white)
     with pytest.raises(NotFoundError) as info:
         tasks.get_exports(WHEAT_WHITE, 2027, country_code=CANADA)
-    assert str(info.value).startswith("ESR lists no market year for commodity 104: ")
+    assert str(info.value) == (
+        "ESR lists no market year for commodity 104: GET /api/esr/datareleasedates "
+        "(ESRData_GetDataReleaseInfo) answered without a record for it, although the packaged "
+        "commodities list names it. The release list was read and no exports were requested."
+    )
     assert not respx_mock.calls, "no exports request"
 
 

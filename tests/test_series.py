@@ -478,7 +478,7 @@ def test_a_commodity_the_release_list_lacks_refuses_a_range_into_next_year(
     assert str(info.value) == (
         "ESR lists no market year for commodity 104: GET /api/esr/datareleasedates "
         "(ESRData_GetDataReleaseInfo) answered without a record for it, although the packaged "
-        "commodities list names it."
+        "commodities list names it. The release list was read and no exports were requested."
     )
     assert not respx_mock.calls, "no yearly request"
 
