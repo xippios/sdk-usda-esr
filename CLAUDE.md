@@ -74,8 +74,9 @@ the package does with it; `_client.classify` maps ESR's own answers once.
   (https://github.com/xippios/sdk-usda-esr/pull/10,
   https://github.com/xippios/sdk-usda-esr/issues/21; conventions §4; sdk-core ADR-0041,
   decisions 6 and 7). The read is one request, which core's cache answers within its
-  lifetime. The current year counts too: a market year named by it may have begun without a
-  week released, as a calendar-year commodity's does in January.
+  lifetime, and the refusal says what was sent: the release list was read and no exports
+  were requested (conventions §5). The current year counts too: a market year named by it
+  may have begun without a week released, as a calendar-year commodity's does in January.
 - ESR's empty 404 for a market year it holds no data for (1900) is mapped by the gateway to
   the shared package's `xippios.usda.fas.NoDataForYear`, a `NotFoundError` (only that answer
   on an exports path, `_client.DATA_PATH`). `get_exports` raises it again, naming what was
