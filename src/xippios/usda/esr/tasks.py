@@ -443,19 +443,25 @@ async def get_release_dates_async(
     return Result(data=selected, meta=meta)
 
 
+_RELEASE_LIST_READ = "The release list was read and no exports were requested."
+"""What a refusal after the read of the release list says was sent, the one wording of the two
+refusals of ``_check_released`` (conventions §5; sdk-core ADR-0054, amendment 2026-11-22)."""
+
+
 def _release_of(commodity_code: int, releases: list[DataReleaseInfo]) -> DataReleaseInfo:
     """The commodity's record of ESR's release list, unchanged; ``NotFoundError`` if absent.
 
     A commodity the packaged list names and the release list lacks is one upstream has
     dropped: ``get_exports`` and ``get_weekly_series`` refuse a market year from the current
-    calendar year on, which they cannot tell released.
+    calendar year on, which they cannot tell released, after the read of the list, and say so
+    (https://github.com/xippios/sdk-usda-esr/issues/84).
     """
     record = next((r for r in releases if r.commodity_code == commodity_code), None)
     if record is None:
         raise NotFoundError(
             f"ESR lists no market year for commodity {commodity_code}: GET "
             "/api/esr/datareleasedates (ESRData_GetDataReleaseInfo) answered without a record "
-            "for it, although the packaged commodities list names it.",
+            f"for it, although the packaged commodities list names it. {_RELEASE_LIST_READ}",
             source=SOURCE,
         )
     return record
@@ -489,9 +495,9 @@ async def _check_released(
         raise NotFoundError(
             f"ESR has not released market year {market_year} of commodity {commodity_code} "
             f"yet: its latest released market year is {latest}, the current one in ESR's "
-            "release list (ESRData_GetDataReleaseInfo). The release list was read and no "
-            "exports were requested. ESR answers a market year it has not released with an "
-            f"empty list, the same answer as a year without exports, so {refused(latest)}.",
+            f"release list (ESRData_GetDataReleaseInfo). {_RELEASE_LIST_READ} ESR answers a "
+            "market year it has not released with an empty list, the same answer as a year "
+            f"without exports, so {refused(latest)}.",
             source=SOURCE,
         )
 
